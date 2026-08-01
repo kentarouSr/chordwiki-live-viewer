@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>ChordWiki Live Viewer (Prototype)</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #111; color: #eee; font-family: system-ui, sans-serif;
+    overscroll-behavior: none;
+  }
+  #app { position: fixed; inset: 0; }
+
+  /* --- 読み込み画面 --- */
+  #loader {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; padding: 24px;
+    text-align: center;
+  }
+  #loader.hidden { display: none; }
+  #dropZone {
+    width: min(480px, 90vw); padding: 40px 20px; border: 2px dashed #555;
+    border-radius: 12px; cursor: pointer;
+  }
+  #dropZone.dragover { border-color: #6cf; background: #1a2733; }
+  #fileInput { display: none; }
+  #loaderNote { font-size: 13px; color: #999; max-width: 420px; }
+
+  /* --- ビューア画面 --- */
+  #viewer { position: absolute; inset: 0; }
+  #viewer.hidden { display: none; }
+  #scrollWrap {
+    position: absolute; inset: 0; overflow: hidden; touch-action: none;
+    background: #222;
+  }
+  #tileContainer {
+    position: absolute; top: 0; left: 0; width: 100%;
+    will-change: transform;
+  }
+  #tileContainer canvas { display: block; width: 100%; }
+
+  #progressBar {
+    position: absolute; top: 0; left: 0; right: 0; height: 4px;
+    background: rgba(255,255,255,0.15); z-index: 5;
+  }
+  #progressFill { height: 100%; width: 0%; background: #6cf; }
+
+  #toolbar {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    background: rgba(17,17,17,0.85); backdrop-filter: blur(4px);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  #toolbar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+  #toolbar button {
+    font-size: 16px; padding: 10px 14px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #toolbar button:active { background: #6cf; color: #111; }
+  #btnPlay { min-width: 84px; font-weight: bold; }
+  #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
+  #btnBack { margin-right: auto; font-size: 13px; opacity: 0.8; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="loader">
+    <h1 style="font-size:18px;margin:0;">ChordWiki Live Viewer (Prototype)</h1>
+    <div id="dropZone">
+      画像 (PNG/JPG) または PDF をここにドロップ<br>
+      またはタップして選択
+    </div>
+    <input id="fileInput" type="file" accept="image/*,application/pdf">
+    <p id="loaderNote">
+      事前に移調済みの状態でフルページスクショ/PDF化した譜面を読み込みます。
+      本番中の移調機能はありません。
+    </p>
+  </div>
+
+  <div id="viewer" class="hidden">
+    <div id="scrollWrap">
+      <div id="tileContainer"></div>
+    </div>
+    <div id="progressBar"><div id="progressFill"></div></div>
+    <div id="toolbar">
+      <button id="btnBack">&larr; 読込み直す</button>
+      <button id="btnSpeedDown">&minus;</button>
+      <span id="speedLabel">40 px/s</span>
+      <button id="btnSpeedUp">+</button>
+      <button id="btnPlay">&#9654; 再生</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---- 定数 ----
+  const TILE_HEIGHT_CSS = 1024; // iPad Safariの巨大画像描画問題対策としてタイル分割
+  const SPEED_STORAGE_KEY = 'cwlv_speed_px_per_sec';
+  const MIN_SPEED = 1;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
+
+  // ---- DOM ----
+  const loader = document.getElementById('loader');
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const viewer = document.getElementById('viewer');
+  const scrollWrap = document.getElementById('scrollWrap');
+  const tileContainer = document.getElementById('tileContainer');
+  const progressFill = document.getElementById('progressFill');
+  const toolbar = document.getElementById('toolbar');
+  const btnPlay = document.getElementById('btnPlay');
+  const btnBack = document.getElementById('btnBack');
+  const btnSpeedUp = document.getElementById('btnSpeedUp');
+  const btnSpeedDown = document.getElementById('btnSpeedDown');
+  const speedLabel = document.getElementById('speedLabel');
+
+  // ---- 状態 ----
+  let contentHeight = 0;   // タイル全体のCSS高さ
+  let scrollY = 0;         // 現在のスクロール位置(0=先頭)
+  let playing = false;
+  let speed = loadSpeed(); // px/秒
+  let rafId = null;
+  let lastTs = null;
+  let wakeLockSentinel = null;
+  let currentSourceKind = null; // 'image' | 'pdf'
+  let currentImageEl = null;    // kind==='image' 用。リサイズ時の再タイル化に使う
+  let currentPdfDoc = null;     // kind==='pdf' 用
+
+  speedLabel.textContent = `${speed} px/s`;
+
+  function loadSpeed() {
+    const v = parseInt(localStorage.getItem(SPEED_STORAGE_KEY), 10);
+    return Number.isFinite(v) && v >= MIN_SPEED ? v : 40;
+  }
+
+  function viewportHeight() { return scrollWrap.clientHeight; }
+  function viewportWidthCss() { return scrollWrap.clientWidth; }
+  function maxScroll() { return Math.max(0, contentHeight - viewportHeight()); }
+  function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+  // ==================================================
+  // タイル生成
+  // ==================================================
+  function makeTileCanvas(cssWidth, cssHeight) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(cssWidth * DPR);
+    c.height = Math.round(cssHeight * DPR);
+    c.style.width = cssWidth + 'px';
+    c.style.height = cssHeight + 'px';
+    return c;
+  }
+
+  // <img> などの描画可能ソースから、スケールしつつタイルへ直接描画する。
+  // 拡大後の画像全体を中間キャンバスに一度に描かない(それ自体が巨大描画問題の原因になるため)。
+  function tileFromDrawableSource(img, naturalWidth, naturalHeight) {
+    const cssWidth = viewportWidthCss();
+    const scale = cssWidth / naturalWidth;
+    const cssHeight = naturalHeight * scale;
+    const tileCount = Math.ceil(cssHeight / TILE_HEIGHT_CSS);
+    for (let i = 0; i < tileCount; i++) {
+      const tileCssH = Math.min(TILE_HEIGHT_CSS, cssHeight - i * TILE_HEIGHT_CSS);
+      const canvas = makeTileCanvas(cssWidth, tileCssH);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(DPR, DPR);
+      const sy = (i * TILE_HEIGHT_CSS) / scale;
+      const sh = tileCssH / scale;
+      ctx.drawImage(img, 0, sy, naturalWidth, sh, 0, 0, cssWidth, tileCssH);
+      tileContainer.appendChild(canvas);
+    }
+    return cssHeight;
+  }
+
+  // 既にレンダリング済みのcanvas(PDFページ等)から、デバイスピクセル単位でそのまま切り出す。
+  function tileFromRenderedCanvas(pageCanvas, cssWidth) {
+    const tileHeightPx = Math.round(TILE_HEIGHT_CSS * DPR);
+    const tileCount = Math.ceil(pageCanvas.height / tileHeightPx);
+    let cssHeightTotal = 0;
+    for (let i = 0; i < tileCount; i++) {
+      const tilePx = Math.min(tileHeightPx, pageCanvas.height - i * tileHeightPx);
+      const tileCssH = tilePx / DPR;
+      const canvas = makeTileCanvas(cssWidth, tileCssH);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(pageCanvas, 0, i * tileHeightPx, pageCanvas.width, tilePx, 0, 0, canvas.width, tilePx);
+      tileContainer.appendChild(canvas);
+      cssHeightTotal += tileCssH;
+    }
+    return cssHeightTotal;
+  }
+
+  function clearTiles() {
+    tileContainer.innerHTML = '';
+    contentHeight = 0;
+    scrollY = 0;
+    applyTransform();
+  }
+
+  async function buildTilesFromImage(img) {
+    clearTiles();
+    contentHeight = tileFromDrawableSource(img, img.naturalWidth, img.naturalHeight);
+    applyTransform();
+  }
+
+  async function buildTilesFromPdf(pdf) {
+    clearTiles();
+    const cssWidth = viewportWidthCss();
+    let total = 0;
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const baseViewport = page.getViewport({ scale: 1 });
+      const renderScale = (cssWidth * DPR) / baseViewport.width;
+      const viewport = page.getViewport({ scale: renderScale });
+
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = Math.round(viewport.width);
+      pageCanvas.height = Math.round(viewport.height);
+      const pageCtx = pageCanvas.getContext('2d');
+      await page.render({ canvasContext: pageCtx, viewport }).promise;
+
+      total += tileFromRenderedCanvas(pageCanvas, cssWidth);
+
+      // iOS Safariはcanvasメモリが厳しいため、ページ描画後すぐ解放する
+      pageCanvas.width = 0;
+      pageCanvas.height = 0;
+    }
+    contentHeight = total;
+    applyTransform();
+  }
+
+  function rebuildCurrentSource() {
+    if (currentSourceKind === 'image' && currentImageEl) {
+      buildTilesFromImage(currentImageEl);
+    } else if (currentSourceKind === 'pdf' && currentPdfDoc) {
+      buildTilesFromPdf(currentPdfDoc);
+    }
+  }
+
+  // ==================================================
+  // スクロール再生
+  // ==================================================
+  function applyTransform() {
+    tileContainer.style.transform = `translate3d(0, ${-scrollY}px, 0)`;
+    const m = maxScroll();
+    progressFill.style.width = (m > 0 ? (scrollY / m * 100) : 0) + '%';
+  }
+
+  function tick(ts) {
+    if (!playing) return;
+    if (lastTs === null) lastTs = ts;
+    const dt = (ts - lastTs) / 1000;
+    lastTs = ts;
+    scrollY += speed * dt;
+    const m = maxScroll();
+    if (scrollY >= m) {
+      scrollY = m;
+      applyTransform();
+      stopPlayback(); // 末尾到達で自動停止
+      return;
+    }
+    applyTransform();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function startPlayback() {
+    if (playing || contentHeight === 0) return;
+    if (scrollY >= maxScroll()) scrollY = 0; // 末尾で止まっていたら先頭から
+    playing = true;
+    lastTs = null;
+    rafId = requestAnimationFrame(tick);
+    acquireWakeLock();
+    scheduleToolbarHide();
+    btnPlay.innerHTML = '&#10074;&#10074; 停止';
+  }
+
+  function stopPlayback() {
+    playing = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    releaseWakeLock();
+    showToolbar();
+    btnPlay.innerHTML = '&#9654; 再生';
+  }
+
+  btnPlay.addEventListener('click', () => {
+    if (playing) stopPlayback(); else startPlayback();
+  });
+
+  // ==================================================
+  // 手動ドラッグ(再生中はドラッグ中一時停止、離すと自動再開)
+  // ==================================================
+  let dragging = false;
+  let dragStartY = 0;
+  let dragStartScrollY = 0;
+  let wasPlayingBeforeDrag = false;
+
+  scrollWrap.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    dragStartY = e.clientY;
+    dragStartScrollY = scrollY;
+    wasPlayingBeforeDrag = playing;
+    if (playing) stopPlayback();
+    showToolbar();
+    scrollWrap.setPointerCapture(e.pointerId);
+  });
+  scrollWrap.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const deltaY = e.clientY - dragStartY;
+    scrollY = clamp(dragStartScrollY - deltaY, 0, maxScroll());
+    applyTransform();
+  });
+  scrollWrap.addEventListener('pointerup', endDrag);
+  scrollWrap.addEventListener('pointercancel', endDrag);
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    if (wasPlayingBeforeDrag) startPlayback();
+  }
+
+  // ==================================================
+  // 速度調整(1px/秒刻み、長押しで加速)
+  // ==================================================
+  let holdTimeout = null;
+  let holdInterval = null;
+
+  function changeSpeed(delta) {
+    speed = Math.max(MIN_SPEED, speed + delta);
+    speedLabel.textContent = `${speed} px/s`;
+    localStorage.setItem(SPEED_STORAGE_KEY, String(speed));
+  }
+
+  function bindHold(button, sign) {
+    const start = (e) => {
+      e.preventDefault();
+      changeSpeed(sign);
+      let step = 1;
+      holdTimeout = setTimeout(() => {
+        holdInterval = setInterval(() => {
+          changeSpeed(sign * step);
+          step += 1; // 長押しで刻み加速
+        }, 120);
+      }, 500);
+    };
+    const stop = () => {
+      clearTimeout(holdTimeout);
+      clearInterval(holdInterval);
+    };
+    button.addEventListener('pointerdown', start);
+    button.addEventListener('pointerup', stop);
+    button.addEventListener('pointerleave', stop);
+    button.addEventListener('pointercancel', stop);
+  }
+  bindHold(btnSpeedUp, +1);
+  bindHold(btnSpeedDown, -1);
+
+  // ==================================================
+  // Wake Lock
+  // ==================================================
+  async function acquireWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLockSentinel = await navigator.wakeLock.request('screen');
+    } catch (err) { /* 拒否・非対応時は無視 */ }
+  }
+  function releaseWakeLock() {
+    if (wakeLockSentinel) { wakeLockSentinel.release(); wakeLockSentinel = null; }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && playing) acquireWakeLock();
+  });
+
+  // ==================================================
+  // ツールバー自動非表示(再生中のみ)
+  // ==================================================
+  let toolbarHideTimer = null;
+  function scheduleToolbarHide() {
+    clearTimeout(toolbarHideTimer);
+    toolbarHideTimer = setTimeout(() => {
+      if (playing) toolbar.classList.add('hidden');
+    }, 2500);
+  }
+  function showToolbar() {
+    toolbar.classList.remove('hidden');
+    if (playing) scheduleToolbarHide();
+  }
+
+  // ==================================================
+  // 読み込み
+  // ==================================================
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (file) handleFile(file);
+    fileInput.value = '';
+  });
+
+  btnBack.addEventListener('click', () => {
+    stopPlayback();
+    clearTiles();
+    currentSourceKind = null;
+    currentImageEl = null;
+    currentPdfDoc = null;
+    viewer.classList.add('hidden');
+    loader.classList.remove('hidden');
+  });
+
+  async function handleFile(file) {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      await loadPdfFile(file);
+    } else if (file.type.startsWith('image/')) {
+      await loadImageFile(file);
+    } else {
+      alert('画像またはPDFファイルを選択してください');
+      return;
+    }
+    loader.classList.add('hidden');
+    viewer.classList.remove('hidden');
+  }
+
+  function loadImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        currentSourceKind = 'image';
+        currentImageEl = img;
+        currentPdfDoc = null;
+        buildTilesFromImage(img).then(resolve);
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  let pdfJsLoadPromise = null;
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    if (pdfJsLoadPromise) return pdfJsLoadPromise;
+    pdfJsLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      // プロトタイプ検証用にCDNから遅延読込。本実装ではリポジトリに同梱してオフライン化する。
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js';
+      script.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+        resolve(window.pdfjsLib);
+      };
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    return pdfJsLoadPromise;
+  }
+
+  async function loadPdfFile(file) {
+    const pdfjsLib = await loadPdfJs();
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    currentSourceKind = 'pdf';
+    currentPdfDoc = pdf;
+    currentImageEl = null;
+    await buildTilesFromPdf(pdf);
+  }
+
+  // ==================================================
+  // リサイズ・向き変更で再タイル化
+  // ==================================================
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (currentSourceKind) rebuildCurrentSource();
+    }, 200);
+  });
+})();
+</script>
+</body>
+</html>
