@@ -451,18 +451,14 @@
   function loadPdfJs() {
     if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
     if (pdfJsLoadPromise) return pdfJsLoadPromise;
-    pdfJsLoadPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      // プロトタイプ検証用にCDNから遅延読込。本実装ではリポジトリに同梱してオフライン化する。
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js';
-      script.onload = () => {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
-        resolve(window.pdfjsLib);
-      };
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
+    // プロトタイプ検証用にCDN(ESMビルド)から動的import。本実装ではリポジトリに同梱してオフライン化する。
+    pdfJsLoadPromise = import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs')
+      .then((pdfjsLib) => {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs';
+        window.pdfjsLib = pdfjsLib;
+        return pdfjsLib;
+      });
     return pdfJsLoadPromise;
   }
 
