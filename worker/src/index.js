@@ -42,6 +42,14 @@ export default {
       updatedAt: row.updated_at,
     });
 
+    const rowToSetlist = (row) => ({
+      uuid: row.uuid,
+      name: row.name,
+      songUuids: row.song_uuids ? JSON.parse(row.song_uuids) : [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    });
+
     try {
       // 曲一覧(メタデータのみ)
       if (path === '/api/songs' && request.method === 'GET') {
@@ -110,6 +118,43 @@ export default {
         const row = await env.DB.prepare('SELECT r2_key FROM songs WHERE uuid = ?').bind(uuid).first();
         if (row) await env.BUCKET.delete(row.r2_key);
         await env.DB.prepare('DELETE FROM songs WHERE uuid = ?').bind(uuid).run();
+        return json({ ok: true });
+      }
+
+      // セットリスト一覧
+      if (path === '/api/setlists' && request.method === 'GET') {
+        if (!requireKey()) return err('invalid key', 401);
+        const { results } = await env.DB.prepare('SELECT * FROM setlists ORDER BY updated_at DESC').all();
+        return json(results.map(rowToSetlist));
+      }
+
+      const setlistIdMatch = path.match(/^\/api\/setlists\/([0-9a-f-]{36})$/);
+
+      // セットリストの追加/更新(バイナリを含まないのでJSONで送る)
+      if (setlistIdMatch && request.method === 'PUT') {
+        if (!requireKey()) return err('invalid key', 401);
+        const uuid = setlistIdMatch[1];
+        const body = await request.json();
+        const { name, songUuids, createdAt, updatedAt } = body;
+        if (!name || !Array.isArray(songUuids) || !Number.isFinite(updatedAt)) {
+          return err('missing fields');
+        }
+
+        await env.DB.prepare(
+          `INSERT INTO setlists (uuid, name, song_uuids, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(uuid) DO UPDATE SET
+             name = excluded.name, song_uuids = excluded.song_uuids, updated_at = excluded.updated_at`
+        ).bind(uuid, name, JSON.stringify(songUuids), createdAt || Date.now(), updatedAt).run();
+
+        return json({ ok: true });
+      }
+
+      // セットリストの削除
+      if (setlistIdMatch && request.method === 'DELETE') {
+        if (!requireKey()) return err('invalid key', 401);
+        const uuid = setlistIdMatch[1];
+        await env.DB.prepare('DELETE FROM setlists WHERE uuid = ?').bind(uuid).run();
         return json({ ok: true });
       }
 

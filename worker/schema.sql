@@ -10,3 +10,11 @@ CREATE TABLE IF NOT EXISTS songs (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS setlists (
+  uuid TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  song_uuids TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
