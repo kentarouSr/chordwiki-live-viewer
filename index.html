@@ -101,6 +101,15 @@
 (() => {
   'use strict';
 
+  // 実機(devtoolsを開けない環境)でも原因が分かるよう、想定外のエラーはアラート表示する
+  window.addEventListener('error', (e) => {
+    alert('JSエラー: ' + e.message);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const reason = e.reason;
+    alert('Promiseエラー: ' + (reason && reason.message ? reason.message : reason));
+  });
+
   // ---- 定数 ----
   const TILE_HEIGHT_CSS = 1024; // iPad Safariの巨大画像描画問題対策としてタイル分割
   const SPEED_STORAGE_KEY = 'cwlv_speed_px_per_sec';
@@ -419,16 +428,28 @@
   });
 
   async function handleFile(file) {
-    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-      await loadPdfFile(file);
-    } else if (file.type.startsWith('image/')) {
-      await loadImageFile(file);
-    } else {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    const isImage = file.type.startsWith('image/');
+    if (!isPdf && !isImage) {
       alert('画像またはPDFファイルを選択してください');
       return;
     }
+    // タイル生成時にscrollWrapのclientWidth/Heightを使うため、
+    // 計測前にビューア画面を表示してレイアウトを確定させる(#viewerはdisplay:noneだと0になる)。
     loader.classList.add('hidden');
     viewer.classList.remove('hidden');
+    try {
+      if (isPdf) await loadPdfFile(file);
+      else await loadImageFile(file);
+      if (contentHeight <= 0) {
+        throw new Error('コンテンツの高さが0でした(読み込んだファイルが空か、非対応の形式の可能性があります)');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('読み込みエラー: ' + (err && err.message ? err.message : err));
+      viewer.classList.add('hidden');
+      loader.classList.remove('hidden');
+    }
   }
 
   function loadImageFile(file) {
