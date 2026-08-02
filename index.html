@@ -55,6 +55,45 @@
     background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
   }
 
+  /* --- セットリスト一覧・編集・曲ピッカー画面(曲一覧画面と共通の見た目) --- */
+  #setlistListScreen, #setlistEditScreen, #songPickerScreen {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    padding: 20px; padding-top: max(20px, env(safe-area-inset-top));
+    overflow-y: auto;
+  }
+  #setlistListScreen.hidden, #setlistEditScreen.hidden, #songPickerScreen.hidden { display: none; }
+  #setlistListHeader, #setlistEditHeader, #songPickerHeader {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+  }
+  #setlistListHeader h1, #setlistEditHeader h1, #songPickerHeader h1 {
+    font-size: 18px; margin: 0; flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #setlistListHeader button, #setlistEditHeader button, #songPickerHeader button,
+  #setlistEditFooter button {
+    font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  #btnAddSetlist, #btnStartSetlist, #btnSongPickerDone {
+    background: #6cf; color: #111; font-weight: bold;
+  }
+  #setlistList, #setlistSongs, #songPickerList { display: flex; flex-direction: column; gap: 10px; }
+  #setlistList .empty, #setlistSongs .empty, #songPickerList .empty {
+    color: #999; font-size: 14px; text-align: center; margin-top: 40px;
+  }
+  .setlistRow, .setlistSongRow, .pickerRow {
+    display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+    background: #1c1c1c; border-radius: 10px;
+  }
+  .setlistRow .songMain, .pickerRow .songMain { flex: 1; min-width: 0; cursor: pointer; }
+  .setlistSongRow .songMain { flex: 1; min-width: 0; }
+  .setlistSongIndex { color: #999; font-size: 13px; width: 22px; flex-shrink: 0; }
+  .setlistRow button, .setlistSongRow button, .pickerRow button {
+    font-size: 13px; padding: 8px 10px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  #setlistEditFooter { display: flex; gap: 10px; margin-top: 16px; }
+
   /* --- ビューア画面 --- */
   #viewer { position: absolute; inset: 0; }
   #viewer.hidden { display: none; }
@@ -102,6 +141,8 @@
   #memoImageInput { display: none; }
   .memoEditOnly { display: none; }
   #viewer.memo-edit-mode .memoEditOnly { display: inline-block; }
+  .setlistOnly { display: none; }
+  #viewer.setlist-active .setlistOnly { display: inline-block; }
 
   #progressBar {
     position: absolute; top: 0; left: 0; right: 0; height: 4px;
@@ -122,6 +163,7 @@
     background: #333; color: #eee; cursor: pointer;
   }
   #toolbar button:active { background: #6cf; color: #111; }
+  #toolbar button:disabled { opacity: 0.35; cursor: default; }
   #btnMetronome.active { background: #6cf; color: #111; }
   #btnPlay { min-width: 84px; font-weight: bold; }
   #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
@@ -134,6 +176,7 @@
   <div id="songListScreen">
     <div id="songListHeader">
       <h1>ChordWiki Live Viewer</h1>
+      <button id="btnGoSetlists">セットリスト</button>
       <button id="btnAddSong">＋ 曲を追加</button>
     </div>
     <div id="backupBar">
@@ -148,6 +191,37 @@
     <input id="zipInput" type="file" accept=".zip,application/zip">
   </div>
 
+  <div id="setlistListScreen" class="hidden">
+    <div id="setlistListHeader">
+      <button id="btnSetlistBack">&larr; 曲一覧</button>
+      <h1>セットリスト</h1>
+      <button id="btnAddSetlist">＋ 作成</button>
+    </div>
+    <div id="setlistList"></div>
+  </div>
+
+  <div id="setlistEditScreen" class="hidden">
+    <div id="setlistEditHeader">
+      <button id="btnSetlistEditBack">&larr; セットリスト一覧</button>
+      <h1 id="setlistEditName">-</h1>
+      <button id="btnRenameSetlist">名前変更</button>
+      <button id="btnDeleteSetlist">削除</button>
+    </div>
+    <div id="setlistSongs"></div>
+    <div id="setlistEditFooter">
+      <button id="btnAddSongToSetlist">＋ 曲を追加</button>
+      <button id="btnStartSetlist">&#9654; 演奏開始</button>
+    </div>
+  </div>
+
+  <div id="songPickerScreen" class="hidden">
+    <div id="songPickerHeader">
+      <button id="btnSongPickerDone">完了</button>
+      <h1>曲を選択して追加</h1>
+    </div>
+    <div id="songPickerList"></div>
+  </div>
+
   <div id="viewer" class="hidden">
     <div id="scrollWrap">
       <div id="tileContainer"></div>
@@ -156,6 +230,8 @@
     <div id="progressBar"><div id="progressFill"></div></div>
     <div id="toolbar">
       <button id="btnBack">&larr; 曲一覧</button>
+      <button id="btnPrevSong" class="setlistOnly">&#9198; 前</button>
+      <button id="btnNextSong" class="setlistOnly">次 &#9197;</button>
       <button id="btnMemoEdit">&#9998; 編集</button>
       <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
       <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
@@ -201,6 +277,29 @@
   const lastBackupInfo = document.getElementById('lastBackupInfo');
   const btnSync = document.getElementById('btnSync');
   const btnCopySetupLink = document.getElementById('btnCopySetupLink');
+  const btnGoSetlists = document.getElementById('btnGoSetlists');
+
+  const setlistListScreen = document.getElementById('setlistListScreen');
+  const setlistListEl = document.getElementById('setlistList');
+  const btnSetlistBack = document.getElementById('btnSetlistBack');
+  const btnAddSetlist = document.getElementById('btnAddSetlist');
+
+  const setlistEditScreen = document.getElementById('setlistEditScreen');
+  const setlistEditName = document.getElementById('setlistEditName');
+  const setlistSongsEl = document.getElementById('setlistSongs');
+  const btnSetlistEditBack = document.getElementById('btnSetlistEditBack');
+  const btnRenameSetlist = document.getElementById('btnRenameSetlist');
+  const btnDeleteSetlist = document.getElementById('btnDeleteSetlist');
+  const btnAddSongToSetlist = document.getElementById('btnAddSongToSetlist');
+  const btnStartSetlist = document.getElementById('btnStartSetlist');
+
+  const songPickerScreen = document.getElementById('songPickerScreen');
+  const songPickerListEl = document.getElementById('songPickerList');
+  const btnSongPickerDone = document.getElementById('btnSongPickerDone');
+
+  const btnPrevSong = document.getElementById('btnPrevSong');
+  const btnNextSong = document.getElementById('btnNextSong');
+
   const viewer = document.getElementById('viewer');
   const scrollWrap = document.getElementById('scrollWrap');
   const tileContainer = document.getElementById('tileContainer');
@@ -237,13 +336,24 @@
   let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
   let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
   let memoObjectUrls = [];      // renderMemosで作ったBlob URL(再描画のたびに解放する)
+  let currentSetlistId = null;  // セットリスト編集画面で開いているセットリストのid
+  let activeSetlist = null;     // ビューアで演奏中のセットリスト({id,uuid,name,songUuids}) or null
+  let activeSetlistIndex = -1;  // activeSetlist内の現在の曲インデックス
+  let viewerReturnScreen = null; // ビューアの「戻る」で戻る先の画面
+
+  // ---- 画面切り替え ----
+  const allScreens = [songListScreen, setlistListScreen, setlistEditScreen, songPickerScreen, viewer];
+  function showScreen(screen) {
+    for (const s of allScreens) s.classList.toggle('hidden', s !== screen);
+  }
 
   // ==================================================
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
   // ==================================================
   const DB_NAME = 'chordwiki-live-viewer';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORE = 'songs';
+  const SETLIST_STORE = 'setlists';
   let dbPromise = null;
 
   function openDb() {
@@ -254,6 +364,9 @@
         const db = req.result;
         if (!db.objectStoreNames.contains(STORE)) {
           db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+        }
+        if (!db.objectStoreNames.contains(SETLIST_STORE)) {
+          db.createObjectStore(SETLIST_STORE, { keyPath: 'id', autoIncrement: true });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -310,6 +423,63 @@
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
+  }
+
+  // ---- セットリスト用CRUD(曲とは別のオブジェクトストア) ----
+  async function slAdd(setlist) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SETLIST_STORE, 'readwrite');
+      const req = tx.objectStore(SETLIST_STORE).add(setlist);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function slPut(setlist) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SETLIST_STORE, 'readwrite');
+      const req = tx.objectStore(SETLIST_STORE).put(setlist);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function slGetAll() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SETLIST_STORE, 'readonly');
+      const req = tx.objectStore(SETLIST_STORE).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function slGet(id) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SETLIST_STORE, 'readonly');
+      const req = tx.objectStore(SETLIST_STORE).get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function slDelete(id) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SETLIST_STORE, 'readwrite');
+      const req = tx.objectStore(SETLIST_STORE).delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function ensureSetlistUuid(setlist) {
+    if (setlist.uuid) return setlist;
+    setlist.uuid = crypto.randomUUID();
+    await slPut(setlist);
+    return setlist;
+  }
+  async function findSongByUuid(uuid) {
+    const all = await dbGetAll();
+    return all.find((s) => s.uuid === uuid);
   }
 
   // ZIPバックアップ/Cloudflare同期での同一曲判定に使う固定ID。
@@ -1036,6 +1206,271 @@
   }
 
   // ==================================================
+  // セットリスト
+  // ==================================================
+  btnGoSetlists.addEventListener('click', () => {
+    showScreen(setlistListScreen);
+    renderSetlistList();
+  });
+  btnSetlistBack.addEventListener('click', () => {
+    showScreen(songListScreen);
+    renderSongList();
+  });
+
+  async function renderSetlistList() {
+    const setlists = await slGetAll();
+    await Promise.all(setlists.map(ensureSetlistUuid));
+    setlists.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    setlistListEl.innerHTML = '';
+    if (setlists.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'まだセットリストがありません。「＋ 作成」から作ってください。';
+      setlistListEl.appendChild(p);
+      return;
+    }
+    for (const sl of setlists) {
+      const row = document.createElement('div');
+      row.className = 'setlistRow';
+
+      const main = document.createElement('div');
+      main.className = 'songMain';
+      const name = document.createElement('div');
+      name.className = 'songName';
+      name.textContent = sl.name;
+      const meta = document.createElement('div');
+      meta.className = 'songMeta';
+      meta.textContent = `${(sl.songUuids || []).length}曲`;
+      main.appendChild(name);
+      main.appendChild(meta);
+      main.addEventListener('click', () => openSetlistEdit(sl.id));
+
+      const btnDel = document.createElement('button');
+      btnDel.textContent = '削除';
+      btnDel.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm(`「${sl.name}」を削除しますか？`)) return;
+        await slDelete(sl.id);
+        renderSetlistList();
+      });
+
+      row.appendChild(main);
+      row.appendChild(btnDel);
+      setlistListEl.appendChild(row);
+    }
+  }
+
+  btnAddSetlist.addEventListener('click', async () => {
+    const name = prompt('セットリスト名を入力してください', '新しいセットリスト');
+    if (name === null) return;
+    const id = await slAdd({
+      uuid: crypto.randomUUID(),
+      name: name.trim() || '無題のセットリスト',
+      songUuids: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    openSetlistEdit(id);
+  });
+
+  async function openSetlistEdit(id) {
+    currentSetlistId = id;
+    showScreen(setlistEditScreen);
+    await renderSetlistEdit();
+  }
+
+  async function renderSetlistEdit() {
+    const sl = await slGet(currentSetlistId);
+    if (!sl) {
+      showScreen(setlistListScreen);
+      renderSetlistList();
+      return;
+    }
+    setlistEditName.textContent = sl.name;
+
+    const allSongs = await dbGetAll();
+    await Promise.all(allSongs.map(ensureSongUuid));
+    const byUuid = new Map(allSongs.map((s) => [s.uuid, s]));
+
+    setlistSongsEl.innerHTML = '';
+    const uuids = sl.songUuids || [];
+    if (uuids.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'まだ曲がありません。「＋ 曲を追加」から追加してください。';
+      setlistSongsEl.appendChild(p);
+      return;
+    }
+    uuids.forEach((uuid, index) => {
+      const song = byUuid.get(uuid);
+      const row = document.createElement('div');
+      row.className = 'setlistSongRow';
+
+      const idx = document.createElement('div');
+      idx.className = 'setlistSongIndex';
+      idx.textContent = String(index + 1);
+
+      const main = document.createElement('div');
+      main.className = 'songMain';
+      main.textContent = song ? song.name : '(見つかりません。削除された可能性)';
+
+      const btnUp = document.createElement('button');
+      btnUp.textContent = '↑';
+      btnUp.disabled = index === 0;
+      btnUp.addEventListener('click', () => moveSetlistSong(sl, index, -1));
+
+      const btnDown = document.createElement('button');
+      btnDown.textContent = '↓';
+      btnDown.disabled = index === uuids.length - 1;
+      btnDown.addEventListener('click', () => moveSetlistSong(sl, index, 1));
+
+      const btnRemove = document.createElement('button');
+      btnRemove.textContent = '削除';
+      btnRemove.addEventListener('click', () => removeSetlistSong(sl, index));
+
+      row.appendChild(idx);
+      row.appendChild(main);
+      row.appendChild(btnUp);
+      row.appendChild(btnDown);
+      row.appendChild(btnRemove);
+      setlistSongsEl.appendChild(row);
+    });
+  }
+
+  async function moveSetlistSong(sl, index, delta) {
+    const uuids = sl.songUuids.slice();
+    const newIndex = index + delta;
+    if (newIndex < 0 || newIndex >= uuids.length) return;
+    [uuids[index], uuids[newIndex]] = [uuids[newIndex], uuids[index]];
+    sl.songUuids = uuids;
+    sl.updatedAt = Date.now();
+    await slPut(sl);
+    renderSetlistEdit();
+  }
+
+  async function removeSetlistSong(sl, index) {
+    const uuids = sl.songUuids.slice();
+    uuids.splice(index, 1);
+    sl.songUuids = uuids;
+    sl.updatedAt = Date.now();
+    await slPut(sl);
+    renderSetlistEdit();
+  }
+
+  btnRenameSetlist.addEventListener('click', async () => {
+    const sl = await slGet(currentSetlistId);
+    if (!sl) return;
+    const name = prompt('セットリスト名を変更', sl.name);
+    if (name === null) return;
+    sl.name = name.trim() || sl.name;
+    sl.updatedAt = Date.now();
+    await slPut(sl);
+    renderSetlistEdit();
+  });
+
+  btnDeleteSetlist.addEventListener('click', async () => {
+    const sl = await slGet(currentSetlistId);
+    if (!sl) return;
+    if (!confirm(`「${sl.name}」を削除しますか？`)) return;
+    await slDelete(currentSetlistId);
+    showScreen(setlistListScreen);
+    renderSetlistList();
+  });
+
+  btnSetlistEditBack.addEventListener('click', () => {
+    showScreen(setlistListScreen);
+    renderSetlistList();
+  });
+
+  // ---- 曲ピッカー(セットリストへの曲追加) ----
+  btnAddSongToSetlist.addEventListener('click', async () => {
+    showScreen(songPickerScreen);
+    await renderSongPicker();
+  });
+
+  async function renderSongPicker() {
+    const sl = await slGet(currentSetlistId);
+    const existing = new Set(sl ? sl.songUuids : []);
+    const allSongs = await dbGetAll();
+    await Promise.all(allSongs.map(ensureSongUuid));
+    allSongs.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+
+    songPickerListEl.innerHTML = '';
+    const available = allSongs.filter((s) => !existing.has(s.uuid));
+    if (available.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = '追加できる曲がありません(すべて追加済みか、曲が未登録です)';
+      songPickerListEl.appendChild(p);
+      return;
+    }
+    for (const song of available) {
+      const row = document.createElement('div');
+      row.className = 'pickerRow';
+      const main = document.createElement('div');
+      main.className = 'songMain';
+      main.textContent = song.name;
+      main.addEventListener('click', async () => {
+        const sl2 = await slGet(currentSetlistId);
+        sl2.songUuids = [...(sl2.songUuids || []), song.uuid];
+        sl2.updatedAt = Date.now();
+        await slPut(sl2);
+        renderSongPicker(); // 追加した曲を候補から消す
+      });
+      row.appendChild(main);
+      songPickerListEl.appendChild(row);
+    }
+  }
+
+  btnSongPickerDone.addEventListener('click', () => {
+    showScreen(setlistEditScreen);
+    renderSetlistEdit();
+  });
+
+  // ---- セットリストの演奏(ビューアでの前後曲切替え) ----
+  btnStartSetlist.addEventListener('click', async () => {
+    const sl = await slGet(currentSetlistId);
+    if (!sl || !sl.songUuids || sl.songUuids.length === 0) {
+      alert('曲が1曲もありません。先に曲を追加してください。');
+      return;
+    }
+    activeSetlist = sl;
+    viewerReturnScreen = setlistListScreen;
+    viewer.classList.add('setlist-active');
+    await openSetlistSongAtIndex(0);
+  });
+
+  async function openSetlistSongAtIndex(index) {
+    if (!activeSetlist) return;
+    const uuid = activeSetlist.songUuids[index];
+    const song = await findSongByUuid(uuid);
+    if (!song) {
+      alert('この曲が見つかりません(削除された可能性があります)');
+      return;
+    }
+    activeSetlistIndex = index;
+    await openSongRecord(song);
+    updateSetlistNavButtons();
+  }
+
+  function updateSetlistNavButtons() {
+    if (!activeSetlist) return;
+    btnPrevSong.disabled = activeSetlistIndex <= 0;
+    btnNextSong.disabled = activeSetlistIndex >= activeSetlist.songUuids.length - 1;
+  }
+
+  btnPrevSong.addEventListener('click', async () => {
+    if (!activeSetlist || activeSetlistIndex <= 0) return;
+    flushSpeedSave();
+    await openSetlistSongAtIndex(activeSetlistIndex - 1);
+  });
+  btnNextSong.addEventListener('click', async () => {
+    if (!activeSetlist || activeSetlistIndex >= activeSetlist.songUuids.length - 1) return;
+    flushSpeedSave();
+    await openSetlistSongAtIndex(activeSetlistIndex + 1);
+  });
+
+  // ==================================================
   // ZIPバックアップ(依存ライブラリなし、無圧縮STORE方式)
   // 画像/PDFは既に圧縮済み形式なので、DEFLATE圧縮のコストをかけても
   // ほぼ縮まない。CRC32計算とヘッダー書き込みだけで完結する。
@@ -1492,20 +1927,19 @@
       updatedAt: Date.now(),
     };
     const id = await dbAdd(song);
-    currentSongId = id;
-    speed = song.speed;
-    currentMemos = [];
-    currentBpm = song.bpm ?? null;
-    speedLabel.textContent = `${speed} px/s`;
-    updateBpmLabel();
-    await loadIntoViewer(file);
+    song.id = id;
+    activeSetlist = null;
+    activeSetlistIndex = -1;
+    viewerReturnScreen = songListScreen;
+    viewer.classList.remove('setlist-active');
+    await openSongRecord(song);
   }
 
-  async function openSong(id) {
-    let song = await dbGet(id);
-    if (!song) return;
+  // 曲レコード(dbGetAllやfindSongByUuidで取得済みのもの)からビューアを開く共通処理。
+  // セットリストの前後曲切替え(uuidから曲を探して開く)でも使う。
+  async function openSongRecord(song) {
     song = await ensureSongUuid(song);
-    currentSongId = id;
+    currentSongId = song.id;
     speed = song.speed || DEFAULT_SPEED;
     currentMemos = song.memos || [];
     currentBpm = song.bpm ?? null;
@@ -1514,6 +1948,16 @@
     const buf = await getSongArrayBuffer(song);
     const file = new File([buf], song.fileName, { type: song.mimeType });
     await loadIntoViewer(file);
+  }
+
+  async function openSong(id) {
+    const song = await dbGet(id);
+    if (!song) return;
+    activeSetlist = null;
+    activeSetlistIndex = -1;
+    viewerReturnScreen = songListScreen;
+    viewer.classList.remove('setlist-active');
+    await openSongRecord(song);
   }
 
   btnAddSong.addEventListener('click', () => fileInput.click());
@@ -1543,10 +1987,13 @@
     memoEditMode = false;
     pendingMemoType = null;
     pendingMemoPlacement = null;
+    activeSetlist = null;
+    activeSetlistIndex = -1;
     viewer.classList.remove('memo-edit-mode');
-    viewer.classList.add('hidden');
-    songListScreen.classList.remove('hidden');
+    viewer.classList.remove('setlist-active');
+    showScreen(viewerReturnScreen || songListScreen);
     renderSongList();
+    renderSetlistList();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushSpeedSave();
@@ -1556,8 +2003,7 @@
     const isPdf = isPdfFile(file);
     // タイル生成時にscrollWrapのclientWidth/Heightを使うため、
     // 計測前にビューア画面を表示してレイアウトを確定させる(#viewerはdisplay:noneだと0になる)。
-    songListScreen.classList.add('hidden');
-    viewer.classList.remove('hidden');
+    showScreen(viewer);
     try {
       if (isPdf) await loadPdfFile(file);
       else await loadImageFile(file);
@@ -1568,8 +2014,7 @@
     } catch (err) {
       console.error(err);
       alert('読み込みエラー: ' + (err && err.message ? err.message : err));
-      viewer.classList.add('hidden');
-      songListScreen.classList.remove('hidden');
+      showScreen(viewerReturnScreen || songListScreen);
     }
   }
 
