@@ -116,6 +116,7 @@
     background: #333; color: #eee; cursor: pointer;
   }
   #toolbar button:active { background: #6cf; color: #111; }
+  #btnMetronome.active { background: #6cf; color: #111; }
   #btnPlay { min-width: 84px; font-weight: bold; }
   #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
   #btnBack { margin-right: auto; font-size: 13px; opacity: 0.8; }
@@ -149,9 +150,11 @@
     <div id="progressBar"><div id="progressFill"></div></div>
     <div id="toolbar">
       <button id="btnBack">&larr; 曲一覧</button>
-      <button id="btnMemoEdit">&#9998; メモ編集</button>
+      <button id="btnMemoEdit">&#9998; 編集</button>
       <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
       <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
+      <button id="btnEditBpm" class="memoEditOnly">BPM: --</button>
+      <button id="btnMetronome">&#128276; クリック</button>
       <button id="btnSpeedDown">&minus;</button>
       <span id="speedLabel">40 px/s</span>
       <button id="btnSpeedUp">+</button>
@@ -204,6 +207,8 @@
   const btnAddTextMemo = document.getElementById('btnAddTextMemo');
   const btnAddImageMemo = document.getElementById('btnAddImageMemo');
   const memoImageInput = document.getElementById('memoImageInput');
+  const btnEditBpm = document.getElementById('btnEditBpm');
+  const btnMetronome = document.getElementById('btnMetronome');
   const btnSpeedUp = document.getElementById('btnSpeedUp');
   const btnSpeedDown = document.getElementById('btnSpeedDown');
   const speedLabel = document.getElementById('speedLabel');
@@ -221,6 +226,7 @@
   let currentPdfDoc = null;     // kind==='pdf' 用
   let currentSongId = null;     // IndexedDBに保存されている曲のid(未保存時はnull)
   let currentMemos = [];        // 開いている曲のメモ配列
+  let currentBpm = null;        // 開いている曲のBPM(未設定はnull)
   let memoEditMode = false;
   let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
   let memoObjectUrls = [];      // renderMemosで作ったBlob URL(再描画のたびに解放する)
@@ -688,6 +694,95 @@
   btnAddImageMemo.addEventListener('click', () => {
     pendingMemoType = 'image';
     alert('配置したい場所を譜面上でタップしてください');
+  });
+
+  // ==================================================
+  // BPM編集
+  // ==================================================
+  function updateBpmLabel() {
+    btnEditBpm.textContent = currentBpm != null ? `BPM: ${currentBpm}` : 'BPM: --';
+  }
+
+  async function saveCurrentBpm() {
+    if (currentSongId == null) return;
+    const song = await dbGet(currentSongId);
+    if (!song) return;
+    song.bpm = currentBpm;
+    song.updatedAt = Date.now();
+    await dbPut(song);
+  }
+
+  btnEditBpm.addEventListener('click', async () => {
+    const input = prompt('BPMを入力してください(空欄で未設定)', currentBpm != null ? String(currentBpm) : '');
+    if (input === null) return;
+    const bpm = input.trim() ? parseInt(input, 10) : null;
+    currentBpm = Number.isFinite(bpm) ? bpm : null;
+    updateBpmLabel();
+    await saveCurrentBpm();
+  });
+
+  // ==================================================
+  // メトロノーム(Web Audio)
+  // rAFやsetTimeoutだけで刻むと時間ズレが蓄積するため、AudioContextの時刻を基準に
+  // 少し先まで予約するルックアヘッド方式にする(定番の実装パターン)。
+  // ==================================================
+  let audioCtx = null;
+  let metronomePlaying = false;
+  let metronomeTimerId = null;
+  let nextClickTime = 0;
+  const METRONOME_LOOKAHEAD_MS = 25;
+  const METRONOME_SCHEDULE_AHEAD_SEC = 0.1;
+
+  function ensureAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  function scheduleClick(time) {
+    const ctx = ensureAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 1000;
+    gain.gain.setValueAtTime(0.4, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(time);
+    osc.stop(time + 0.03);
+  }
+
+  function metronomeScheduler() {
+    const ctx = ensureAudioCtx();
+    while (nextClickTime < ctx.currentTime + METRONOME_SCHEDULE_AHEAD_SEC) {
+      scheduleClick(nextClickTime);
+      nextClickTime += 60 / currentBpm;
+    }
+    metronomeTimerId = setTimeout(metronomeScheduler, METRONOME_LOOKAHEAD_MS);
+  }
+
+  function startMetronome() {
+    if (!currentBpm) {
+      alert('BPMが未設定です。「編集」を押してBPMを設定してください。');
+      return;
+    }
+    const ctx = ensureAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    nextClickTime = ctx.currentTime + 0.05;
+    metronomePlaying = true;
+    metronomeScheduler();
+    btnMetronome.textContent = '\u{1F515} 停止';
+    btnMetronome.classList.add('active');
+  }
+
+  function stopMetronome() {
+    metronomePlaying = false;
+    clearTimeout(metronomeTimerId);
+    btnMetronome.textContent = '\u{1F514} クリック';
+    btnMetronome.classList.remove('active');
+  }
+
+  btnMetronome.addEventListener('click', () => {
+    if (metronomePlaying) stopMetronome(); else startMetronome();
   });
 
   // ==================================================
@@ -1335,7 +1430,9 @@
     currentSongId = id;
     speed = song.speed;
     currentMemos = [];
+    currentBpm = song.bpm ?? null;
     speedLabel.textContent = `${speed} px/s`;
+    updateBpmLabel();
     await loadIntoViewer(file);
   }
 
@@ -1346,7 +1443,9 @@
     currentSongId = id;
     speed = song.speed || DEFAULT_SPEED;
     currentMemos = song.memos || [];
+    currentBpm = song.bpm ?? null;
     speedLabel.textContent = `${speed} px/s`;
+    updateBpmLabel();
     const buf = await getSongArrayBuffer(song);
     const file = new File([buf], song.fileName, { type: song.mimeType });
     await loadIntoViewer(file);
@@ -1368,12 +1467,14 @@
   btnBack.addEventListener('click', () => {
     flushSpeedSave();
     stopPlayback();
+    stopMetronome();
     clearTiles();
     currentSourceKind = null;
     currentImageEl = null;
     currentPdfDoc = null;
     currentSongId = null;
     currentMemos = [];
+    currentBpm = null;
     memoEditMode = false;
     pendingMemoType = null;
     viewer.classList.remove('memo-edit-mode');
