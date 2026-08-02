@@ -886,6 +886,20 @@
   const SYNC_API_URL = 'https://chordwiki-live-viewer.kento-kawamura-730.workers.dev';
   const SYNC_KEY_STORAGE = 'cwlv_sync_key';
 
+  // URLに ?key=... が付いていたら自動保存してURLから消す。
+  // 新しい端末でキーを手入力しなくて済むよう、このURLをLINE/メモ等で自分に送って
+  // タップするだけでセットアップできるようにするため。
+  (() => {
+    const params = new URLSearchParams(location.search);
+    const keyFromUrl = params.get('key');
+    if (keyFromUrl) {
+      localStorage.setItem(SYNC_KEY_STORAGE, keyFromUrl);
+      params.delete('key');
+      const newSearch = params.toString();
+      history.replaceState(null, '', location.pathname + (newSearch ? `?${newSearch}` : ''));
+    }
+  })();
+
   function getSyncKey() {
     let key = localStorage.getItem(SYNC_KEY_STORAGE);
     if (!key) {
