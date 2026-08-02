@@ -102,6 +102,7 @@
     </div>
     <div id="backupBar">
       <span id="lastBackupInfo"></span>
+      <button id="btnSync">クラウド同期</button>
       <button id="btnExportZip">バックアップを書き出す</button>
       <button id="btnImportZip">ZIPを読み込む</button>
     </div>
@@ -154,6 +155,7 @@
   const btnExportZip = document.getElementById('btnExportZip');
   const btnImportZip = document.getElementById('btnImportZip');
   const lastBackupInfo = document.getElementById('lastBackupInfo');
+  const btnSync = document.getElementById('btnSync');
   const viewer = document.getElementById('viewer');
   const scrollWrap = document.getElementById('scrollWrap');
   const tileContainer = document.getElementById('tileContainer');
@@ -874,6 +876,105 @@
     importBackupZip(file).catch((err) => {
       console.error(err);
       alert('読み込みエラー: ' + (err && err.message ? err.message : err));
+    });
+  });
+
+  // ==================================================
+  // クラウド同期(Cloudflare Workers + D1 + R2)
+  // uuidとupdatedAtを見て、新しい方を残す双方向マージ。ZIPバックアップと同じ考え方。
+  // ==================================================
+  const SYNC_API_URL = 'https://chordwiki-live-viewer.kento-kawamura-730.workers.dev';
+  const SYNC_KEY_STORAGE = 'cwlv_sync_key';
+
+  function getSyncKey() {
+    let key = localStorage.getItem(SYNC_KEY_STORAGE);
+    if (!key) {
+      key = prompt('同期キーを入力してください');
+      if (key) localStorage.setItem(SYNC_KEY_STORAGE, key);
+    }
+    return key || null;
+  }
+
+  async function uploadSong(key, song) {
+    const form = new FormData();
+    form.set('name', song.name);
+    form.set('fileName', song.fileName);
+    form.set('mimeType', song.mimeType);
+    form.set('speed', String(song.speed));
+    form.set('bpm', song.bpm != null ? String(song.bpm) : '');
+    form.set('createdAt', String(song.createdAt));
+    form.set('updatedAt', String(song.updatedAt));
+    form.set('file', song.blob, song.fileName);
+    const res = await fetch(`${SYNC_API_URL}/api/songs/${song.uuid}`, {
+      method: 'PUT', headers: { 'X-Sync-Key': key }, body: form,
+    });
+    if (!res.ok) throw new Error(`アップロード失敗: ${song.name} (${res.status})`);
+  }
+
+  async function downloadSong(key, remote, existingLocal) {
+    const res = await fetch(`${SYNC_API_URL}/api/songs/${remote.uuid}/file`, {
+      headers: { 'X-Sync-Key': key },
+    });
+    if (!res.ok) throw new Error(`ダウンロード失敗: ${remote.name} (${res.status})`);
+    const blob = await res.blob();
+    if (existingLocal) {
+      Object.assign(existingLocal, {
+        name: remote.name, bpm: remote.bpm, speed: remote.speed,
+        blob, fileName: remote.fileName, mimeType: remote.mimeType,
+        updatedAt: remote.updatedAt,
+      });
+      await dbPut(existingLocal);
+    } else {
+      await dbAdd({
+        uuid: remote.uuid, name: remote.name, bpm: remote.bpm, speed: remote.speed,
+        blob, fileName: remote.fileName, mimeType: remote.mimeType,
+        createdAt: remote.createdAt, updatedAt: remote.updatedAt,
+      });
+    }
+  }
+
+  async function syncNow() {
+    const key = getSyncKey();
+    if (!key) return;
+
+    const res = await fetch(`${SYNC_API_URL}/api/songs`, { headers: { 'X-Sync-Key': key } });
+    if (res.status === 401) {
+      localStorage.removeItem(SYNC_KEY_STORAGE);
+      throw new Error('同期キーが正しくありません(再度お試しください)');
+    }
+    if (!res.ok) throw new Error(`サーバーエラー (${res.status})`);
+    const remoteSongs = await res.json();
+    const remoteByUuid = new Map(remoteSongs.map((s) => [s.uuid, s]));
+
+    const localSongs = await dbGetAll();
+    await Promise.all(localSongs.map(ensureSongUuid));
+    const localByUuid = new Map(localSongs.map((s) => [s.uuid, s]));
+
+    let uploaded = 0, downloaded = 0;
+
+    for (const song of localSongs) {
+      const remote = remoteByUuid.get(song.uuid);
+      if (!remote || song.updatedAt > remote.updatedAt) {
+        await uploadSong(key, song);
+        uploaded++;
+      }
+    }
+    for (const remote of remoteSongs) {
+      const local = localByUuid.get(remote.uuid);
+      if (!local || remote.updatedAt > local.updatedAt) {
+        await downloadSong(key, remote, local);
+        downloaded++;
+      }
+    }
+
+    alert(`同期完了: アップロード${uploaded}件 / ダウンロード${downloaded}件`);
+    renderSongList();
+  }
+
+  btnSync.addEventListener('click', () => {
+    syncNow().catch((err) => {
+      console.error(err);
+      alert('同期エラー: ' + (err && err.message ? err.message : err));
     });
   });
 
