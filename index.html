@@ -853,6 +853,25 @@
   async function deleteSong(song) {
     if (!confirm(`「${song.name}」を削除しますか？`)) return;
     await dbDelete(song.id);
+
+    // クラウド同期を使っている場合はサーバー側からも削除する。
+    // ローカルだけ消すと、次回同期で「サーバーにあってローカルにない」と
+    // 判定されて復活してしまうため。
+    const key = localStorage.getItem(SYNC_KEY_STORAGE);
+    if (key && song.uuid) {
+      try {
+        const res = await fetch(`${SYNC_API_URL}/api/songs/${song.uuid}`, {
+          method: 'DELETE', headers: { 'X-Sync-Key': key },
+        });
+        if (!res.ok && res.status !== 404) {
+          alert(`サーバー側の削除に失敗しました(次回同期で復活する可能性があります): ${res.status}`);
+        }
+      } catch (err) {
+        console.error(err);
+        alert('サーバーに接続できず、クラウド側の削除はスキップされました(次回同期で復活する可能性があります)');
+      }
+    }
+
     renderSongList();
   }
 
