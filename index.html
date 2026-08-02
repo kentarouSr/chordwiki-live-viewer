@@ -68,6 +68,35 @@
   }
   #tileContainer canvas { display: block; width: 100%; }
 
+  #memoLayer {
+    position: absolute; top: 0; left: 0; width: 100%;
+    will-change: transform; pointer-events: none;
+  }
+  .memo {
+    position: absolute; pointer-events: none;
+  }
+  #viewer.memo-edit-mode .memo {
+    pointer-events: auto; cursor: grab; outline: 2px dashed #6cf; outline-offset: 2px;
+  }
+  .memo-text {
+    max-width: 220px; padding: 6px 9px; border-radius: 6px; font-size: 13px;
+    line-height: 1.4; white-space: pre-wrap; background: rgba(255, 224, 130, 0.95);
+    color: #111; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .memo-image img {
+    display: block; width: 100%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .memo-delete {
+    position: absolute; top: -10px; right: -10px; width: 22px; height: 22px;
+    border-radius: 50%; border: none; background: #c33; color: #fff;
+    font-size: 14px; line-height: 1; cursor: pointer; display: none;
+  }
+  #viewer.memo-edit-mode .memo-delete { display: block; }
+
+  #memoImageInput { display: none; }
+  .memoEditOnly { display: none; }
+  #viewer.memo-edit-mode .memoEditOnly { display: inline-block; }
+
   #progressBar {
     position: absolute; top: 0; left: 0; right: 0; height: 4px;
     background: rgba(255,255,255,0.15); z-index: 5;
@@ -76,7 +105,7 @@
 
   #toolbar {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
     background: rgba(17,17,17,0.85); backdrop-filter: blur(4px);
     transition: transform 0.3s ease, opacity 0.3s ease;
@@ -115,15 +144,20 @@
   <div id="viewer" class="hidden">
     <div id="scrollWrap">
       <div id="tileContainer"></div>
+      <div id="memoLayer"></div>
     </div>
     <div id="progressBar"><div id="progressFill"></div></div>
     <div id="toolbar">
       <button id="btnBack">&larr; 曲一覧</button>
+      <button id="btnMemoEdit">&#9998; メモ編集</button>
+      <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
+      <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
       <button id="btnSpeedDown">&minus;</button>
       <span id="speedLabel">40 px/s</span>
       <button id="btnSpeedUp">+</button>
       <button id="btnPlay">&#9654; 再生</button>
     </div>
+    <input id="memoImageInput" type="file" accept="image/*">
   </div>
 
 </div>
@@ -161,10 +195,15 @@
   const viewer = document.getElementById('viewer');
   const scrollWrap = document.getElementById('scrollWrap');
   const tileContainer = document.getElementById('tileContainer');
+  const memoLayerEl = document.getElementById('memoLayer');
   const progressFill = document.getElementById('progressFill');
   const toolbar = document.getElementById('toolbar');
   const btnPlay = document.getElementById('btnPlay');
   const btnBack = document.getElementById('btnBack');
+  const btnMemoEdit = document.getElementById('btnMemoEdit');
+  const btnAddTextMemo = document.getElementById('btnAddTextMemo');
+  const btnAddImageMemo = document.getElementById('btnAddImageMemo');
+  const memoImageInput = document.getElementById('memoImageInput');
   const btnSpeedUp = document.getElementById('btnSpeedUp');
   const btnSpeedDown = document.getElementById('btnSpeedDown');
   const speedLabel = document.getElementById('speedLabel');
@@ -181,6 +220,10 @@
   let currentImageEl = null;    // kind==='image' 用。リサイズ時の再タイル化に使う
   let currentPdfDoc = null;     // kind==='pdf' 用
   let currentSongId = null;     // IndexedDBに保存されている曲のid(未保存時はnull)
+  let currentMemos = [];        // 開いている曲のメモ配列
+  let memoEditMode = false;
+  let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
+  let memoObjectUrls = [];      // renderMemosで作ったBlob URL(再描画のたびに解放する)
 
   // ==================================================
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
@@ -331,6 +374,7 @@
 
   function clearTiles() {
     tileContainer.innerHTML = '';
+    clearMemoLayer();
     contentHeight = 0;
     scrollY = 0;
     applyTransform();
@@ -369,18 +413,22 @@
   }
 
   function rebuildCurrentSource() {
+    let p = null;
     if (currentSourceKind === 'image' && currentImageEl) {
-      buildTilesFromImage(currentImageEl);
+      p = buildTilesFromImage(currentImageEl);
     } else if (currentSourceKind === 'pdf' && currentPdfDoc) {
-      buildTilesFromPdf(currentPdfDoc);
+      p = buildTilesFromPdf(currentPdfDoc);
     }
+    if (p) p.then(renderMemos); // 画面幅が変わるとメモの位置も再計算が必要
   }
 
   // ==================================================
   // スクロール再生
   // ==================================================
   function applyTransform() {
-    tileContainer.style.transform = `translate3d(0, ${-scrollY}px, 0)`;
+    const t = `translate3d(0, ${-scrollY}px, 0)`;
+    tileContainer.style.transform = t;
+    memoLayerEl.style.transform = t;
     const m = maxScroll();
     progressFill.style.width = (m > 0 ? (scrollY / m * 100) : 0) + '%';
   }
@@ -430,12 +478,14 @@
   // 手動ドラッグ(再生中はドラッグ中一時停止、離すと自動再開)
   // ==================================================
   let dragging = false;
+  let dragStartX = 0;
   let dragStartY = 0;
   let dragStartScrollY = 0;
   let wasPlayingBeforeDrag = false;
 
   scrollWrap.addEventListener('pointerdown', (e) => {
     dragging = true;
+    dragStartX = e.clientX;
     dragStartY = e.clientY;
     dragStartScrollY = scrollY;
     wasPlayingBeforeDrag = playing;
@@ -451,9 +501,17 @@
   });
   scrollWrap.addEventListener('pointerup', endDrag);
   scrollWrap.addEventListener('pointercancel', endDrag);
-  function endDrag() {
+  function endDrag(e) {
     if (!dragging) return;
     dragging = false;
+    const moved = e ? Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY) : 999;
+    // メモ編集モードで種類を選択済みなら、ほぼ動いていないタップを配置操作として扱う
+    if (memoEditMode && pendingMemoType && moved < 8 && e) {
+      const type = pendingMemoType;
+      pendingMemoType = null;
+      placeMemoAt(e.clientX, e.clientY, type);
+      return;
+    }
     if (wasPlayingBeforeDrag) startPlayback();
   }
 
@@ -472,6 +530,165 @@
       wheelResumeTimer = setTimeout(startPlayback, 400);
     }
   }, { passive: false });
+
+  // ==================================================
+  // メモ(譜面画像上の相対座標に配置し、タイルと一緒にスクロールする)
+  // x, yは0〜1の範囲。コンテンツ幅・高さに対する割合で保持することで、
+  // 端末やタイル再生成後も同じ位置に描画できるようにしている。
+  // ==================================================
+  function clearMemoLayer() {
+    for (const url of memoObjectUrls) URL.revokeObjectURL(url);
+    memoObjectUrls = [];
+    memoLayerEl.innerHTML = '';
+  }
+
+  function renderMemos() {
+    clearMemoLayer();
+    memoLayerEl.style.height = contentHeight + 'px';
+    const cssWidth = viewportWidthCss();
+    for (const memo of currentMemos) {
+      const el = document.createElement('div');
+      el.className = memo.type === 'text' ? 'memo memo-text' : 'memo memo-image';
+      el.style.left = Math.round(memo.x * cssWidth) + 'px';
+      el.style.top = Math.round(memo.y * contentHeight) + 'px';
+
+      if (memo.type === 'text') {
+        el.textContent = memo.text;
+      } else {
+        const img = document.createElement('img');
+        const url = URL.createObjectURL(new Blob([memo.data], { type: memo.mimeType }));
+        memoObjectUrls.push(url);
+        img.src = url;
+        img.style.width = (memo.width || 160) + 'px';
+        el.appendChild(img);
+      }
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'memo-delete';
+      delBtn.textContent = '×';
+      delBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('このメモを削除しますか？')) return;
+        currentMemos = currentMemos.filter((m) => m.id !== memo.id);
+        await saveCurrentMemos();
+        renderMemos();
+      });
+      el.appendChild(delBtn);
+
+      bindMemoDrag(el, memo);
+      memoLayerEl.appendChild(el);
+    }
+  }
+
+  function bindMemoDrag(el, memo) {
+    el.addEventListener('pointerdown', (e) => {
+      if (!memoEditMode) return;
+      e.stopPropagation(); // scrollWrap側のスクロール開始を防ぐ
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const startClientX = e.clientX;
+      const startClientY = e.clientY;
+      const startLeft = parseFloat(el.style.left);
+      const startTop = parseFloat(el.style.top);
+      let moved = false;
+
+      const onMove = (ev) => {
+        const dx = ev.clientX - startClientX;
+        const dy = ev.clientY - startClientY;
+        if (Math.hypot(dx, dy) > 4) moved = true;
+        el.style.left = (startLeft + dx) + 'px';
+        el.style.top = (startTop + dy) + 'px';
+      };
+      const onUp = async () => {
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup', onUp);
+        el.removeEventListener('pointercancel', onUp);
+        if (moved) {
+          const cssWidth = viewportWidthCss();
+          memo.x = clamp(parseFloat(el.style.left) / cssWidth, 0, 1);
+          memo.y = contentHeight > 0 ? clamp(parseFloat(el.style.top) / contentHeight, 0, 1) : 0;
+          memo.updatedAt = Date.now();
+          await saveCurrentMemos();
+        } else if (memo.type === 'text') {
+          const newText = prompt('メモを編集', memo.text);
+          if (newText !== null && newText.trim()) {
+            memo.text = newText;
+            memo.updatedAt = Date.now();
+            await saveCurrentMemos();
+            renderMemos();
+          }
+        }
+      };
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+      el.addEventListener('pointercancel', onUp);
+    });
+  }
+
+  function placeMemoAt(clientX, clientY, type) {
+    const rect = scrollWrap.getBoundingClientRect();
+    const xCss = clientX - rect.left;
+    const yCss = (clientY - rect.top) + scrollY; // ビューポート座標→コンテンツ座標に変換
+    const cssWidth = viewportWidthCss();
+    const x = clamp(xCss / cssWidth, 0, 1);
+    const y = contentHeight > 0 ? clamp(yCss / contentHeight, 0, 1) : 0;
+
+    if (type === 'text') {
+      const text = prompt('メモの内容を入力してください');
+      if (!text || !text.trim()) return;
+      addMemo({ id: crypto.randomUUID(), type: 'text', x, y, text: text.trim(), createdAt: Date.now(), updatedAt: Date.now() });
+    } else {
+      memoImageInput.dataset.pendingX = String(x);
+      memoImageInput.dataset.pendingY = String(y);
+      memoImageInput.click();
+    }
+  }
+
+  async function addMemo(memo) {
+    currentMemos.push(memo);
+    await saveCurrentMemos();
+    renderMemos();
+  }
+
+  async function saveCurrentMemos() {
+    if (currentSongId == null) return;
+    const song = await dbGet(currentSongId);
+    if (!song) return;
+    song.memos = currentMemos;
+    song.updatedAt = Date.now();
+    await dbPut(song);
+  }
+
+  memoImageInput.addEventListener('change', async () => {
+    const file = memoImageInput.files && memoImageInput.files[0];
+    const x = parseFloat(memoImageInput.dataset.pendingX);
+    const y = parseFloat(memoImageInput.dataset.pendingY);
+    memoImageInput.value = '';
+    if (!file) return;
+    const data = await file.arrayBuffer();
+    await addMemo({
+      id: crypto.randomUUID(), type: 'image', x, y,
+      data, mimeType: file.type || 'image/png', width: 160,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    });
+  });
+
+  btnMemoEdit.addEventListener('click', () => {
+    memoEditMode = !memoEditMode;
+    pendingMemoType = null;
+    viewer.classList.toggle('memo-edit-mode', memoEditMode);
+    if (memoEditMode) stopPlayback();
+  });
+  btnAddTextMemo.addEventListener('click', () => {
+    pendingMemoType = 'text';
+    alert('配置したい場所を譜面上でタップしてください');
+  });
+  btnAddImageMemo.addEventListener('click', () => {
+    pendingMemoType = 'image';
+    alert('配置したい場所を譜面上でタップしてください');
+  });
 
   // ==================================================
   // 速度調整(1px/秒刻み、長押しで加速)
@@ -813,6 +1030,11 @@
       uuid: s.uuid, name: s.name, bpm: s.bpm, speed: s.speed,
       fileName: s.fileName, mimeType: s.mimeType,
       createdAt: s.createdAt, updatedAt: s.updatedAt,
+      memos: (s.memos || []).map((m) => ({
+        id: m.id, type: m.type, x: m.x, y: m.y,
+        text: m.text, mimeType: m.mimeType, width: m.width,
+        createdAt: m.createdAt, updatedAt: m.updatedAt,
+      })),
     }));
     const entries = [
       { name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) },
@@ -820,6 +1042,11 @@
     for (const s of songs) {
       const data = new Uint8Array(await getSongArrayBuffer(s));
       entries.push({ name: `songs/${s.uuid}_${s.fileName}`, data });
+      for (const m of (s.memos || [])) {
+        if (m.type === 'image' && m.data) {
+          entries.push({ name: `songs/${s.uuid}_memo_${m.id}.bin`, data: new Uint8Array(m.data) });
+        }
+      }
     }
 
     const zipBlob = buildZip(entries);
@@ -847,6 +1074,11 @@
       if (!fileEntry) continue;
       // subarrayのままだとZIP全体のバッファを参照し続けてしまうのでslice()でコピーする
       const data = fileEntry.data.slice().buffer;
+      const memos = (meta.memos || []).map((m) => {
+        if (m.type !== 'image') return m;
+        const memoEntry = entries.find((e) => e.name === `songs/${meta.uuid}_memo_${m.id}.bin`);
+        return { ...m, data: memoEntry ? memoEntry.data.slice().buffer : null };
+      });
       const current = byUuid.get(meta.uuid);
 
       if (current) {
@@ -855,7 +1087,7 @@
           Object.assign(current, {
             name: meta.name, bpm: meta.bpm, speed: meta.speed,
             data, fileName: meta.fileName, mimeType: meta.mimeType,
-            updatedAt: meta.updatedAt,
+            memos, updatedAt: meta.updatedAt,
           });
           await dbPut(current);
           updated++;
@@ -865,7 +1097,7 @@
       } else {
         await dbAdd({
           uuid: meta.uuid, name: meta.name, bpm: meta.bpm, speed: meta.speed,
-          data, fileName: meta.fileName, mimeType: meta.mimeType,
+          data, fileName: meta.fileName, mimeType: meta.mimeType, memos,
           createdAt: meta.createdAt || Date.now(), updatedAt: meta.updatedAt || Date.now(),
         });
         added++;
@@ -922,6 +1154,38 @@
     return key || null;
   }
 
+  // memo画像はJSON(D1のTEXTカラム)に載せて送るためbase64にする
+  function arrayBufferToBase64(buf) {
+    let binary = '';
+    const bytes = new Uint8Array(buf);
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+  function base64ToArrayBuffer(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  function serializeMemosForUpload(memos) {
+    return (memos || []).map((m) => ({
+      id: m.id, type: m.type, x: m.x, y: m.y, text: m.text,
+      mimeType: m.mimeType, width: m.width,
+      data: m.type === 'image' && m.data ? arrayBufferToBase64(m.data) : undefined,
+      createdAt: m.createdAt, updatedAt: m.updatedAt,
+    }));
+  }
+  function deserializeMemosFromRemote(memos) {
+    return (memos || []).map((m) => ({
+      ...m,
+      data: m.type === 'image' && m.data ? base64ToArrayBuffer(m.data) : undefined,
+    }));
+  }
+
   async function uploadSong(key, song) {
     const form = new FormData();
     form.set('name', song.name);
@@ -929,6 +1193,7 @@
     form.set('mimeType', song.mimeType);
     form.set('speed', String(song.speed));
     form.set('bpm', song.bpm != null ? String(song.bpm) : '');
+    form.set('memos', JSON.stringify(serializeMemosForUpload(song.memos)));
     form.set('createdAt', String(song.createdAt));
     form.set('updatedAt', String(song.updatedAt));
     const buf = await getSongArrayBuffer(song);
@@ -945,17 +1210,18 @@
     });
     if (!res.ok) throw new Error(`ダウンロード失敗: ${remote.name} (${res.status})`);
     const data = await res.arrayBuffer();
+    const memos = deserializeMemosFromRemote(remote.memos);
     if (existingLocal) {
       Object.assign(existingLocal, {
         name: remote.name, bpm: remote.bpm, speed: remote.speed,
         data, fileName: remote.fileName, mimeType: remote.mimeType,
-        updatedAt: remote.updatedAt,
+        memos, updatedAt: remote.updatedAt,
       });
       await dbPut(existingLocal);
     } else {
       await dbAdd({
         uuid: remote.uuid, name: remote.name, bpm: remote.bpm, speed: remote.speed,
-        data, fileName: remote.fileName, mimeType: remote.mimeType,
+        data, fileName: remote.fileName, mimeType: remote.mimeType, memos,
         createdAt: remote.createdAt, updatedAt: remote.updatedAt,
       });
     }
@@ -1042,12 +1308,14 @@
       fileName: file.name,
       speed: DEFAULT_SPEED,
       bpm: Number.isFinite(bpm) ? bpm : null,
+      memos: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
     const id = await dbAdd(song);
     currentSongId = id;
     speed = song.speed;
+    currentMemos = [];
     speedLabel.textContent = `${speed} px/s`;
     await loadIntoViewer(file);
   }
@@ -1058,6 +1326,7 @@
     song = await ensureSongUuid(song);
     currentSongId = id;
     speed = song.speed || DEFAULT_SPEED;
+    currentMemos = song.memos || [];
     speedLabel.textContent = `${speed} px/s`;
     const buf = await getSongArrayBuffer(song);
     const file = new File([buf], song.fileName, { type: song.mimeType });
@@ -1085,6 +1354,10 @@
     currentImageEl = null;
     currentPdfDoc = null;
     currentSongId = null;
+    currentMemos = [];
+    memoEditMode = false;
+    pendingMemoType = null;
+    viewer.classList.remove('memo-edit-mode');
     viewer.classList.add('hidden');
     songListScreen.classList.remove('hidden');
     renderSongList();
@@ -1105,6 +1378,7 @@
       if (contentHeight <= 0) {
         throw new Error('コンテンツの高さが0でした(読み込んだファイルが空か、非対応の形式の可能性があります)');
       }
+      renderMemos();
     } catch (err) {
       console.error(err);
       alert('読み込みエラー: ' + (err && err.message ? err.message : err));
