@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>ChordWiki Live Viewer (Prototype)</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#1b1f2a">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ChordWiki Live">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -222,6 +228,8 @@
       <button id="btnCopySetupLink">セットアップリンクをコピー</button>
       <button id="btnExportZip">バックアップを書き出す</button>
       <button id="btnImportZip">ZIPを読み込む</button>
+      <span id="offlineCacheInfo"></span>
+      <button id="btnUpdateOfflineCache">オフライン用データを更新</button>
     </div>
     <div id="songList"></div>
     <input id="fileInput" type="file" accept="image/*,application/pdf">
@@ -311,6 +319,12 @@
   const DEFAULT_SPEED = 40; // 曲未選択時・新規追加時の初期値
   const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
 
+  // ---- Service Worker登録 ----
+  // オフライン起動用。file://等では登録できないためhttp(s)の時だけ試みる。
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+
   // ---- DOM ----
   const songListScreen = document.getElementById('songListScreen');
   const songListEl = document.getElementById('songList');
@@ -323,6 +337,8 @@
   const btnSync = document.getElementById('btnSync');
   const btnCopySetupLink = document.getElementById('btnCopySetupLink');
   const btnGoSetlists = document.getElementById('btnGoSetlists');
+  const offlineCacheInfo = document.getElementById('offlineCacheInfo');
+  const btnUpdateOfflineCache = document.getElementById('btnUpdateOfflineCache');
 
   const setlistListScreen = document.getElementById('setlistListScreen');
   const setlistListEl = document.getElementById('setlistList');
@@ -1356,6 +1372,7 @@
 
   async function renderSongList() {
     renderLastBackupInfo();
+    renderOfflineCacheInfo();
     const songs = await dbGetAll();
     await Promise.all(songs.map(ensureSongUuid));
     songs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -1924,6 +1941,35 @@
     lastBackupInfo.classList.toggle('warn', days >= BACKUP_WARN_DAYS);
   }
 
+  // ---- オフラインキャッシュ更新 ----
+  // Service Workerのキャッシュ(cwlv-shell-v1)を、ボタン操作で明示的に最新化する。
+  const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
+  const OFFLINE_CACHE_NAME = 'cwlv-shell-v1';
+  const OFFLINE_ASSET_LIST = [
+    './', './index.html', './manifest.json',
+    './vendor/pdfjs/pdf.min.js', './vendor/pdfjs/pdf.worker.min.js',
+    './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
+  ];
+
+  function renderOfflineCacheInfo() {
+    const ts = parseInt(localStorage.getItem(OFFLINE_CACHE_UPDATED_KEY), 10);
+    offlineCacheInfo.textContent = Number.isFinite(ts)
+      ? `オフライン用データ: ${new Date(ts).toLocaleString('ja-JP')}時点`
+      : 'オフライン用データ: 未更新';
+  }
+
+  async function updateOfflineCache() {
+    if (!('caches' in window)) throw new Error('このブラウザはオフラインキャッシュに対応していません');
+    const cache = await caches.open(OFFLINE_CACHE_NAME);
+    for (const url of OFFLINE_ASSET_LIST) {
+      const res = await fetch(url, { cache: 'reload' });
+      if (!res.ok) throw new Error(`${url} の取得に失敗しました`);
+      await cache.put(url, res);
+    }
+    localStorage.setItem(OFFLINE_CACHE_UPDATED_KEY, String(Date.now()));
+    renderOfflineCacheInfo();
+  }
+
   async function exportBackupZip() {
     const songs = await dbGetAll();
     await Promise.all(songs.map(ensureSongUuid));
@@ -2050,6 +2096,12 @@
     exportBackupZip().catch((err) => {
       console.error(err);
       alert('書き出しエラー: ' + (err && err.message ? err.message : err));
+    });
+  });
+  btnUpdateOfflineCache.addEventListener('click', () => {
+    updateOfflineCache().catch((err) => {
+      console.error(err);
+      alert('オフライン用データの更新エラー: ' + (err && err.message ? err.message : err));
     });
   });
   btnImportZip.addEventListener('click', () => zipInput.click());
@@ -2443,11 +2495,10 @@
   function loadPdfJs() {
     if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
     if (pdfJsLoadPromise) return pdfJsLoadPromise;
-    // プロトタイプ検証用にCDN(ESMビルド)から動的import。本実装ではリポジトリに同梱してオフライン化する。
-    pdfJsLoadPromise = import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs')
+    // オフライン起動用にリポジトリ同梱のpdf.jsを動的importする(CDN依存なし)。
+    pdfJsLoadPromise = import('./vendor/pdfjs/pdf.min.js')
       .then((pdfjsLib) => {
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdfjs/pdf.worker.min.js';
         window.pdfjsLib = pdfjsLib;
         return pdfjsLib;
       });
