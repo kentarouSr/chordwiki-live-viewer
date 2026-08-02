@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS songs (
   file_name TEXT NOT NULL,
   mime_type TEXT NOT NULL,
   r2_key TEXT NOT NULL,
+  memos TEXT NOT NULL DEFAULT '[]',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
