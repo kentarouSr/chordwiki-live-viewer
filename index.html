@@ -86,6 +86,12 @@
   .memo-image img {
     display: block; width: 100%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   }
+  .memo-resize-handle {
+    position: absolute; right: -6px; bottom: -6px; width: 16px; height: 16px;
+    background: #6cf; border: 2px solid #111; border-radius: 3px; cursor: nwse-resize;
+    display: none;
+  }
+  #viewer.memo-edit-mode .memo-resize-handle { display: block; }
   .memo-delete {
     position: absolute; top: -10px; right: -10px; width: 22px; height: 22px;
     border-radius: 50%; border: none; background: #c33; color: #fff;
@@ -229,6 +235,7 @@
   let currentBpm = null;        // 開いている曲のBPM(未設定はnull)
   let memoEditMode = false;
   let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
+  let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
   let memoObjectUrls = [];      // renderMemosで作ったBlob URL(再描画のたびに解放する)
 
   // ==================================================
@@ -567,6 +574,7 @@
         img.src = url;
         img.style.width = (memo.width || 160) + 'px';
         el.appendChild(img);
+        el.appendChild(makeResizeHandle(memo, img));
       }
 
       const delBtn = document.createElement('button');
@@ -633,6 +641,37 @@
     });
   }
 
+  function makeResizeHandle(memo, img) {
+    const handle = document.createElement('div');
+    handle.className = 'memo-resize-handle';
+    handle.addEventListener('pointerdown', (e) => {
+      if (!memoEditMode) return;
+      e.stopPropagation(); // 親要素(.memo)の移動ドラッグを発火させない
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      const startClientX = e.clientX;
+      const startWidth = memo.width || img.getBoundingClientRect().width || 160;
+
+      const onMove = (ev) => {
+        const dx = ev.clientX - startClientX;
+        const newWidth = clamp(startWidth + dx, 40, 600);
+        img.style.width = newWidth + 'px';
+      };
+      const onUp = async () => {
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        handle.removeEventListener('pointercancel', onUp);
+        memo.width = parseFloat(img.style.width);
+        memo.updatedAt = Date.now();
+        await saveCurrentMemos();
+      };
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+      handle.addEventListener('pointercancel', onUp);
+    });
+    return handle;
+  }
+
   function placeMemoAt(clientX, clientY, type) {
     const rect = scrollWrap.getBoundingClientRect();
     const xCss = clientX - rect.left;
@@ -648,9 +687,38 @@
     } else {
       memoImageInput.dataset.pendingX = String(x);
       memoImageInput.dataset.pendingY = String(y);
+      pendingMemoPlacement = { x, y };
+      alert('画像を選択するか、この画面に貼り付け(Ctrl+V)してください');
       memoImageInput.click();
     }
   }
+
+  async function addImageMemoFromFile(file, x, y) {
+    const data = await file.arrayBuffer();
+    await addMemo({
+      id: crypto.randomUUID(), type: 'image', x, y,
+      data, mimeType: file.type || 'image/png', width: 160,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    });
+  }
+
+  // クリップボードから画像を貼り付け(コピペ対応)。tap→種類選択で位置決め済みの時だけ有効。
+  document.addEventListener('paste', (e) => {
+    if (!memoEditMode || !pendingMemoPlacement) return;
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const { x, y } = pendingMemoPlacement;
+        pendingMemoPlacement = null;
+        addImageMemoFromFile(file, x, y);
+        break;
+      }
+    }
+  });
 
   async function addMemo(memo) {
     currentMemos.push(memo);
@@ -672,18 +740,15 @@
     const x = parseFloat(memoImageInput.dataset.pendingX);
     const y = parseFloat(memoImageInput.dataset.pendingY);
     memoImageInput.value = '';
+    pendingMemoPlacement = null;
     if (!file) return;
-    const data = await file.arrayBuffer();
-    await addMemo({
-      id: crypto.randomUUID(), type: 'image', x, y,
-      data, mimeType: file.type || 'image/png', width: 160,
-      createdAt: Date.now(), updatedAt: Date.now(),
-    });
+    await addImageMemoFromFile(file, x, y);
   });
 
   btnMemoEdit.addEventListener('click', () => {
     memoEditMode = !memoEditMode;
     pendingMemoType = null;
+    pendingMemoPlacement = null;
     viewer.classList.toggle('memo-edit-mode', memoEditMode);
     if (memoEditMode) stopPlayback();
   });
@@ -1477,6 +1542,7 @@
     currentBpm = null;
     memoEditMode = false;
     pendingMemoType = null;
+    pendingMemoPlacement = null;
     viewer.classList.remove('memo-edit-mode');
     viewer.classList.add('hidden');
     songListScreen.classList.remove('hidden');
