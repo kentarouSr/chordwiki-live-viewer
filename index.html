@@ -1251,6 +1251,7 @@
         e.stopPropagation();
         if (!confirm(`「${sl.name}」を削除しますか？`)) return;
         await slDelete(sl.id);
+        await deleteSetlistFromCloudIfSynced(sl);
         renderSetlistList();
       });
 
@@ -1373,6 +1374,7 @@
     if (!sl) return;
     if (!confirm(`「${sl.name}」を削除しますか？`)) return;
     await slDelete(currentSetlistId);
+    await deleteSetlistFromCloudIfSynced(sl);
     showScreen(setlistListScreen);
     renderSetlistList();
   });
@@ -1639,8 +1641,10 @@
   async function exportBackupZip() {
     const songs = await dbGetAll();
     await Promise.all(songs.map(ensureSongUuid));
+    const setlists = await slGetAll();
+    await Promise.all(setlists.map(ensureSetlistUuid));
 
-    const manifest = songs.map((s) => ({
+    const songManifest = songs.map((s) => ({
       uuid: s.uuid, name: s.name, bpm: s.bpm, speed: s.speed,
       fileName: s.fileName, mimeType: s.mimeType,
       createdAt: s.createdAt, updatedAt: s.updatedAt,
@@ -1650,6 +1654,11 @@
         createdAt: m.createdAt, updatedAt: m.updatedAt,
       })),
     }));
+    const setlistManifest = setlists.map((sl) => ({
+      uuid: sl.uuid, name: sl.name, songUuids: sl.songUuids || [],
+      createdAt: sl.createdAt, updatedAt: sl.updatedAt,
+    }));
+    const manifest = { songs: songManifest, setlists: setlistManifest };
     const entries = [
       { name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) },
     ];
@@ -1676,14 +1685,17 @@
     if (!manifestEntry) {
       throw new Error('manifest.jsonが見つかりません(このアプリで書き出したZIPではない可能性があります)');
     }
-    const manifest = JSON.parse(new TextDecoder().decode(manifestEntry.data));
+    const parsed = JSON.parse(new TextDecoder().decode(manifestEntry.data));
+    // 旧形式(曲の配列そのもの)との後方互換。新形式は{songs, setlists}。
+    const songManifest = Array.isArray(parsed) ? parsed : (parsed.songs || []);
+    const setlistManifest = Array.isArray(parsed) ? [] : (parsed.setlists || []);
 
     const existing = await dbGetAll();
     await Promise.all(existing.map(ensureSongUuid));
     const byUuid = new Map(existing.filter((s) => s.uuid).map((s) => [s.uuid, s]));
 
     let added = 0, updated = 0, skipped = 0;
-    for (const meta of manifest) {
+    for (const meta of songManifest) {
       const fileEntry = entries.find((e) => e.name === `songs/${meta.uuid}_${meta.fileName}`);
       if (!fileEntry) continue;
       // subarrayのままだとZIP全体のバッファを参照し続けてしまうのでslice()でコピーする
@@ -1717,8 +1729,32 @@
         added++;
       }
     }
+
+    const existingSetlists = await slGetAll();
+    await Promise.all(existingSetlists.map(ensureSetlistUuid));
+    const setlistByUuid = new Map(existingSetlists.filter((s) => s.uuid).map((s) => [s.uuid, s]));
+    for (const meta of setlistManifest) {
+      const current = setlistByUuid.get(meta.uuid);
+      if (current) {
+        if ((meta.updatedAt || 0) > (current.updatedAt || 0)) {
+          Object.assign(current, { name: meta.name, songUuids: meta.songUuids || [], updatedAt: meta.updatedAt });
+          await slPut(current);
+          updated++;
+        } else {
+          skipped++;
+        }
+      } else {
+        await slAdd({
+          uuid: meta.uuid, name: meta.name, songUuids: meta.songUuids || [],
+          createdAt: meta.createdAt || Date.now(), updatedAt: meta.updatedAt || Date.now(),
+        });
+        added++;
+      }
+    }
+
     alert(`復元完了: 追加${added}件 / 更新${updated}件 / スキップ${skipped}件`);
     renderSongList();
+    renderSetlistList();
   }
 
   btnExportZip.addEventListener('click', () => {
@@ -1875,8 +1911,79 @@
       }
     }
 
+    const setlistRes = await fetch(`${SYNC_API_URL}/api/setlists`, { headers: { 'X-Sync-Key': key } });
+    if (!setlistRes.ok) throw new Error(`サーバーエラー(セットリスト) (${setlistRes.status})`);
+    const remoteSetlists = await setlistRes.json();
+    const remoteSetlistByUuid = new Map(remoteSetlists.map((s) => [s.uuid, s]));
+
+    const localSetlists = await slGetAll();
+    await Promise.all(localSetlists.map(ensureSetlistUuid));
+    const localSetlistByUuid = new Map(localSetlists.map((s) => [s.uuid, s]));
+
+    for (const sl of localSetlists) {
+      const remote = remoteSetlistByUuid.get(sl.uuid);
+      if (!remote || sl.updatedAt > remote.updatedAt) {
+        await uploadSetlist(key, sl);
+        uploaded++;
+      }
+    }
+    for (const remote of remoteSetlists) {
+      const local = localSetlistByUuid.get(remote.uuid);
+      if (!local || remote.updatedAt > local.updatedAt) {
+        await downloadSetlist(remote, local);
+        downloaded++;
+      }
+    }
+
     alert(`同期完了: アップロード${uploaded}件 / ダウンロード${downloaded}件`);
     renderSongList();
+    renderSetlistList();
+  }
+
+  async function uploadSetlist(key, setlist) {
+    const res = await fetch(`${SYNC_API_URL}/api/setlists/${setlist.uuid}`, {
+      method: 'PUT',
+      headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: setlist.name,
+        songUuids: setlist.songUuids || [],
+        createdAt: setlist.createdAt,
+        updatedAt: setlist.updatedAt,
+      }),
+    });
+    if (!res.ok) throw new Error(`アップロード失敗(セットリスト): ${setlist.name} (${res.status})`);
+  }
+
+  async function downloadSetlist(remote, existingLocal) {
+    if (existingLocal) {
+      Object.assign(existingLocal, {
+        name: remote.name, songUuids: remote.songUuids, updatedAt: remote.updatedAt,
+      });
+      await slPut(existingLocal);
+    } else {
+      await slAdd({
+        uuid: remote.uuid, name: remote.name, songUuids: remote.songUuids,
+        createdAt: remote.createdAt, updatedAt: remote.updatedAt,
+      });
+    }
+  }
+
+  // 曲の削除と同様、クラウド同期中ならサーバー側のセットリストも一緒に消す。
+  async function deleteSetlistFromCloudIfSynced(setlist) {
+    if (!setlist || !setlist.uuid) return;
+    const key = localStorage.getItem(SYNC_KEY_STORAGE);
+    if (!key) return;
+    try {
+      const res = await fetch(`${SYNC_API_URL}/api/setlists/${setlist.uuid}`, {
+        method: 'DELETE', headers: { 'X-Sync-Key': key },
+      });
+      if (!res.ok && res.status !== 404) {
+        alert(`サーバー側の削除に失敗しました(次回同期で復活する可能性があります): ${res.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('サーバーに接続できず、クラウド側の削除はスキップされました(次回同期で復活する可能性があります)');
+    }
   }
 
   btnSync.addEventListener('click', () => {
