@@ -115,6 +115,14 @@
   #viewer.memo-edit-mode #strokeLayer path.stroke-hit { pointer-events: visibleStroke; cursor: pointer; }
   #viewer.draw-mode #strokeLayer { pointer-events: auto; touch-action: none; }
   #btnDrawPen.active, #btnDrawHighlighter.active { background: #6cf; color: #111; }
+  .drawOnly { display: none; }
+  #viewer.draw-mode .drawOnly { display: inline-block; }
+  #drawColorInput {
+    width: 36px; height: 36px; padding: 0; border: none; border-radius: 8px;
+    background: none; cursor: pointer;
+  }
+  #drawWidthInput { width: 100px; }
+  #drawWidthLabel { font-size: 12px; color: #999; min-width: 32px; }
 
   #memoLayer {
     position: absolute; top: 0; left: 0; width: 100%;
@@ -269,6 +277,9 @@
       <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
       <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
       <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
+      <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
+      <input type="range" id="drawWidthInput" class="drawOnly" min="1" max="40" value="4">
+      <span id="drawWidthLabel" class="drawOnly">4px</span>
       <button id="btnEditBpm" class="memoEditOnly">BPM: --</button>
       <button id="btnMetronome">&#128276; クリック</button>
       <button id="btnSpeedDown">&minus;</button>
@@ -351,6 +362,9 @@
   const btnAddImageMemo = document.getElementById('btnAddImageMemo');
   const btnDrawPen = document.getElementById('btnDrawPen');
   const btnDrawHighlighter = document.getElementById('btnDrawHighlighter');
+  const drawColorInput = document.getElementById('drawColorInput');
+  const drawWidthInput = document.getElementById('drawWidthInput');
+  const drawWidthLabel = document.getElementById('drawWidthLabel');
   const memoImageInput = document.getElementById('memoImageInput');
   const btnEditBpm = document.getElementById('btnEditBpm');
   const btnMetronome = document.getElementById('btnMetronome');
@@ -835,6 +849,11 @@
   function renderStroke(memo, cssWidth) {
     const d = strokePathD(memo.points, cssWidth);
     const isHighlighter = memo.tool === 'highlighter';
+    // color/widthは描画時点の値をメモ自体に保持している。持っていない古いデータは
+    // ツールごとの初期値にフォールバックする。
+    const fallback = DRAW_DEFAULTS[isHighlighter ? 'highlighter' : 'pen'];
+    const color = memo.color || fallback.color;
+    const width = memo.width || fallback.width;
 
     const visible = document.createElementNS(SVG_NS, 'path');
     visible.setAttribute('d', d);
@@ -842,14 +861,11 @@
     visible.setAttribute('stroke-linecap', 'round');
     visible.setAttribute('stroke-linejoin', 'round');
     visible.setAttribute('pointer-events', 'none');
+    visible.setAttribute('stroke', color);
+    visible.setAttribute('stroke-width', String(width));
     if (isHighlighter) {
-      visible.setAttribute('stroke', '#ffeb3b');
-      visible.setAttribute('stroke-width', '22');
       visible.setAttribute('opacity', '0.45');
       visible.style.mixBlendMode = 'multiply';
-    } else {
-      visible.setAttribute('stroke', '#ff3b3b');
-      visible.setAttribute('stroke-width', '4');
     }
     strokeLayerEl.appendChild(visible);
 
@@ -858,7 +874,7 @@
     hit.setAttribute('d', d);
     hit.setAttribute('fill', 'none');
     hit.setAttribute('stroke', 'transparent');
-    hit.setAttribute('stroke-width', '28');
+    hit.setAttribute('stroke-width', String(Math.max(width + 20, 28)));
     hit.setAttribute('stroke-linecap', 'round');
     hit.setAttribute('stroke-linejoin', 'round');
     hit.setAttribute('class', 'stroke-hit');
@@ -1046,6 +1062,23 @@
   // 座標系はメモと同じくコンテンツ幅/高さに対する割合(0〜1)。strokeLayerはtileContainerと
   // 同じtransformで動くので、スクロールに追従する。
   // ==================================================
+  // ツールごとの色・太さは端末に記憶させる(ペン/蛍光ペンで別々に持つ)。
+  // 既存のストロークは作成時点のcolor/widthを自分のメモデータに持っているので、
+  // 後から初期値を変えても過去に描いた線の見た目は変わらない。
+  const DRAW_DEFAULTS = {
+    pen: { color: '#ff3b3b', width: 4 },
+    highlighter: { color: '#ffeb3b', width: 22 },
+  };
+  function loadDrawPrefs(tool) {
+    const d = DRAW_DEFAULTS[tool];
+    const color = localStorage.getItem(`cwlv_draw_${tool}_color`) || d.color;
+    const width = parseInt(localStorage.getItem(`cwlv_draw_${tool}_width`), 10) || d.width;
+    return { color, width };
+  }
+  function saveDrawPref(tool, key, value) {
+    localStorage.setItem(`cwlv_draw_${tool}_${key}`, value);
+  }
+
   function setDrawMode(on, tool) {
     drawMode = on;
     if (tool) currentDrawTool = tool;
@@ -1053,6 +1086,12 @@
     viewer.classList.toggle('draw-mode', drawMode);
     btnDrawPen.classList.toggle('active', drawMode && currentDrawTool === 'pen');
     btnDrawHighlighter.classList.toggle('active', drawMode && currentDrawTool === 'highlighter');
+    if (drawMode) {
+      const prefs = loadDrawPrefs(currentDrawTool);
+      drawColorInput.value = prefs.color;
+      drawWidthInput.value = String(prefs.width);
+      drawWidthLabel.textContent = `${prefs.width}px`;
+    }
   }
 
   btnDrawPen.addEventListener('click', () => {
@@ -1060,6 +1099,13 @@
   });
   btnDrawHighlighter.addEventListener('click', () => {
     setDrawMode(!(drawMode && currentDrawTool === 'highlighter'), 'highlighter');
+  });
+  drawColorInput.addEventListener('input', () => {
+    saveDrawPref(currentDrawTool, 'color', drawColorInput.value);
+  });
+  drawWidthInput.addEventListener('input', () => {
+    drawWidthLabel.textContent = `${drawWidthInput.value}px`;
+    saveDrawPref(currentDrawTool, 'width', drawWidthInput.value);
   });
 
   strokeLayerEl.addEventListener('pointerdown', (e) => {
@@ -1077,19 +1123,19 @@
 
     const points = [toPoint(e)];
     const isHighlighter = currentDrawTool === 'highlighter';
+    const color = drawColorInput.value;
+    const width = parseInt(drawWidthInput.value, 10) || DRAW_DEFAULTS[currentDrawTool].width;
+
     const previewEl = document.createElementNS(SVG_NS, 'path');
     previewEl.setAttribute('fill', 'none');
     previewEl.setAttribute('stroke-linecap', 'round');
     previewEl.setAttribute('stroke-linejoin', 'round');
     previewEl.setAttribute('pointer-events', 'none');
+    previewEl.setAttribute('stroke', color);
+    previewEl.setAttribute('stroke-width', String(width));
     if (isHighlighter) {
-      previewEl.setAttribute('stroke', '#ffeb3b');
-      previewEl.setAttribute('stroke-width', '22');
       previewEl.setAttribute('opacity', '0.45');
       previewEl.style.mixBlendMode = 'multiply';
-    } else {
-      previewEl.setAttribute('stroke', '#ff3b3b');
-      previewEl.setAttribute('stroke-width', '4');
     }
     strokeLayerEl.appendChild(previewEl);
     previewEl.setAttribute('d', strokePathD(points, cssWidth));
@@ -1105,7 +1151,8 @@
       previewEl.remove();
       if (points.length < 2) return; // タップだけなら何も描かない
       const memo = {
-        id: crypto.randomUUID(), type: 'stroke', tool: currentDrawTool, points,
+        id: crypto.randomUUID(), type: 'stroke', tool: currentDrawTool,
+        color, width, points,
         createdAt: Date.now(), updatedAt: Date.now(),
       };
       await addMemo(memo);
