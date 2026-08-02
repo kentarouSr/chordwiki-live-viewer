@@ -332,6 +332,22 @@
     if (wasPlayingBeforeDrag) startPlayback();
   }
 
+  // マウスホイール/トラックパッド操作(PC検証用)。ドラッグと同様に、操作中は一時停止し
+  // 操作が止まってから少し経ったら自動再開する。
+  let wheelResumeTimer = null;
+  scrollWrap.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const wasPlaying = playing;
+    if (playing) stopPlayback();
+    scrollY = clamp(scrollY + e.deltaY, 0, maxScroll());
+    applyTransform();
+    showToolbar();
+    clearTimeout(wheelResumeTimer);
+    if (wasPlaying) {
+      wheelResumeTimer = setTimeout(startPlayback, 400);
+    }
+  }, { passive: false });
+
   // ==================================================
   // 速度調整(1px/秒刻み、長押しで加速)
   // ==================================================
