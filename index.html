@@ -13,20 +13,36 @@
   }
   #app { position: fixed; inset: 0; }
 
-  /* --- 読み込み画面 --- */
-  #loader {
+  /* --- 曲一覧画面 --- */
+  #songListScreen {
     position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 16px; padding: 24px;
-    text-align: center;
+    padding: 20px; padding-top: max(20px, env(safe-area-inset-top));
+    overflow-y: auto;
   }
-  #loader.hidden { display: none; }
-  #dropZone {
-    width: min(480px, 90vw); padding: 40px 20px; border: 2px dashed #555;
-    border-radius: 12px; cursor: pointer;
+  #songListScreen.hidden { display: none; }
+  #songListHeader {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
   }
-  #dropZone.dragover { border-color: #6cf; background: #1a2733; }
+  #songListHeader h1 { font-size: 18px; margin: 0; }
+  #btnAddSong {
+    font-size: 15px; padding: 10px 16px; border-radius: 8px; border: none;
+    background: #6cf; color: #111; font-weight: bold; cursor: pointer;
+  }
   #fileInput { display: none; }
-  #loaderNote { font-size: 13px; color: #999; max-width: 420px; }
+  #songList { display: flex; flex-direction: column; gap: 10px; }
+  #songList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
+  .songRow {
+    display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+    background: #1c1c1c; border-radius: 10px;
+  }
+  .songMain { flex: 1; min-width: 0; cursor: pointer; }
+  .songName { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .songMeta { font-size: 12px; color: #999; margin-top: 2px; }
+  .songRow button {
+    font-size: 13px; padding: 8px 10px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
 
   /* --- ビューア画面 --- */
   #viewer { position: absolute; inset: 0; }
@@ -68,17 +84,13 @@
 <body>
 <div id="app">
 
-  <div id="loader">
-    <h1 style="font-size:18px;margin:0;">ChordWiki Live Viewer (Prototype)</h1>
-    <div id="dropZone">
-      画像 (PNG/JPG) または PDF をここにドロップ<br>
-      またはタップして選択
+  <div id="songListScreen">
+    <div id="songListHeader">
+      <h1>ChordWiki Live Viewer</h1>
+      <button id="btnAddSong">＋ 曲を追加</button>
     </div>
+    <div id="songList"></div>
     <input id="fileInput" type="file" accept="image/*,application/pdf">
-    <p id="loaderNote">
-      事前に移調済みの状態でフルページスクショ/PDF化した譜面を読み込みます。
-      本番中の移調機能はありません。
-    </p>
   </div>
 
   <div id="viewer" class="hidden">
@@ -87,7 +99,7 @@
     </div>
     <div id="progressBar"><div id="progressFill"></div></div>
     <div id="toolbar">
-      <button id="btnBack">&larr; 読込み直す</button>
+      <button id="btnBack">&larr; 曲一覧</button>
       <button id="btnSpeedDown">&minus;</button>
       <span id="speedLabel">40 px/s</span>
       <button id="btnSpeedUp">+</button>
@@ -112,13 +124,14 @@
 
   // ---- 定数 ----
   const TILE_HEIGHT_CSS = 1024; // iPad Safariの巨大画像描画問題対策としてタイル分割
-  const SPEED_STORAGE_KEY = 'cwlv_speed_px_per_sec';
   const MIN_SPEED = 1;
+  const DEFAULT_SPEED = 40; // 曲未選択時・新規追加時の初期値
   const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
 
   // ---- DOM ----
-  const loader = document.getElementById('loader');
-  const dropZone = document.getElementById('dropZone');
+  const songListScreen = document.getElementById('songListScreen');
+  const songListEl = document.getElementById('songList');
+  const btnAddSong = document.getElementById('btnAddSong');
   const fileInput = document.getElementById('fileInput');
   const viewer = document.getElementById('viewer');
   const scrollWrap = document.getElementById('scrollWrap');
@@ -135,19 +148,87 @@
   let contentHeight = 0;   // タイル全体のCSS高さ
   let scrollY = 0;         // 現在のスクロール位置(0=先頭)
   let playing = false;
-  let speed = loadSpeed(); // px/秒
+  let speed = DEFAULT_SPEED; // px/秒。曲を開くと保存済みの値に置き換わる
   let rafId = null;
   let lastTs = null;
   let wakeLockSentinel = null;
   let currentSourceKind = null; // 'image' | 'pdf'
   let currentImageEl = null;    // kind==='image' 用。リサイズ時の再タイル化に使う
   let currentPdfDoc = null;     // kind==='pdf' 用
+  let currentSongId = null;     // IndexedDBに保存されている曲のid(未保存時はnull)
 
-  speedLabel.textContent = `${speed} px/s`;
+  // ==================================================
+  // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
+  // ==================================================
+  const DB_NAME = 'chordwiki-live-viewer';
+  const DB_VERSION = 1;
+  const STORE = 'songs';
+  let dbPromise = null;
 
-  function loadSpeed() {
-    const v = parseInt(localStorage.getItem(SPEED_STORAGE_KEY), 10);
-    return Number.isFinite(v) && v >= MIN_SPEED ? v : 40;
+  function openDb() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) {
+          db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+
+  async function dbAdd(song) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const req = tx.objectStore(STORE).add(song);
+      req.onsuccess = () => resolve(req.result); // 新規id
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function dbPut(song) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const req = tx.objectStore(STORE).put(song);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function dbGetAll() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function dbGet(id) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function dbDelete(id) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const req = tx.objectStore(STORE).delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
   }
 
   function viewportHeight() { return scrollWrap.clientHeight; }
@@ -354,10 +435,22 @@
   let holdTimeout = null;
   let holdInterval = null;
 
+  let speedSaveTimer = null;
   function changeSpeed(delta) {
     speed = Math.max(MIN_SPEED, speed + delta);
     speedLabel.textContent = `${speed} px/s`;
-    localStorage.setItem(SPEED_STORAGE_KEY, String(speed));
+    if (currentSongId != null) {
+      clearTimeout(speedSaveTimer);
+      speedSaveTimer = setTimeout(saveCurrentSongSpeed, 300); // 長押し連打の度にDB書き込みしない
+    }
+  }
+
+  async function saveCurrentSongSpeed() {
+    const song = await dbGet(currentSongId);
+    if (!song) return;
+    song.speed = speed;
+    song.updatedAt = Date.now();
+    await dbPut(song);
   }
 
   function bindHold(button, sign) {
@@ -416,21 +509,126 @@
   }
 
   // ==================================================
-  // 読み込み
+  // 曲一覧
   // ==================================================
-  dropZone.addEventListener('click', () => fileInput.click());
-  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-  dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  });
+  function isPdfFile(file) {
+    return file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  }
+  function isImageFile(file) {
+    return file.type.startsWith('image/');
+  }
+
+  async function renderSongList() {
+    const songs = await dbGetAll();
+    songs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    songListEl.innerHTML = '';
+    if (songs.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'まだ曲がありません。「＋ 曲を追加」から譜面(画像/PDF)を登録してください。';
+      songListEl.appendChild(p);
+      return;
+    }
+    for (const song of songs) {
+      const row = document.createElement('div');
+      row.className = 'songRow';
+
+      const main = document.createElement('div');
+      main.className = 'songMain';
+      const name = document.createElement('div');
+      name.className = 'songName';
+      name.textContent = song.name;
+      const meta = document.createElement('div');
+      meta.className = 'songMeta';
+      meta.textContent = `${song.speed} px/s` + (song.bpm ? ` / BPM ${song.bpm}` : '');
+      main.appendChild(name);
+      main.appendChild(meta);
+      main.addEventListener('click', () => openSong(song.id));
+
+      const btnEdit = document.createElement('button');
+      btnEdit.textContent = '編集';
+      btnEdit.addEventListener('click', (e) => { e.stopPropagation(); editSong(song); });
+
+      const btnDelete = document.createElement('button');
+      btnDelete.textContent = '削除';
+      btnDelete.addEventListener('click', (e) => { e.stopPropagation(); deleteSong(song); });
+
+      row.appendChild(main);
+      row.appendChild(btnEdit);
+      row.appendChild(btnDelete);
+      songListEl.appendChild(row);
+    }
+  }
+
+  async function editSong(song) {
+    const newName = prompt('曲名を変更', song.name);
+    if (newName === null) return;
+    const newBpmStr = prompt('BPM(任意、空欄で未設定)', song.bpm != null ? String(song.bpm) : '');
+    if (newBpmStr === null) return;
+    const bpm = newBpmStr.trim() ? parseInt(newBpmStr, 10) : null;
+    song.name = newName.trim() || song.name;
+    song.bpm = Number.isFinite(bpm) ? bpm : null;
+    song.updatedAt = Date.now();
+    await dbPut(song);
+    renderSongList();
+  }
+
+  async function deleteSong(song) {
+    if (!confirm(`「${song.name}」を削除しますか？`)) return;
+    await dbDelete(song.id);
+    renderSongList();
+  }
+
+  async function addNewSong(file) {
+    if (!isPdfFile(file) && !isImageFile(file)) {
+      alert('画像またはPDFファイルを選択してください');
+      return;
+    }
+    const defaultName = file.name.replace(/\.[^.]+$/, '');
+    const name = prompt('曲名を入力してください', defaultName);
+    if (name === null) return; // キャンセル
+    const bpmStr = prompt('BPM(任意、空欄可)', '');
+    if (bpmStr === null) return;
+    const bpm = bpmStr.trim() ? parseInt(bpmStr, 10) : null;
+
+    const song = {
+      name: name.trim() || defaultName,
+      blob: file,
+      mimeType: file.type || (isPdfFile(file) ? 'application/pdf' : 'image/png'),
+      fileName: file.name,
+      speed: DEFAULT_SPEED,
+      bpm: Number.isFinite(bpm) ? bpm : null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const id = await dbAdd(song);
+    currentSongId = id;
+    speed = song.speed;
+    speedLabel.textContent = `${speed} px/s`;
+    await loadIntoViewer(file);
+  }
+
+  async function openSong(id) {
+    const song = await dbGet(id);
+    if (!song) return;
+    currentSongId = id;
+    speed = song.speed || DEFAULT_SPEED;
+    speedLabel.textContent = `${speed} px/s`;
+    const file = new File([song.blob], song.fileName, { type: song.mimeType });
+    await loadIntoViewer(file);
+  }
+
+  btnAddSong.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
     const file = fileInput.files && fileInput.files[0];
-    if (file) handleFile(file);
     fileInput.value = '';
+    if (file) addNewSong(file);
+  });
+  songListScreen.addEventListener('dragover', (e) => e.preventDefault());
+  songListScreen.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) addNewSong(file);
   });
 
   btnBack.addEventListener('click', () => {
@@ -439,20 +637,17 @@
     currentSourceKind = null;
     currentImageEl = null;
     currentPdfDoc = null;
+    currentSongId = null;
     viewer.classList.add('hidden');
-    loader.classList.remove('hidden');
+    songListScreen.classList.remove('hidden');
+    renderSongList();
   });
 
-  async function handleFile(file) {
-    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-    const isImage = file.type.startsWith('image/');
-    if (!isPdf && !isImage) {
-      alert('画像またはPDFファイルを選択してください');
-      return;
-    }
+  async function loadIntoViewer(file) {
+    const isPdf = isPdfFile(file);
     // タイル生成時にscrollWrapのclientWidth/Heightを使うため、
     // 計測前にビューア画面を表示してレイアウトを確定させる(#viewerはdisplay:noneだと0になる)。
-    loader.classList.add('hidden');
+    songListScreen.classList.add('hidden');
     viewer.classList.remove('hidden');
     try {
       if (isPdf) await loadPdfFile(file);
@@ -464,7 +659,7 @@
       console.error(err);
       alert('読み込みエラー: ' + (err && err.message ? err.message : err));
       viewer.classList.add('hidden');
-      loader.classList.remove('hidden');
+      songListScreen.classList.remove('hidden');
     }
   }
 
@@ -519,6 +714,8 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
+  renderSongList();
 })();
 </script>
 </body>
