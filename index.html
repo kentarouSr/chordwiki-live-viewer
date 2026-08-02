@@ -107,6 +107,15 @@
   }
   #tileContainer canvas { display: block; width: 100%; }
 
+  #strokeLayer {
+    position: absolute; top: 0; left: 0; width: 100%;
+    will-change: transform; pointer-events: none;
+  }
+  #strokeLayer path.stroke-hit { pointer-events: none; }
+  #viewer.memo-edit-mode #strokeLayer path.stroke-hit { pointer-events: visibleStroke; cursor: pointer; }
+  #viewer.draw-mode #strokeLayer { pointer-events: auto; touch-action: none; }
+  #btnDrawPen.active, #btnDrawHighlighter.active { background: #6cf; color: #111; }
+
   #memoLayer {
     position: absolute; top: 0; left: 0; width: 100%;
     will-change: transform; pointer-events: none;
@@ -246,6 +255,7 @@
   <div id="viewer" class="hidden">
     <div id="scrollWrap">
       <div id="tileContainer"></div>
+      <svg id="strokeLayer"></svg>
       <div id="memoLayer"></div>
     </div>
     <div id="setlistMemoView"><p id="setlistMemoText"></p></div>
@@ -257,6 +267,8 @@
       <button id="btnMemoEdit">&#9998; 編集</button>
       <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
       <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
+      <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
+      <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
       <button id="btnEditBpm" class="memoEditOnly">BPM: --</button>
       <button id="btnMetronome">&#128276; クリック</button>
       <button id="btnSpeedDown">&minus;</button>
@@ -328,6 +340,7 @@
   const viewer = document.getElementById('viewer');
   const scrollWrap = document.getElementById('scrollWrap');
   const tileContainer = document.getElementById('tileContainer');
+  const strokeLayerEl = document.getElementById('strokeLayer');
   const memoLayerEl = document.getElementById('memoLayer');
   const progressFill = document.getElementById('progressFill');
   const toolbar = document.getElementById('toolbar');
@@ -336,6 +349,8 @@
   const btnMemoEdit = document.getElementById('btnMemoEdit');
   const btnAddTextMemo = document.getElementById('btnAddTextMemo');
   const btnAddImageMemo = document.getElementById('btnAddImageMemo');
+  const btnDrawPen = document.getElementById('btnDrawPen');
+  const btnDrawHighlighter = document.getElementById('btnDrawHighlighter');
   const memoImageInput = document.getElementById('memoImageInput');
   const btnEditBpm = document.getElementById('btnEditBpm');
   const btnMetronome = document.getElementById('btnMetronome');
@@ -360,6 +375,8 @@
   let memoEditMode = false;
   let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
   let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
+  let drawMode = false;         // 手書き(ペン/蛍光ペン)モード中か
+  let currentDrawTool = 'pen';  // 'pen' | 'highlighter'
   let memoObjectUrls = [];      // renderMemosで作ったBlob URL(再描画のたびに解放する)
   let currentSetlistId = null;  // セットリスト編集画面で開いているセットリストのid
   let activeSetlist = null;     // ビューアで演奏中のセットリスト({id,uuid,name,items}) or null
@@ -645,6 +662,7 @@
   function applyTransform() {
     const t = `translate3d(0, ${-scrollY}px, 0)`;
     tileContainer.style.transform = t;
+    strokeLayerEl.style.transform = t;
     memoLayerEl.style.transform = t;
     const m = maxScroll();
     progressFill.style.width = (m > 0 ? (scrollY / m * 100) : 0) + '%';
@@ -757,13 +775,20 @@
     for (const url of memoObjectUrls) URL.revokeObjectURL(url);
     memoObjectUrls = [];
     memoLayerEl.innerHTML = '';
+    strokeLayerEl.innerHTML = '';
   }
 
   function renderMemos() {
     clearMemoLayer();
     memoLayerEl.style.height = contentHeight + 'px';
+    strokeLayerEl.style.height = contentHeight + 'px';
     const cssWidth = viewportWidthCss();
     for (const memo of currentMemos) {
+      if (memo.type === 'stroke') {
+        renderStroke(memo, cssWidth);
+        continue;
+      }
+
       const el = document.createElement('div');
       el.className = memo.type === 'text' ? 'memo memo-text' : 'memo memo-image';
       el.style.left = Math.round(memo.x * cssWidth) + 'px';
@@ -798,6 +823,54 @@
       bindMemoDrag(el, memo);
       memoLayerEl.appendChild(el);
     }
+  }
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function strokePathD(points, cssWidth) {
+    return points
+      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x * cssWidth).toFixed(1)},${(p.y * contentHeight).toFixed(1)}`)
+      .join(' ');
+  }
+
+  function renderStroke(memo, cssWidth) {
+    const d = strokePathD(memo.points, cssWidth);
+    const isHighlighter = memo.tool === 'highlighter';
+
+    const visible = document.createElementNS(SVG_NS, 'path');
+    visible.setAttribute('d', d);
+    visible.setAttribute('fill', 'none');
+    visible.setAttribute('stroke-linecap', 'round');
+    visible.setAttribute('stroke-linejoin', 'round');
+    visible.setAttribute('pointer-events', 'none');
+    if (isHighlighter) {
+      visible.setAttribute('stroke', '#ffeb3b');
+      visible.setAttribute('stroke-width', '22');
+      visible.setAttribute('opacity', '0.45');
+      visible.style.mixBlendMode = 'multiply';
+    } else {
+      visible.setAttribute('stroke', '#ff3b3b');
+      visible.setAttribute('stroke-width', '4');
+    }
+    strokeLayerEl.appendChild(visible);
+
+    // タップで削除できるように、見た目より太い透明な当たり判定を重ねる
+    const hit = document.createElementNS(SVG_NS, 'path');
+    hit.setAttribute('d', d);
+    hit.setAttribute('fill', 'none');
+    hit.setAttribute('stroke', 'transparent');
+    hit.setAttribute('stroke-width', '28');
+    hit.setAttribute('stroke-linecap', 'round');
+    hit.setAttribute('stroke-linejoin', 'round');
+    hit.setAttribute('class', 'stroke-hit');
+    hit.addEventListener('click', async (e) => {
+      if (!memoEditMode || drawMode) return;
+      e.stopPropagation();
+      if (!confirm('この手書きを削除しますか？')) return;
+      currentMemos = currentMemos.filter((m) => m.id !== memo.id);
+      await saveCurrentMemos();
+      renderMemos();
+    });
+    strokeLayerEl.appendChild(hit);
   }
 
   function bindMemoDrag(el, memo) {
@@ -953,16 +1026,93 @@
     memoEditMode = !memoEditMode;
     pendingMemoType = null;
     pendingMemoPlacement = null;
+    setDrawMode(false);
     viewer.classList.toggle('memo-edit-mode', memoEditMode);
     if (memoEditMode) stopPlayback();
   });
   btnAddTextMemo.addEventListener('click', () => {
+    setDrawMode(false);
     pendingMemoType = 'text';
     alert('配置したい場所を譜面上でタップしてください');
   });
   btnAddImageMemo.addEventListener('click', () => {
+    setDrawMode(false);
     pendingMemoType = 'image';
     alert('配置したい場所を譜面上でタップしてください');
+  });
+
+  // ==================================================
+  // 手書き(ペン・蛍光ペン)
+  // 座標系はメモと同じくコンテンツ幅/高さに対する割合(0〜1)。strokeLayerはtileContainerと
+  // 同じtransformで動くので、スクロールに追従する。
+  // ==================================================
+  function setDrawMode(on, tool) {
+    drawMode = on;
+    if (tool) currentDrawTool = tool;
+    if (on) pendingMemoType = null; // テキスト/画像配置待ちと排他
+    viewer.classList.toggle('draw-mode', drawMode);
+    btnDrawPen.classList.toggle('active', drawMode && currentDrawTool === 'pen');
+    btnDrawHighlighter.classList.toggle('active', drawMode && currentDrawTool === 'highlighter');
+  }
+
+  btnDrawPen.addEventListener('click', () => {
+    setDrawMode(!(drawMode && currentDrawTool === 'pen'), 'pen');
+  });
+  btnDrawHighlighter.addEventListener('click', () => {
+    setDrawMode(!(drawMode && currentDrawTool === 'highlighter'), 'highlighter');
+  });
+
+  strokeLayerEl.addEventListener('pointerdown', (e) => {
+    if (!drawMode) return;
+    e.preventDefault();
+    e.stopPropagation(); // scrollWrap側のスクロール開始を防ぐ
+    strokeLayerEl.setPointerCapture(e.pointerId);
+
+    const rect = scrollWrap.getBoundingClientRect();
+    const cssWidth = viewportWidthCss();
+    const toPoint = (ev) => ({
+      x: (ev.clientX - rect.left) / cssWidth,
+      y: contentHeight > 0 ? ((ev.clientY - rect.top) + scrollY) / contentHeight : 0,
+    });
+
+    const points = [toPoint(e)];
+    const isHighlighter = currentDrawTool === 'highlighter';
+    const previewEl = document.createElementNS(SVG_NS, 'path');
+    previewEl.setAttribute('fill', 'none');
+    previewEl.setAttribute('stroke-linecap', 'round');
+    previewEl.setAttribute('stroke-linejoin', 'round');
+    previewEl.setAttribute('pointer-events', 'none');
+    if (isHighlighter) {
+      previewEl.setAttribute('stroke', '#ffeb3b');
+      previewEl.setAttribute('stroke-width', '22');
+      previewEl.setAttribute('opacity', '0.45');
+      previewEl.style.mixBlendMode = 'multiply';
+    } else {
+      previewEl.setAttribute('stroke', '#ff3b3b');
+      previewEl.setAttribute('stroke-width', '4');
+    }
+    strokeLayerEl.appendChild(previewEl);
+    previewEl.setAttribute('d', strokePathD(points, cssWidth));
+
+    const onMove = (ev) => {
+      points.push(toPoint(ev));
+      previewEl.setAttribute('d', strokePathD(points, cssWidth));
+    };
+    const onUp = async () => {
+      strokeLayerEl.removeEventListener('pointermove', onMove);
+      strokeLayerEl.removeEventListener('pointerup', onUp);
+      strokeLayerEl.removeEventListener('pointercancel', onUp);
+      previewEl.remove();
+      if (points.length < 2) return; // タップだけなら何も描かない
+      const memo = {
+        id: crypto.randomUUID(), type: 'stroke', tool: currentDrawTool, points,
+        createdAt: Date.now(), updatedAt: Date.now(),
+      };
+      await addMemo(memo);
+    };
+    strokeLayerEl.addEventListener('pointermove', onMove);
+    strokeLayerEl.addEventListener('pointerup', onUp);
+    strokeLayerEl.addEventListener('pointercancel', onUp);
   });
 
   // ==================================================
@@ -1737,11 +1887,12 @@
       uuid: s.uuid, name: s.name, bpm: s.bpm, speed: s.speed,
       fileName: s.fileName, mimeType: s.mimeType,
       createdAt: s.createdAt, updatedAt: s.updatedAt,
-      memos: (s.memos || []).map((m) => ({
-        id: m.id, type: m.type, x: m.x, y: m.y,
-        text: m.text, mimeType: m.mimeType, width: m.width,
-        createdAt: m.createdAt, updatedAt: m.updatedAt,
-      })),
+      // dataは画像メモのバイナリ本体(別途zipエントリで書き出す)。それ以外のフィールドは
+      // メモ種別(text/image/stroke)を問わずそのまま引き継ぐ。
+      memos: (s.memos || []).map((m) => {
+        const { data, ...rest } = m;
+        return rest;
+      }),
     }));
     const setlistManifest = setlists.map((sl) => ({
       uuid: sl.uuid, name: sl.name, items: sl.items || [],
@@ -1912,19 +2063,24 @@
     return bytes.buffer;
   }
 
+  // 種別(text/image/stroke)を問わずフィールドをそのまま引き継ぎ、画像のバイナリ本体だけ
+  // base64に変換する(D1のJSONカラムに載せるため)。
   function serializeMemosForUpload(memos) {
-    return (memos || []).map((m) => ({
-      id: m.id, type: m.type, x: m.x, y: m.y, text: m.text,
-      mimeType: m.mimeType, width: m.width,
-      data: m.type === 'image' && m.data ? arrayBufferToBase64(m.data) : undefined,
-      createdAt: m.createdAt, updatedAt: m.updatedAt,
-    }));
+    return (memos || []).map((m) => {
+      if (m.type === 'image' && m.data) {
+        const { data, ...rest } = m;
+        return { ...rest, data: arrayBufferToBase64(data) };
+      }
+      return m;
+    });
   }
   function deserializeMemosFromRemote(memos) {
-    return (memos || []).map((m) => ({
-      ...m,
-      data: m.type === 'image' && m.data ? base64ToArrayBuffer(m.data) : undefined,
-    }));
+    return (memos || []).map((m) => {
+      if (m.type === 'image' && m.data) {
+        return { ...m, data: base64ToArrayBuffer(m.data) };
+      }
+      return m;
+    });
   }
 
   async function uploadSong(key, song) {
@@ -2186,9 +2342,11 @@
     memoEditMode = false;
     pendingMemoType = null;
     pendingMemoPlacement = null;
+    drawMode = false;
     activeSetlist = null;
     activeSetlistIndex = -1;
     viewer.classList.remove('memo-edit-mode');
+    viewer.classList.remove('draw-mode');
     viewer.classList.remove('setlist-active');
     viewer.classList.remove('setlist-memo-mode');
     showScreen(viewerReturnScreen || songListScreen);
