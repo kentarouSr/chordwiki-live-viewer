@@ -1,0 +1,12 @@
+name = "chordwiki-live-viewer"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "chordwiki-live-viewer"
+database_id = "157daea7-e033-4d56-aa50-3a1346eacd93"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "chordwiki-live-viewer"

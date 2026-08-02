@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS songs (
+  uuid TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  bpm INTEGER,
+  speed INTEGER NOT NULL DEFAULT 40,
+  file_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  r2_key TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
