@@ -144,6 +144,26 @@
   .setlistOnly { display: none; }
   #viewer.setlist-active .setlistOnly { display: inline-block; }
 
+  #setlistMemoView {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    padding: 40px; text-align: center; background: #111; z-index: 3;
+  }
+  #setlistMemoView p {
+    font-size: 28px; line-height: 1.6; white-space: pre-wrap; max-width: 700px; margin: 0;
+  }
+  #viewer.setlist-memo-mode #setlistMemoView { display: flex; }
+  #viewer.setlist-memo-mode #scrollWrap,
+  #viewer.setlist-memo-mode #progressBar,
+  #viewer.setlist-memo-mode #btnMemoEdit,
+  #viewer.setlist-memo-mode #btnEditBpm,
+  #viewer.setlist-memo-mode #btnMetronome,
+  #viewer.setlist-memo-mode #btnSpeedDown,
+  #viewer.setlist-memo-mode #speedLabel,
+  #viewer.setlist-memo-mode #btnSpeedUp,
+  #viewer.setlist-memo-mode #btnPlay {
+    display: none;
+  }
+
   #progressBar {
     position: absolute; top: 0; left: 0; right: 0; height: 4px;
     background: rgba(255,255,255,0.15); z-index: 5;
@@ -210,6 +230,7 @@
     <div id="setlistSongs"></div>
     <div id="setlistEditFooter">
       <button id="btnAddSongToSetlist">＋ 曲を追加</button>
+      <button id="btnAddMemoToSetlist">＋ メモを追加</button>
       <button id="btnStartSetlist">&#9654; 演奏開始</button>
     </div>
   </div>
@@ -227,6 +248,7 @@
       <div id="tileContainer"></div>
       <div id="memoLayer"></div>
     </div>
+    <div id="setlistMemoView"><p id="setlistMemoText"></p></div>
     <div id="progressBar"><div id="progressFill"></div></div>
     <div id="toolbar">
       <button id="btnBack">&larr; 曲一覧</button>
@@ -291,6 +313,7 @@
   const btnRenameSetlist = document.getElementById('btnRenameSetlist');
   const btnDeleteSetlist = document.getElementById('btnDeleteSetlist');
   const btnAddSongToSetlist = document.getElementById('btnAddSongToSetlist');
+  const btnAddMemoToSetlist = document.getElementById('btnAddMemoToSetlist');
   const btnStartSetlist = document.getElementById('btnStartSetlist');
 
   const songPickerScreen = document.getElementById('songPickerScreen');
@@ -299,6 +322,8 @@
 
   const btnPrevSong = document.getElementById('btnPrevSong');
   const btnNextSong = document.getElementById('btnNextSong');
+  const setlistMemoView = document.getElementById('setlistMemoView');
+  const setlistMemoText = document.getElementById('setlistMemoText');
 
   const viewer = document.getElementById('viewer');
   const scrollWrap = document.getElementById('scrollWrap');
@@ -337,7 +362,7 @@
   let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
   let memoObjectUrls = [];      // renderMemosで作ったBlob URL(再描画のたびに解放する)
   let currentSetlistId = null;  // セットリスト編集画面で開いているセットリストのid
-  let activeSetlist = null;     // ビューアで演奏中のセットリスト({id,uuid,name,songUuids}) or null
+  let activeSetlist = null;     // ビューアで演奏中のセットリスト({id,uuid,name,items}) or null
   let activeSetlistIndex = -1;  // activeSetlist内の現在の曲インデックス
   let viewerReturnScreen = null; // ビューアの「戻る」で戻る先の画面
 
@@ -471,10 +496,19 @@
       req.onerror = () => reject(req.error);
     });
   }
+  // uuidの後付けに加え、旧形式(songUuidsのみ)のセットリストをitems形式
+  // ({type:'song',uuid} / {type:'memo',id,text}の配列)へその場で移行する。
   async function ensureSetlistUuid(setlist) {
-    if (setlist.uuid) return setlist;
-    setlist.uuid = crypto.randomUUID();
-    await slPut(setlist);
+    let changed = false;
+    if (!setlist.uuid) {
+      setlist.uuid = crypto.randomUUID();
+      changed = true;
+    }
+    if (!setlist.items) {
+      setlist.items = (setlist.songUuids || []).map((uuid) => ({ type: 'song', uuid }));
+      changed = true;
+    }
+    if (changed) await slPut(setlist);
     return setlist;
   }
   async function findSongByUuid(uuid) {
@@ -1240,7 +1274,9 @@
       name.textContent = sl.name;
       const meta = document.createElement('div');
       meta.className = 'songMeta';
-      meta.textContent = `${(sl.songUuids || []).length}曲`;
+      const songCount = (sl.items || []).filter((i) => i.type === 'song').length;
+      const memoCount = (sl.items || []).filter((i) => i.type === 'memo').length;
+      meta.textContent = `${songCount}曲` + (memoCount > 0 ? ` / メモ${memoCount}件` : '');
       main.appendChild(name);
       main.appendChild(meta);
       main.addEventListener('click', () => openSetlistEdit(sl.id));
@@ -1267,7 +1303,7 @@
     const id = await slAdd({
       uuid: crypto.randomUUID(),
       name: name.trim() || '無題のセットリスト',
-      songUuids: [],
+      items: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -1294,16 +1330,15 @@
     const byUuid = new Map(allSongs.map((s) => [s.uuid, s]));
 
     setlistSongsEl.innerHTML = '';
-    const uuids = sl.songUuids || [];
-    if (uuids.length === 0) {
+    const items = sl.items || [];
+    if (items.length === 0) {
       const p = document.createElement('p');
       p.className = 'empty';
-      p.textContent = 'まだ曲がありません。「＋ 曲を追加」から追加してください。';
+      p.textContent = 'まだ何もありません。「＋ 曲を追加」「＋ メモを追加」から追加してください。';
       setlistSongsEl.appendChild(p);
       return;
     }
-    uuids.forEach((uuid, index) => {
-      const song = byUuid.get(uuid);
+    items.forEach((item, index) => {
       const row = document.createElement('div');
       row.className = 'setlistSongRow';
 
@@ -1313,46 +1348,73 @@
 
       const main = document.createElement('div');
       main.className = 'songMain';
-      main.textContent = song ? song.name : '(見つかりません。削除された可能性)';
+      if (item.type === 'song') {
+        const song = byUuid.get(item.uuid);
+        main.textContent = song ? song.name : '(見つかりません。削除された可能性)';
+      } else {
+        main.textContent = '\u{1F4DD} ' + item.text; // MCメモなど。タップでは何も起きない(演奏中に誤操作しないため)
+        main.style.opacity = '0.85';
+      }
 
       const btnUp = document.createElement('button');
       btnUp.textContent = '↑';
       btnUp.disabled = index === 0;
-      btnUp.addEventListener('click', () => moveSetlistSong(sl, index, -1));
+      btnUp.addEventListener('click', () => moveSetlistItem(sl, index, -1));
 
       const btnDown = document.createElement('button');
       btnDown.textContent = '↓';
-      btnDown.disabled = index === uuids.length - 1;
-      btnDown.addEventListener('click', () => moveSetlistSong(sl, index, 1));
-
-      const btnRemove = document.createElement('button');
-      btnRemove.textContent = '削除';
-      btnRemove.addEventListener('click', () => removeSetlistSong(sl, index));
+      btnDown.disabled = index === items.length - 1;
+      btnDown.addEventListener('click', () => moveSetlistItem(sl, index, 1));
 
       row.appendChild(idx);
       row.appendChild(main);
       row.appendChild(btnUp);
       row.appendChild(btnDown);
+
+      if (item.type === 'memo') {
+        const btnEditMemo = document.createElement('button');
+        btnEditMemo.textContent = '編集';
+        btnEditMemo.addEventListener('click', () => editSetlistMemo(sl, index));
+        row.appendChild(btnEditMemo);
+      }
+
+      const btnRemove = document.createElement('button');
+      btnRemove.textContent = '削除';
+      btnRemove.addEventListener('click', () => removeSetlistItem(sl, index));
       row.appendChild(btnRemove);
+
       setlistSongsEl.appendChild(row);
     });
   }
 
-  async function moveSetlistSong(sl, index, delta) {
-    const uuids = sl.songUuids.slice();
+  async function moveSetlistItem(sl, index, delta) {
+    const items = sl.items.slice();
     const newIndex = index + delta;
-    if (newIndex < 0 || newIndex >= uuids.length) return;
-    [uuids[index], uuids[newIndex]] = [uuids[newIndex], uuids[index]];
-    sl.songUuids = uuids;
+    if (newIndex < 0 || newIndex >= items.length) return;
+    [items[index], items[newIndex]] = [items[newIndex], items[index]];
+    sl.items = items;
     sl.updatedAt = Date.now();
     await slPut(sl);
     renderSetlistEdit();
   }
 
-  async function removeSetlistSong(sl, index) {
-    const uuids = sl.songUuids.slice();
-    uuids.splice(index, 1);
-    sl.songUuids = uuids;
+  async function removeSetlistItem(sl, index) {
+    const items = sl.items.slice();
+    items.splice(index, 1);
+    sl.items = items;
+    sl.updatedAt = Date.now();
+    await slPut(sl);
+    renderSetlistEdit();
+  }
+
+  async function editSetlistMemo(sl, index) {
+    const item = sl.items[index];
+    if (!item || item.type !== 'memo') return;
+    const text = prompt('メモの内容を編集', item.text);
+    if (text === null || !text.trim()) return;
+    const items = sl.items.slice();
+    items[index] = { ...item, text: text.trim() };
+    sl.items = items;
     sl.updatedAt = Date.now();
     await slPut(sl);
     renderSetlistEdit();
@@ -1392,7 +1454,7 @@
 
   async function renderSongPicker() {
     const sl = await slGet(currentSetlistId);
-    const existing = new Set(sl ? sl.songUuids : []);
+    const existing = new Set((sl ? sl.items || [] : []).filter((i) => i.type === 'song').map((i) => i.uuid));
     const allSongs = await dbGetAll();
     await Promise.all(allSongs.map(ensureSongUuid));
     allSongs.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
@@ -1414,7 +1476,7 @@
       main.textContent = song.name;
       main.addEventListener('click', async () => {
         const sl2 = await slGet(currentSetlistId);
-        sl2.songUuids = [...(sl2.songUuids || []), song.uuid];
+        sl2.items = [...(sl2.items || []), { type: 'song', uuid: song.uuid }];
         sl2.updatedAt = Date.now();
         await slPut(sl2);
         renderSongPicker(); // 追加した曲を候補から消す
@@ -1429,28 +1491,55 @@
     renderSetlistEdit();
   });
 
+  btnAddMemoToSetlist.addEventListener('click', async () => {
+    const sl = await slGet(currentSetlistId);
+    if (!sl) return;
+    const text = prompt('メモの内容を入力してください(MCの内容など)');
+    if (!text || !text.trim()) return;
+    sl.items = [...(sl.items || []), { type: 'memo', id: crypto.randomUUID(), text: text.trim() }];
+    sl.updatedAt = Date.now();
+    await slPut(sl);
+    renderSetlistEdit();
+  });
+
   // ---- セットリストの演奏(ビューアでの前後曲切替え) ----
   btnStartSetlist.addEventListener('click', async () => {
     const sl = await slGet(currentSetlistId);
-    if (!sl || !sl.songUuids || sl.songUuids.length === 0) {
-      alert('曲が1曲もありません。先に曲を追加してください。');
+    if (!sl || !sl.items || sl.items.length === 0) {
+      alert('曲もメモもありません。先に追加してください。');
       return;
     }
     activeSetlist = sl;
     viewerReturnScreen = setlistListScreen;
     viewer.classList.add('setlist-active');
-    await openSetlistSongAtIndex(0);
+    await openSetlistItemAtIndex(0);
   });
 
-  async function openSetlistSongAtIndex(index) {
+  // セットリストの項目(曲 or メモ)をインデックスで開く。
+  // メモはビューアに「読み込む」ものではなく、テキストをそのまま表示するだけ
+  // (誤操作防止のため、タップしても何も開かない)。
+  async function openSetlistItemAtIndex(index) {
     if (!activeSetlist) return;
-    const uuid = activeSetlist.songUuids[index];
-    const song = await findSongByUuid(uuid);
+    const item = activeSetlist.items[index];
+    if (!item) return;
+    activeSetlistIndex = index;
+
+    if (item.type === 'memo') {
+      stopPlayback();
+      stopMetronome();
+      viewer.classList.add('setlist-memo-mode');
+      showScreen(viewer);
+      setlistMemoText.textContent = item.text;
+      updateSetlistNavButtons();
+      return;
+    }
+
+    viewer.classList.remove('setlist-memo-mode');
+    const song = await findSongByUuid(item.uuid);
     if (!song) {
       alert('この曲が見つかりません(削除された可能性があります)');
       return;
     }
-    activeSetlistIndex = index;
     await openSongRecord(song);
     updateSetlistNavButtons();
   }
@@ -1458,18 +1547,18 @@
   function updateSetlistNavButtons() {
     if (!activeSetlist) return;
     btnPrevSong.disabled = activeSetlistIndex <= 0;
-    btnNextSong.disabled = activeSetlistIndex >= activeSetlist.songUuids.length - 1;
+    btnNextSong.disabled = activeSetlistIndex >= activeSetlist.items.length - 1;
   }
 
   btnPrevSong.addEventListener('click', async () => {
     if (!activeSetlist || activeSetlistIndex <= 0) return;
     flushSpeedSave();
-    await openSetlistSongAtIndex(activeSetlistIndex - 1);
+    await openSetlistItemAtIndex(activeSetlistIndex - 1);
   });
   btnNextSong.addEventListener('click', async () => {
-    if (!activeSetlist || activeSetlistIndex >= activeSetlist.songUuids.length - 1) return;
+    if (!activeSetlist || activeSetlistIndex >= activeSetlist.items.length - 1) return;
     flushSpeedSave();
-    await openSetlistSongAtIndex(activeSetlistIndex + 1);
+    await openSetlistItemAtIndex(activeSetlistIndex + 1);
   });
 
   // ==================================================
@@ -1655,7 +1744,7 @@
       })),
     }));
     const setlistManifest = setlists.map((sl) => ({
-      uuid: sl.uuid, name: sl.name, songUuids: sl.songUuids || [],
+      uuid: sl.uuid, name: sl.name, items: sl.items || [],
       createdAt: sl.createdAt, updatedAt: sl.updatedAt,
     }));
     const manifest = { songs: songManifest, setlists: setlistManifest };
@@ -1734,10 +1823,12 @@
     await Promise.all(existingSetlists.map(ensureSetlistUuid));
     const setlistByUuid = new Map(existingSetlists.filter((s) => s.uuid).map((s) => [s.uuid, s]));
     for (const meta of setlistManifest) {
+      // 旧バックアップ(songUuidsのみ)との後方互換
+      const items = meta.items || (meta.songUuids || []).map((uuid) => ({ type: 'song', uuid }));
       const current = setlistByUuid.get(meta.uuid);
       if (current) {
         if ((meta.updatedAt || 0) > (current.updatedAt || 0)) {
-          Object.assign(current, { name: meta.name, songUuids: meta.songUuids || [], updatedAt: meta.updatedAt });
+          Object.assign(current, { name: meta.name, items, updatedAt: meta.updatedAt });
           await slPut(current);
           updated++;
         } else {
@@ -1745,7 +1836,7 @@
         }
       } else {
         await slAdd({
-          uuid: meta.uuid, name: meta.name, songUuids: meta.songUuids || [],
+          uuid: meta.uuid, name: meta.name, items,
           createdAt: meta.createdAt || Date.now(), updatedAt: meta.updatedAt || Date.now(),
         });
         added++;
@@ -1946,7 +2037,7 @@
       headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: setlist.name,
-        songUuids: setlist.songUuids || [],
+        items: setlist.items || [],
         createdAt: setlist.createdAt,
         updatedAt: setlist.updatedAt,
       }),
@@ -1957,12 +2048,12 @@
   async function downloadSetlist(remote, existingLocal) {
     if (existingLocal) {
       Object.assign(existingLocal, {
-        name: remote.name, songUuids: remote.songUuids, updatedAt: remote.updatedAt,
+        name: remote.name, items: remote.items, updatedAt: remote.updatedAt,
       });
       await slPut(existingLocal);
     } else {
       await slAdd({
-        uuid: remote.uuid, name: remote.name, songUuids: remote.songUuids,
+        uuid: remote.uuid, name: remote.name, items: remote.items,
         createdAt: remote.createdAt, updatedAt: remote.updatedAt,
       });
     }
@@ -2045,6 +2136,7 @@
   // 曲レコード(dbGetAllやfindSongByUuidで取得済みのもの)からビューアを開く共通処理。
   // セットリストの前後曲切替え(uuidから曲を探して開く)でも使う。
   async function openSongRecord(song) {
+    viewer.classList.remove('setlist-memo-mode');
     song = await ensureSongUuid(song);
     currentSongId = song.id;
     speed = song.speed || DEFAULT_SPEED;
@@ -2098,6 +2190,7 @@
     activeSetlistIndex = -1;
     viewer.classList.remove('memo-edit-mode');
     viewer.classList.remove('setlist-active');
+    viewer.classList.remove('setlist-memo-mode');
     showScreen(viewerReturnScreen || songListScreen);
     renderSongList();
     renderSetlistList();

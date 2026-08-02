@@ -42,13 +42,18 @@ export default {
       updatedAt: row.updated_at,
     });
 
-    const rowToSetlist = (row) => ({
-      uuid: row.uuid,
-      name: row.name,
-      songUuids: row.song_uuids ? JSON.parse(row.song_uuids) : [],
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    });
+    const rowToSetlist = (row) => {
+      let items = row.items_json ? JSON.parse(row.items_json) : [];
+      // 移行前(曲uuidの配列のみ)のデータをその場で正規化する
+      items = items.map((it) => (typeof it === 'string' ? { type: 'song', uuid: it } : it));
+      return {
+        uuid: row.uuid,
+        name: row.name,
+        items,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    };
 
     try {
       // 曲一覧(メタデータのみ)
@@ -135,17 +140,17 @@ export default {
         if (!requireKey()) return err('invalid key', 401);
         const uuid = setlistIdMatch[1];
         const body = await request.json();
-        const { name, songUuids, createdAt, updatedAt } = body;
-        if (!name || !Array.isArray(songUuids) || !Number.isFinite(updatedAt)) {
+        const { name, items, createdAt, updatedAt } = body;
+        if (!name || !Array.isArray(items) || !Number.isFinite(updatedAt)) {
           return err('missing fields');
         }
 
         await env.DB.prepare(
-          `INSERT INTO setlists (uuid, name, song_uuids, created_at, updated_at)
+          `INSERT INTO setlists (uuid, name, items_json, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(uuid) DO UPDATE SET
-             name = excluded.name, song_uuids = excluded.song_uuids, updated_at = excluded.updated_at`
-        ).bind(uuid, name, JSON.stringify(songUuids), createdAt || Date.now(), updatedAt).run();
+             name = excluded.name, items_json = excluded.items_json, updated_at = excluded.updated_at`
+        ).bind(uuid, name, JSON.stringify(items), createdAt || Date.now(), updatedAt).run();
 
         return json({ ok: true });
       }
