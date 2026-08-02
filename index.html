@@ -265,6 +265,16 @@
     return song;
   }
 
+  // 曲データはIndexedDBにBlob/Fileとしてではなく、生のArrayBuffer(dataフィールド)で
+  // 保存する。Safariには、fetchのレスポンスから得たBlobを直接IndexedDBへ保存すると
+  // 「Error preparing Blob/File data to be stored in object store」で失敗する既知の
+  // 不具合があるため。古いテストデータ(blobフィールド)との互換のため両対応にする。
+  async function getSongArrayBuffer(song) {
+    if (song.data) return song.data;
+    if (song.blob) return await song.blob.arrayBuffer();
+    throw new Error('曲データが見つかりません');
+  }
+
   function viewportHeight() { return scrollWrap.clientHeight; }
   function viewportWidthCss() { return scrollWrap.clientWidth; }
   function maxScroll() { return Math.max(0, contentHeight - viewportHeight()); }
@@ -808,7 +818,7 @@
       { name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) },
     ];
     for (const s of songs) {
-      const data = new Uint8Array(await s.blob.arrayBuffer());
+      const data = new Uint8Array(await getSongArrayBuffer(s));
       entries.push({ name: `songs/${s.uuid}_${s.fileName}`, data });
     }
 
@@ -835,7 +845,8 @@
     for (const meta of manifest) {
       const fileEntry = entries.find((e) => e.name === `songs/${meta.uuid}_${meta.fileName}`);
       if (!fileEntry) continue;
-      const blob = new Blob([fileEntry.data], { type: meta.mimeType });
+      // subarrayのままだとZIP全体のバッファを参照し続けてしまうのでslice()でコピーする
+      const data = fileEntry.data.slice().buffer;
       const current = byUuid.get(meta.uuid);
 
       if (current) {
@@ -843,7 +854,7 @@
         if ((meta.updatedAt || 0) > (current.updatedAt || 0)) {
           Object.assign(current, {
             name: meta.name, bpm: meta.bpm, speed: meta.speed,
-            blob, fileName: meta.fileName, mimeType: meta.mimeType,
+            data, fileName: meta.fileName, mimeType: meta.mimeType,
             updatedAt: meta.updatedAt,
           });
           await dbPut(current);
@@ -854,7 +865,7 @@
       } else {
         await dbAdd({
           uuid: meta.uuid, name: meta.name, bpm: meta.bpm, speed: meta.speed,
-          blob, fileName: meta.fileName, mimeType: meta.mimeType,
+          data, fileName: meta.fileName, mimeType: meta.mimeType,
           createdAt: meta.createdAt || Date.now(), updatedAt: meta.updatedAt || Date.now(),
         });
         added++;
@@ -920,7 +931,8 @@
     form.set('bpm', song.bpm != null ? String(song.bpm) : '');
     form.set('createdAt', String(song.createdAt));
     form.set('updatedAt', String(song.updatedAt));
-    form.set('file', song.blob, song.fileName);
+    const buf = await getSongArrayBuffer(song);
+    form.set('file', new Blob([buf], { type: song.mimeType }), song.fileName);
     const res = await fetch(`${SYNC_API_URL}/api/songs/${song.uuid}`, {
       method: 'PUT', headers: { 'X-Sync-Key': key }, body: form,
     });
@@ -932,18 +944,18 @@
       headers: { 'X-Sync-Key': key },
     });
     if (!res.ok) throw new Error(`ダウンロード失敗: ${remote.name} (${res.status})`);
-    const blob = await res.blob();
+    const data = await res.arrayBuffer();
     if (existingLocal) {
       Object.assign(existingLocal, {
         name: remote.name, bpm: remote.bpm, speed: remote.speed,
-        blob, fileName: remote.fileName, mimeType: remote.mimeType,
+        data, fileName: remote.fileName, mimeType: remote.mimeType,
         updatedAt: remote.updatedAt,
       });
       await dbPut(existingLocal);
     } else {
       await dbAdd({
         uuid: remote.uuid, name: remote.name, bpm: remote.bpm, speed: remote.speed,
-        blob, fileName: remote.fileName, mimeType: remote.mimeType,
+        data, fileName: remote.fileName, mimeType: remote.mimeType,
         createdAt: remote.createdAt, updatedAt: remote.updatedAt,
       });
     }
@@ -1025,7 +1037,7 @@
     const song = {
       uuid: crypto.randomUUID(),
       name: name.trim() || defaultName,
-      blob: file,
+      data: await file.arrayBuffer(),
       mimeType: file.type || (isPdfFile(file) ? 'application/pdf' : 'image/png'),
       fileName: file.name,
       speed: DEFAULT_SPEED,
@@ -1047,7 +1059,8 @@
     currentSongId = id;
     speed = song.speed || DEFAULT_SPEED;
     speedLabel.textContent = `${speed} px/s`;
-    const file = new File([song.blob], song.fileName, { type: song.mimeType });
+    const buf = await getSongArrayBuffer(song);
+    const file = new File([buf], song.fileName, { type: song.mimeType });
     await loadIntoViewer(file);
   }
 
