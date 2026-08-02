@@ -103,6 +103,7 @@
     <div id="backupBar">
       <span id="lastBackupInfo"></span>
       <button id="btnSync">クラウド同期</button>
+      <button id="btnCopySetupLink">セットアップリンクをコピー</button>
       <button id="btnExportZip">バックアップを書き出す</button>
       <button id="btnImportZip">ZIPを読み込む</button>
     </div>
@@ -156,6 +157,7 @@
   const btnImportZip = document.getElementById('btnImportZip');
   const lastBackupInfo = document.getElementById('lastBackupInfo');
   const btnSync = document.getElementById('btnSync');
+  const btnCopySetupLink = document.getElementById('btnCopySetupLink');
   const viewer = document.getElementById('viewer');
   const scrollWrap = document.getElementById('scrollWrap');
   const tileContainer = document.getElementById('tileContainer');
@@ -990,6 +992,22 @@
       console.error(err);
       alert('同期エラー: ' + (err && err.message ? err.message : err));
     });
+  });
+
+  // 他端末のセットアップ用に、同期キー入り(?key=...)のURLをコピーする。
+  btnCopySetupLink.addEventListener('click', async () => {
+    const key = localStorage.getItem(SYNC_KEY_STORAGE);
+    if (!key) {
+      alert('まだ同期キーが設定されていません。先に「クラウド同期」を1回実行してください。');
+      return;
+    }
+    const url = `${location.origin}${location.pathname}?key=${encodeURIComponent(key)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('セットアップ用リンクをコピーしました。LINEやメモなどに貼り付けて、他の端末で開いてください。');
+    } catch (err) {
+      prompt('コピーしてください:', url);
+    }
   });
 
   async function addNewSong(file) {
