@@ -375,6 +375,11 @@
 
   // 実機(devtoolsを開けない環境)でも原因が分かるよう、想定外のエラーはアラート表示する
   window.addEventListener('error', (e) => {
+    // 別ドメインのスクリプト(YouTube埋め込みのプレイヤー内部処理など)由来のエラーは
+    // ブラウザの仕様上ファイル名・行番号が取れず、常に中身の無い"Script error."になる。
+    // 対処のしようがない上に演奏中に無意味なアラートが出てしまうため無視する。
+    // 自分のコードのエラーなら必ずfilename/linenoが伴う。
+    if (!e.filename && !e.lineno) return;
     alert('JSエラー: ' + e.message);
   });
   window.addEventListener('unhandledrejection', (e) => {
