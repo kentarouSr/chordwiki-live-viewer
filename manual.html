@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使い方 - ChordWiki Live Viewer</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#1b1f2a">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #111; color: #eee;
+    font-family: system-ui, sans-serif; line-height: 1.7;
+    padding: 24px; padding-bottom: 60px;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  a { color: #6cf; }
+  #backLink {
+    display: inline-block; margin-bottom: 20px; font-size: 14px;
+    color: #ccc; text-decoration: none; padding: 8px 14px;
+    background: #1c1c1c; border-radius: 8px;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .subtitle { color: #999; font-size: 14px; margin-bottom: 24px; }
+  h2 {
+    font-size: 17px; margin-top: 36px; padding-top: 12px;
+    border-top: 1px solid #2a2a2a; color: #6cf;
+  }
+  h3 { font-size: 15px; color: #ccc; }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  code {
+    background: #1c1c1c; padding: 1px 6px; border-radius: 4px;
+    font-size: 0.9em;
+  }
+  .toc { background: #1c1c1c; border-radius: 10px; padding: 16px 20px; margin-bottom: 8px; }
+  .toc ol { margin: 0; padding-left: 20px; }
+  .toc a { text-decoration: none; }
+  .note {
+    background: #1c1c1c; border-left: 3px solid #6cf; border-radius: 0 8px 8px 0;
+    padding: 10px 14px; margin: 12px 0; font-size: 14px; color: #ccc;
+  }
+  footer { margin-top: 48px; font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a id="backLink" href="./index.html">&larr; アプリに戻る</a>
+  <h1>使い方</h1>
+  <p class="subtitle">ChordWiki Live Viewer — ライブ演奏用コード譜ビューア</p>
+
+  <nav class="toc">
+    <ol>
+      <li><a href="#song">はじめの一歩(曲の登録)</a></li>
+      <li><a href="#mode">演奏モード / 編集モード</a></li>
+      <li><a href="#scroll">自動スクロールの操作</a></li>
+      <li><a href="#memo">メモ機能(テキスト・画像・手書き)</a></li>
+      <li><a href="#bpm">BPM・メトロノーム</a></li>
+      <li><a href="#youtube">YouTube参考動画パネル</a></li>
+      <li><a href="#setlist">セットリスト</a></li>
+      <li><a href="#sync">クラウド同期(複数端末で共有)</a></li>
+      <li><a href="#zip">ZIPバックアップ</a></li>
+      <li><a href="#offline">オフライン対応・ホーム画面への追加</a></li>
+      <li><a href="#trouble">困った時に</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="song">1. はじめの一歩(曲の登録)</h2>
+  <ol>
+    <li>ChordWikiでコード譜を<strong>移調済みの状態</strong>にし、フルページのスクリーンショット(画像)またはPDFとして保存する
+      <div class="note">本番中の移調はできません。キーは事前に確定させておいてください。</div>
+    </li>
+    <li>曲一覧画面の「＋ 曲を追加」から、保存した画像/PDFを選択する</li>
+    <li>曲名・BPM(任意、空欄でも可)を聞かれるので入力する</li>
+    <li>曲一覧に追加され、タップすれば表示・自動スクロールできる</li>
+  </ol>
+  <p>曲一覧が増えてきたら、上部の検索ボックスで曲名絞り込みができます。</p>
+
+  <h2 id="mode">2. 演奏モード / 編集モード</h2>
+  <p>曲一覧画面の「✎ 編集モード」/「▶ 演奏モード」ボタンで切り替えます。この状態は保存され、次にアプリを開いた時も維持されます。</p>
+  <ul>
+    <li><strong>編集モード(デフォルト)</strong>: メモ配置・手書き・動画パネル・BPM編集など、全ての機能が使えます。普段の練習・準備用です</li>
+    <li><strong>演奏モード</strong>: ツールバーが最小限(戻る/前後の曲送り/再生/クリック/速度/進捗バー)になり、編集系のボタンはツールバーから完全に消えます</li>
+  </ul>
+  <div class="note">本番に入る前に、曲一覧画面で演奏モードへの切り替えを忘れずに。</div>
+
+  <h2 id="scroll">3. 自動スクロールの操作</h2>
+  <ul>
+    <li>「▶ 再生」で自動スクロール開始、もう一度押すと停止</li>
+    <li>「－」「＋」でスクロール速度調整(1px/秒刻み、長押しで加速)。曲ごとに保存される</li>
+    <li>指でドラッグすると手動スクロールでき、再生中にドラッグすると自動で一時停止、離すと自動的に再開する</li>
+    <li>末尾まで来ると自動で停止する</li>
+    <li>再生中はツールバーが自動的に隠れる(画面をもう一度タップすると再表示)</li>
+    <li>画面消灯防止(Wake Lock)が働くので、再生中は画面が暗くならない</li>
+  </ul>
+
+  <h2 id="memo">4. メモ機能(テキスト・画像・手書き)</h2>
+  <p>編集モード中のみ操作できます。</p>
+  <ul>
+    <li><strong>「+ テキスト」</strong>: 押した後、譜面上の配置したい場所をタップ→内容を入力</li>
+    <li><strong>「+ 画像」</strong>: 押した後、配置したい場所をタップ→画像を選択、またはクリップボードから貼り付け(Ctrl+V)。配置後はドラッグで移動、右下の丸ハンドルでリサイズできる</li>
+    <li><strong>「✎ ペン」「🔵 蛍光ペン」</strong>: 押すと手書きモードに入り、譜面上に直接線を描ける。色・太さは各ツールごとに保存される。線をタップすると削除確認が出る</li>
+    <li>メモ・線はすべて譜面と一緒にスクロールする(相対座標で保存されるので画面サイズが変わってもズレない)</li>
+  </ul>
+
+  <h2 id="bpm">5. BPM・メトロノーム</h2>
+  <ul>
+    <li>編集モード中、「BPM: --」ボタンで曲ごとのBPMを設定できる</li>
+    <li>「🔔 クリック」ボタンでメトロノームを再生/停止(演奏モードでも使える)。BPM未設定の場合は先に設定するよう案内される</li>
+  </ul>
+
+  <h2 id="youtube">6. YouTube参考動画パネル</h2>
+  <p>編集モード中のみ、ツールバーの「🎬 動画」ボタンで開閉できます。</p>
+  <ul>
+    <li>初回は「YouTubeのURLを設定」からURLを貼り付ける(以後その曲を開くたびに自動で呼び出される)</li>
+    <li>パネルは指でドラッグして好きな位置に動かせる(ヘッダーの「ここをドラッグで移動」の部分をつかむ)</li>
+    <li>「戻る」「進む」ボタンで巻き戻し/早送り(秒数は－/＋で調整可能)</li>
+    <li>再生/一時停止ボタンあり</li>
+    <li>別の曲に切り替えると自動的に動画は止まる</li>
+  </ul>
+  <div class="note">オンライン専用機能です。機内モードでは動画は読み込めません(それ以外の全機能はオフラインで動きます)。</div>
+
+  <h2 id="setlist">7. セットリスト</h2>
+  <ol>
+    <li>曲一覧の「📋 セットリスト」から「＋ 作成」</li>
+    <li>セットリスト編集画面で「＋ 曲を追加」「＋ メモを追加」(MCの内容などを挟める)</li>
+    <li>曲名・メモをタップして直接その項目から演奏を開始できる(セットリストの途中からでもOK)</li>
+    <li>演奏中は「前」「次」ボタンでセットリスト内を移動できる</li>
+    <li>メモ項目は演奏中の画面ではタップしても何も起きない(誤操作防止)。編集画面ではタップで直接編集できる</li>
+    <li>曲順は↑↓ボタンで入れ替え可能</li>
+  </ol>
+
+  <h2 id="sync">8. クラウド同期(複数端末で共有)</h2>
+  <p>Cloudflare Workerを使った、自分専用の同期サーバーとの間でデータをやり取りする機能です。</p>
+  <ul>
+    <li>「クラウド同期」ボタンで同期実行。初回は同期キーの入力を求められる</li>
+    <li>「同期キーを設定」ボタンで、同期キーを直接確認・変更・貼り付けできる(既に使っている端末があれば、そこで開いて値をコピーすればよい)</li>
+    <li>「セットアップリンクをコピー」で、キー入りのURLをコピーできる(LINEなどで他の端末に送って開けば、キー入力なしでセットアップできる)</li>
+    <li>同期は「新しい方が勝つ(updatedAt-wins)」方式</li>
+  </ul>
+  <div class="note">同期キーは他人に見られると勝手にデータを読み書きされてしまいます。人に教えないでください。</div>
+
+  <h2 id="zip">9. ZIPバックアップ</h2>
+  <ul>
+    <li>「バックアップを書き出す」で全データ(曲・画像・メモ・セットリスト)をZIPファイルとして保存できる</li>
+    <li>「ZIPを読み込む」で復元(同じ曲がある場合は新しい方が優先される)</li>
+    <li>最終バックアップ日時が曲一覧上部に表示され、7日以上更新が無いと警告色になる</li>
+  </ul>
+  <div class="note">クラウド同期があっても、念のため定期的にZIPバックアップも取っておくことを推奨します。</div>
+
+  <h2 id="offline">10. オフライン対応・ホーム画面への追加</h2>
+  <ol>
+    <li>Safariでアプリを開き、共有ボタン→「ホーム画面に追加」</li>
+    <li>ホーム画面のアイコンから起動すると、アドレスバーの無い全画面アプリとして開く</li>
+    <li>一度オンラインで開いた状態で「オフライン用データを更新」ボタンを押しておくと、以後は機内モードでも起動・全機能(YouTube以外)が使える</li>
+  </ol>
+  <h3>「オフライン用データを更新」はいつ押せばいいか</h3>
+  <p>このアプリの中身(コード)が更新された時、<strong>自動では反映されません</strong>(裏で勝手に何か起きるのを避ける設計にしているため)。新機能を試したい時や、しばらく起動していなかった時は、オンライン環境で一度このボタンを押してからリロードすると最新の状態になります。</p>
+
+  <h2 id="trouble">11. 困った時に</h2>
+  <ul>
+    <li><strong>エラーが出た</strong>: そのままの文言をメモしておいてもらえれば調査できます</li>
+    <li><strong>せっかく直したのに反映されていないように見える</strong>: だいたい上記の「オフライン用データを更新」を押し忘れているのが原因です。押してからリロードしてみてください</li>
+    <li><strong>同期キーが分からなくなった</strong>: 既に使えている別の端末があれば「同期キーを設定」ボタンで値を確認できます。全端末で分からなくなった場合はCloudflare側での再設定が必要です</li>
+    <li><strong>データが全部消えた/壊れた</strong>: 直近のZIPバックアップから復元してください</li>
+  </ul>
+
+  <footer>ChordWiki Live Viewer — <a href="./index.html">アプリに戻る</a></footer>
+</div>
+</body>
+</html>

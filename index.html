@@ -48,9 +48,10 @@
     display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
     font-size: 12px; color: #999;
   }
-  #backupBar button {
+  #backupBar button, #backupBar a {
     font-size: 12px; padding: 6px 10px; border-radius: 6px; border: none;
     background: #333; color: #eee; cursor: pointer;
+    text-decoration: none; display: inline-block;
   }
   #lastBackupInfo.warn { color: #f77; }
 
@@ -281,6 +282,7 @@
       <button id="btnAddSong">＋ 曲を追加</button>
     </div>
     <div id="backupBar">
+      <a id="btnManual" href="./manual.html">&#128214; 使い方</a>
       <span id="lastBackupInfo"></span>
       <button id="btnSync">クラウド同期</button>
       <button id="btnSetSyncKey">同期キーを設定</button>
@@ -2278,7 +2280,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   const OFFLINE_CACHE_NAME = 'cwlv-shell-v1';
   const OFFLINE_ASSET_LIST = [
-    './', './index.html', './manifest.json',
+    './', './index.html', './manual.html', './manifest.json',
     './vendor/pdfjs/pdf.min.js', './vendor/pdfjs/pdf.worker.min.js',
     './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
   ];

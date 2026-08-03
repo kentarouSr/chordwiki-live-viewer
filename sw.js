@@ -6,6 +6,7 @@ const CACHE_NAME = 'cwlv-shell-v1';
 const ASSET_LIST = [
   './',
   './index.html',
+  './manual.html',
   './manifest.json',
   './vendor/pdfjs/pdf.min.js',
   './vendor/pdfjs/pdf.worker.min.js',
