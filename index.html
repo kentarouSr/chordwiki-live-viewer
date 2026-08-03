@@ -203,7 +203,7 @@
 
   /* --- YouTube子画面(譜面を見ながら参考動画を再生するための浮遊パネル) --- */
   #youtubePanel {
-    position: absolute; top: 16px; right: 16px; width: 220px; z-index: 6;
+    position: absolute; top: 16px; right: 16px; width: 240px; z-index: 6;
     background: rgba(17,17,17,0.92); border: 1px solid #333; border-radius: 10px;
     overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   }
@@ -213,7 +213,10 @@
     background: #1c1c1c; cursor: grab; touch-action: none;
   }
   #youtubePanelHeader:active { cursor: grabbing; }
-  #youtubePanelTitle { flex: 1; font-size: 13px; color: #ccc; }
+  #youtubePanelTitle {
+    flex: 1; font-size: 11px; color: #999;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   #youtubePanelHeader button {
     font-size: 12px; padding: 4px 8px; border-radius: 6px; border: none;
     background: #333; color: #eee; cursor: pointer;
@@ -225,15 +228,15 @@
     background: #6cf; color: #111; font-weight: bold; cursor: pointer;
   }
   #youtubeEmptyState.hidden { display: none; }
-  #youtubePlayerHost { width: 220px; height: 124px; background: #000; }
+  #youtubePlayerHost { width: 240px; height: 135px; background: #000; }
   #youtubePlayerHost.hidden { display: none; }
   #youtubePanelControls {
-    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px;
     background: #1c1c1c;
   }
   #youtubePanelControls.hidden { display: none; }
   #youtubePanelControls button {
-    font-size: 13px; padding: 6px 8px; border-radius: 6px; border: none;
+    font-size: 12px; padding: 6px 7px; border-radius: 6px; border: none;
     background: #333; color: #eee; cursor: pointer;
   }
   #youtubeRewindSecLabel { font-size: 12px; color: #ccc; min-width: 34px; text-align: center; }
@@ -323,7 +326,7 @@
     <div id="progressBar"><div id="progressFill"></div></div>
     <div id="youtubePanel" class="hidden">
       <div id="youtubePanelHeader">
-        <span id="youtubePanelTitle">&#9776; 動画</span>
+        <span id="youtubePanelTitle">&#10021; ここをドラッグで移動</span>
         <button id="btnYoutubeChangeUrl">URL</button>
         <button id="btnYoutubeClose">&times;</button>
       </div>
@@ -335,6 +338,7 @@
       <div id="youtubePanelControls" class="hidden">
         <button id="btnYoutubeRewind">&#9664; 戻る</button>
         <button id="btnYoutubePlayPause">&#9654;</button>
+        <button id="btnYoutubeForward">進む &#9654;</button>
         <button id="btnYoutubeRewindSecMinus">&minus;</button>
         <span id="youtubeRewindSecLabel">5秒</span>
         <button id="btnYoutubeRewindSecPlus">+</button>
@@ -462,6 +466,7 @@
   const youtubePlayerHost = document.getElementById('youtubePlayerHost');
   const youtubePanelControls = document.getElementById('youtubePanelControls');
   const btnYoutubeRewind = document.getElementById('btnYoutubeRewind');
+  const btnYoutubeForward = document.getElementById('btnYoutubeForward');
   const btnYoutubePlayPause = document.getElementById('btnYoutubePlayPause');
   const btnYoutubeRewindSecMinus = document.getElementById('btnYoutubeRewindSecMinus');
   const btnYoutubeRewindSecPlus = document.getElementById('btnYoutubeRewindSecPlus');
@@ -1438,7 +1443,7 @@
       youtubePlayerHost.appendChild(mount);
       ytPlayer = new YT.Player(mount, {
         videoId,
-        width: '220', height: '124',
+        width: '240', height: '135',
         playerVars: { playsinline: 1 },
         events: {
           onStateChange: (e) => {
@@ -1498,6 +1503,13 @@
   btnYoutubeRewind.addEventListener('click', () => {
     if (!ytPlayer) return;
     const t = Math.max(0, ytPlayer.getCurrentTime() - getRewindSec());
+    ytPlayer.seekTo(t, true);
+  });
+
+  btnYoutubeForward.addEventListener('click', () => {
+    if (!ytPlayer) return;
+    const duration = ytPlayer.getDuration() || Infinity;
+    const t = Math.min(duration, ytPlayer.getCurrentTime() + getRewindSec());
     ytPlayer.seekTo(t, true);
   });
 
