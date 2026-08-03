@@ -32,11 +32,12 @@
   }
   #songListHeader h1 { font-size: 18px; margin: 0; margin-right: auto; }
   #songListHeader { gap: 8px; }
-  #btnGoSetlists {
+  #btnGoSetlists, #btnAppMode {
     font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer;
   }
-  #btnGoSetlists:active { background: #444; }
+  #btnGoSetlists:active, #btnAppMode:active { background: #444; }
+  #btnAppMode.mode-perform { background: #6cf; color: #111; font-weight: bold; }
   #btnAddSong {
     font-size: 15px; padding: 10px 16px; border-radius: 8px; border: none;
     background: #6cf; color: #111; font-weight: bold; cursor: pointer;
@@ -178,6 +179,8 @@
   #viewer.memo-edit-mode .memoEditOnly { display: inline-block; }
   .setlistOnly { display: none; }
   #viewer.setlist-active .setlistOnly { display: inline-block; }
+  /* 演奏モードでは編集・動画関連のボタン自体を表示しない(誤操作の余地を無くすため) */
+  #viewer.app-mode-perform .appModeEditOnly { display: none !important; }
 
   #setlistMemoView {
     position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
@@ -261,7 +264,6 @@
   }
   #toolbar button:active { background: #6cf; color: #111; }
   #toolbar button:disabled { opacity: 0.35; cursor: default; }
-  #btnMemoEdit.holding { background: #6cf; color: #111; transition: background 0.55s linear; }
   #btnMetronome.active { background: #6cf; color: #111; }
   #btnPlay { min-width: 84px; font-weight: bold; }
   #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
@@ -274,6 +276,7 @@
   <div id="songListScreen">
     <div id="songListHeader">
       <h1>ChordWiki Live Viewer</h1>
+      <button id="btnAppMode">&#9998; 編集モード</button>
       <button id="btnGoSetlists">&#128203; セットリスト</button>
       <button id="btnAddSong">＋ 曲を追加</button>
     </div>
@@ -356,8 +359,8 @@
       <button id="btnBack">&larr; 曲一覧</button>
       <button id="btnPrevSong" class="setlistOnly">&#9198; 前</button>
       <button id="btnNextSong" class="setlistOnly">次 &#9197;</button>
-      <button id="btnMemoEdit">&#128274; 編集(長押し)</button>
-      <button id="btnToggleYoutube">&#127909; 動画</button>
+      <button id="btnMemoEdit" class="appModeEditOnly">&#9998; 編集</button>
+      <button id="btnToggleYoutube" class="appModeEditOnly">&#127909; 動画</button>
       <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
       <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
       <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
@@ -421,6 +424,7 @@
   const btnSetSyncKey = document.getElementById('btnSetSyncKey');
   const btnCopySetupLink = document.getElementById('btnCopySetupLink');
   const btnGoSetlists = document.getElementById('btnGoSetlists');
+  const btnAppMode = document.getElementById('btnAppMode');
   const offlineCacheInfo = document.getElementById('offlineCacheInfo');
   const btnUpdateOfflineCache = document.getElementById('btnUpdateOfflineCache');
 
@@ -519,6 +523,24 @@
   function showScreen(screen) {
     for (const s of allScreens) s.classList.toggle('hidden', s !== screen);
   }
+
+  // ---- 演奏モード/編集モード(曲一覧で切り替える。誤操作対策の本体) ----
+  // 演奏モードでは編集・動画関連のボタン自体がツールバーに出ない。
+  // デフォルトは編集モード(普段は練習しながら編集する運用のため)。
+  const APP_MODE_KEY = 'cwlv_app_mode';
+  let appMode = localStorage.getItem(APP_MODE_KEY) || 'edit';
+  function applyAppMode() {
+    const isPerform = appMode === 'perform';
+    viewer.classList.toggle('app-mode-perform', isPerform);
+    btnAppMode.textContent = isPerform ? '\u{25B6} 演奏モード' : '\u{270E} 編集モード';
+    btnAppMode.classList.toggle('mode-perform', isPerform);
+    if (isPerform) setMemoEditMode(false);
+  }
+  btnAppMode.addEventListener('click', () => {
+    appMode = appMode === 'perform' ? 'edit' : 'perform';
+    localStorage.setItem(APP_MODE_KEY, appMode);
+    applyAppMode();
+  });
 
   // ==================================================
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
@@ -1169,42 +1191,18 @@
     await addImageMemoFromFile(file, x, y);
   });
 
-  // 編集モードに入る誤操作を防ぐため、入る時だけ長押しを要求する
-  // (演奏中に誤って触れて編集モードに入ってしまうのを防ぐため)。
-  // 抜ける時は誤操作の害が無いので普通のタップでよい。
+  // 誤操作対策は演奏モード/編集モード(アプリ全体の切り替え、曲一覧で選ぶ)側で
+  // 行うようになったので、この編集(メモ配置)ボタン自体はシンプルなタップ切り替えでよい。
+  // 演奏モード中はそもそもこのボタンごと表示されない(#viewer.app-mode-perform .appModeEditOnly)。
   function setMemoEditMode(on) {
     memoEditMode = on;
     pendingMemoType = null;
     pendingMemoPlacement = null;
     setDrawMode(false);
     viewer.classList.toggle('memo-edit-mode', memoEditMode);
-    btnMemoEdit.textContent = memoEditMode ? '✎ 編集中' : '\u{1F512} 編集(長押し)';
     if (memoEditMode) stopPlayback();
   }
-  let editHoldTimer = null;
-  let editEnteredViaHold = false;
-  function cancelEditHold() {
-    btnMemoEdit.classList.remove('holding');
-    if (editHoldTimer) { clearTimeout(editHoldTimer); editHoldTimer = null; }
-  }
-  btnMemoEdit.addEventListener('pointerdown', (e) => {
-    if (memoEditMode) return;
-    e.preventDefault();
-    btnMemoEdit.classList.add('holding');
-    editHoldTimer = setTimeout(() => {
-      editHoldTimer = null;
-      editEnteredViaHold = true;
-      setMemoEditMode(true);
-      btnMemoEdit.classList.remove('holding');
-    }, 550);
-  });
-  btnMemoEdit.addEventListener('pointerup', cancelEditHold);
-  btnMemoEdit.addEventListener('pointerleave', cancelEditHold);
-  btnMemoEdit.addEventListener('pointercancel', cancelEditHold);
-  btnMemoEdit.addEventListener('click', () => {
-    if (editEnteredViaHold) { editEnteredViaHold = false; return; }
-    if (memoEditMode) setMemoEditMode(false);
-  });
+  btnMemoEdit.addEventListener('click', () => setMemoEditMode(!memoEditMode));
   btnAddTextMemo.addEventListener('click', () => {
     setDrawMode(false);
     pendingMemoType = 'text';
@@ -2888,6 +2886,7 @@
     }, 200);
   });
 
+  applyAppMode();
   renderSongList();
 })();
 </script>
