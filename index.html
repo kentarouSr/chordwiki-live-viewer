@@ -86,7 +86,7 @@
     font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
   }
-  #btnAddSetlist, #btnStartSetlist, #btnSongPickerDone {
+  #btnAddSetlist, #btnSongPickerDone {
     background: #6cf; color: #111; font-weight: bold;
   }
   #setlistList, #setlistSongs, #songPickerList { display: flex; flex-direction: column; gap: 10px; }
@@ -263,7 +263,6 @@
     <div id="setlistEditFooter">
       <button id="btnAddSongToSetlist">＋ 曲を追加</button>
       <button id="btnAddMemoToSetlist">＋ メモを追加</button>
-      <button id="btnStartSetlist">&#9654; 演奏開始</button>
     </div>
   </div>
 
@@ -361,7 +360,6 @@
   const btnDeleteSetlist = document.getElementById('btnDeleteSetlist');
   const btnAddSongToSetlist = document.getElementById('btnAddSongToSetlist');
   const btnAddMemoToSetlist = document.getElementById('btnAddMemoToSetlist');
-  const btnStartSetlist = document.getElementById('btnStartSetlist');
 
   const songPickerScreen = document.getElementById('songPickerScreen');
   const songPickerListEl = document.getElementById('songPickerList');
@@ -477,22 +475,36 @@
 
   async function dbGetAll() {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
+    const songs = await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly');
       const req = tx.objectStore(STORE).getAll();
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
+    await Promise.all(songs.map(migrateLegacyBlobField));
+    return songs;
+  }
+
+  // 読み込んだ曲レコードに古い.blobフィールド(Blobオブジェクト)が残っていたら、
+  // その場で.data(ArrayBuffer)に変換して.blobは削除する。次にdbPutされた時に
+  // Blobがそのまま書き戻されてSafariのバグを再発させるのを防ぐため。
+  async function migrateLegacyBlobField(song) {
+    if (song && song.blob && !song.data) {
+      song.data = await song.blob.arrayBuffer();
+      delete song.blob;
+    }
+    return song;
   }
 
   async function dbGet(id) {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
+    const song = await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly');
       const req = tx.objectStore(STORE).get(id);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
+    return migrateLegacyBlobField(song);
   }
 
   async function dbDelete(id) {
@@ -1573,6 +1585,16 @@
       if (item.type === 'song') {
         const song = byUuid.get(item.uuid);
         main.textContent = song ? song.name : '(見つかりません。削除された可能性)';
+        if (song) {
+          main.style.cursor = 'pointer';
+          // タップでその曲から演奏を開始する(セットリストの途中の曲を直接開きたい場合の導線)。
+          main.addEventListener('click', async () => {
+            activeSetlist = sl;
+            viewerReturnScreen = setlistListScreen;
+            viewer.classList.add('setlist-active');
+            await openSetlistItemAtIndex(index);
+          });
+        }
       } else {
         main.textContent = '\u{1F4DD} ' + item.text; // MCメモなど。タップでは何も起きない(演奏中に誤操作しないため)
         main.style.opacity = '0.85';
@@ -1725,17 +1747,8 @@
   });
 
   // ---- セットリストの演奏(ビューアでの前後曲切替え) ----
-  btnStartSetlist.addEventListener('click', async () => {
-    const sl = await slGet(currentSetlistId);
-    if (!sl || !sl.items || sl.items.length === 0) {
-      alert('曲もメモもありません。先に追加してください。');
-      return;
-    }
-    activeSetlist = sl;
-    viewerReturnScreen = setlistListScreen;
-    viewer.classList.add('setlist-active');
-    await openSetlistItemAtIndex(0);
-  });
+  // 演奏開始は専用ボタンではなく、一覧で曲をタップした所から始まる
+  // (renderSetlistEdit内のmain.addEventListener('click', ...)参照)。
 
   // セットリストの項目(曲 or メモ)をインデックスで開く。
   // メモはビューアに「読み込む」ものではなく、テキストをそのまま表示するだけ
