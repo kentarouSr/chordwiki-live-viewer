@@ -189,7 +189,9 @@
   #viewer.setlist-memo-mode #btnSpeedDown,
   #viewer.setlist-memo-mode #speedLabel,
   #viewer.setlist-memo-mode #btnSpeedUp,
-  #viewer.setlist-memo-mode #btnPlay {
+  #viewer.setlist-memo-mode #btnPlay,
+  #viewer.setlist-memo-mode #btnToggleYoutube,
+  #viewer.setlist-memo-mode #youtubePanel {
     display: none;
   }
 
@@ -198,6 +200,43 @@
     background: rgba(255,255,255,0.15); z-index: 5;
   }
   #progressFill { height: 100%; width: 0%; background: #6cf; }
+
+  /* --- YouTube子画面(譜面を見ながら参考動画を再生するための浮遊パネル) --- */
+  #youtubePanel {
+    position: absolute; top: 16px; right: 16px; width: 220px; z-index: 6;
+    background: rgba(17,17,17,0.92); border: 1px solid #333; border-radius: 10px;
+    overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  #youtubePanel.hidden { display: none; }
+  #youtubePanelHeader {
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+    background: #1c1c1c; cursor: grab; touch-action: none;
+  }
+  #youtubePanelHeader:active { cursor: grabbing; }
+  #youtubePanelTitle { flex: 1; font-size: 13px; color: #ccc; }
+  #youtubePanelHeader button {
+    font-size: 12px; padding: 4px 8px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #youtubeEmptyState { padding: 14px; text-align: center; }
+  #youtubeEmptyState p { font-size: 12px; color: #aaa; margin: 0 0 8px; }
+  #youtubeEmptyState button {
+    font-size: 13px; padding: 8px 12px; border-radius: 8px; border: none;
+    background: #6cf; color: #111; font-weight: bold; cursor: pointer;
+  }
+  #youtubeEmptyState.hidden { display: none; }
+  #youtubePlayerHost { width: 220px; height: 124px; background: #000; }
+  #youtubePlayerHost.hidden { display: none; }
+  #youtubePanelControls {
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+    background: #1c1c1c;
+  }
+  #youtubePanelControls.hidden { display: none; }
+  #youtubePanelControls button {
+    font-size: 13px; padding: 6px 8px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #youtubeRewindSecLabel { font-size: 12px; color: #ccc; min-width: 34px; text-align: center; }
 
   #toolbar {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
@@ -282,11 +321,31 @@
     </div>
     <div id="setlistMemoView"><p id="setlistMemoText"></p></div>
     <div id="progressBar"><div id="progressFill"></div></div>
+    <div id="youtubePanel" class="hidden">
+      <div id="youtubePanelHeader">
+        <span id="youtubePanelTitle">&#9776; 動画</span>
+        <button id="btnYoutubeChangeUrl">URL</button>
+        <button id="btnYoutubeClose">&times;</button>
+      </div>
+      <div id="youtubeEmptyState">
+        <p>この曲の動画URLが未設定です</p>
+        <button id="btnYoutubeSetUrl">YouTubeのURLを設定</button>
+      </div>
+      <div id="youtubePlayerHost" class="hidden"></div>
+      <div id="youtubePanelControls" class="hidden">
+        <button id="btnYoutubeRewind">&#9664; 戻る</button>
+        <button id="btnYoutubePlayPause">&#9654;</button>
+        <button id="btnYoutubeRewindSecMinus">&minus;</button>
+        <span id="youtubeRewindSecLabel">5秒</span>
+        <button id="btnYoutubeRewindSecPlus">+</button>
+      </div>
+    </div>
     <div id="toolbar">
       <button id="btnBack">&larr; 曲一覧</button>
       <button id="btnPrevSong" class="setlistOnly">&#9198; 前</button>
       <button id="btnNextSong" class="setlistOnly">次 &#9197;</button>
       <button id="btnMemoEdit">&#9998; 編集</button>
+      <button id="btnToggleYoutube">&#127909; 動画</button>
       <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
       <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
       <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
@@ -393,6 +452,20 @@
   const btnSpeedUp = document.getElementById('btnSpeedUp');
   const btnSpeedDown = document.getElementById('btnSpeedDown');
   const speedLabel = document.getElementById('speedLabel');
+  const btnToggleYoutube = document.getElementById('btnToggleYoutube');
+  const youtubePanel = document.getElementById('youtubePanel');
+  const youtubePanelHeader = document.getElementById('youtubePanelHeader');
+  const btnYoutubeChangeUrl = document.getElementById('btnYoutubeChangeUrl');
+  const btnYoutubeClose = document.getElementById('btnYoutubeClose');
+  const youtubeEmptyState = document.getElementById('youtubeEmptyState');
+  const btnYoutubeSetUrl = document.getElementById('btnYoutubeSetUrl');
+  const youtubePlayerHost = document.getElementById('youtubePlayerHost');
+  const youtubePanelControls = document.getElementById('youtubePanelControls');
+  const btnYoutubeRewind = document.getElementById('btnYoutubeRewind');
+  const btnYoutubePlayPause = document.getElementById('btnYoutubePlayPause');
+  const btnYoutubeRewindSecMinus = document.getElementById('btnYoutubeRewindSecMinus');
+  const btnYoutubeRewindSecPlus = document.getElementById('btnYoutubeRewindSecPlus');
+  const youtubeRewindSecLabel = document.getElementById('youtubeRewindSecLabel');
 
   // ---- 状態 ----
   let contentHeight = 0;   // タイル全体のCSS高さ
@@ -408,6 +481,9 @@
   let currentSongId = null;     // IndexedDBに保存されている曲のid(未保存時はnull)
   let currentMemos = [];        // 開いている曲のメモ配列
   let currentBpm = null;        // 開いている曲のBPM(未設定はnull)
+  let currentYoutubeUrl = null; // 開いている曲の参考動画URL(未設定はnull)
+  let ytPlayer = null;          // YT.Playerインスタンス(パネルを開いた時だけ生成)
+  let ytApiLoadPromise = null;
   let memoEditMode = false;
   let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
   let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
@@ -1288,6 +1364,177 @@
   });
 
   // ==================================================
+  // YouTube子画面(譜面を見ながら参考動画を再生・巻き戻しするための浮遊パネル)
+  // ==================================================
+  const YT_REWIND_SEC_KEY = 'cwlv_yt_rewind_sec';
+  function getRewindSec() {
+    const v = parseInt(localStorage.getItem(YT_REWIND_SEC_KEY), 10);
+    return Number.isFinite(v) && v > 0 ? v : 5;
+  }
+  function setRewindSec(v) {
+    localStorage.setItem(YT_REWIND_SEC_KEY, String(v));
+    youtubeRewindSecLabel.textContent = `${v}秒`;
+  }
+
+  function extractYoutubeId(url) {
+    if (!url) return null;
+    const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
+    return m ? m[1] : null;
+  }
+
+  function loadYoutubeApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (ytApiLoadPromise) return ytApiLoadPromise;
+    ytApiLoadPromise = new Promise((resolve, reject) => {
+      const prevReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (prevReady) prevReady();
+        resolve(window.YT);
+      };
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      tag.onerror = () => reject(new Error('YouTube APIの読み込みに失敗しました(オフラインの可能性があります)'));
+      document.head.appendChild(tag);
+    });
+    return ytApiLoadPromise;
+  }
+
+  function destroyYtPlayer() {
+    if (ytPlayer) {
+      try { ytPlayer.destroy(); } catch (e) { /* 無視 */ }
+      ytPlayer = null;
+    }
+    youtubePlayerHost.innerHTML = '';
+    btnYoutubePlayPause.textContent = '▶';
+  }
+
+  // 曲を切り替える時に呼ぶ。前の曲の動画を流しっぱなしにしないためのリセット。
+  function resetYoutubePanelForSongSwitch() {
+    destroyYtPlayer();
+    youtubePanel.classList.add('hidden');
+  }
+
+  function renderYoutubePanelState() {
+    const hasUrl = !!currentYoutubeUrl;
+    youtubeEmptyState.classList.toggle('hidden', hasUrl);
+    youtubePlayerHost.classList.toggle('hidden', !hasUrl);
+    youtubePanelControls.classList.toggle('hidden', !hasUrl);
+  }
+
+  async function ensureYtPlayer() {
+    if (ytPlayer || !currentYoutubeUrl) return;
+    const videoId = extractYoutubeId(currentYoutubeUrl);
+    if (!videoId) {
+      alert('YouTubeのURLから動画IDを読み取れませんでした。URLを確認してください。');
+      return;
+    }
+    try {
+      const YT = await loadYoutubeApi();
+      // YT.Playerは渡した要素を<iframe>に「置き換える」ため、youtubePlayerHost自体を
+      // 直接渡すと1回使った時点でその要素が消えてしまい、2回目以降に使い回せなくなる。
+      // youtubePlayerHostは常に空にした上で毎回使い捨ての子要素を作って渡す。
+      youtubePlayerHost.innerHTML = '';
+      const mount = document.createElement('div');
+      youtubePlayerHost.appendChild(mount);
+      ytPlayer = new YT.Player(mount, {
+        videoId,
+        width: '220', height: '124',
+        playerVars: { playsinline: 1 },
+        events: {
+          onStateChange: (e) => {
+            btnYoutubePlayPause.textContent = e.data === YT.PlayerState.PLAYING ? '⏸' : '▶';
+          },
+        },
+      });
+    } catch (err) {
+      alert('動画の読み込みエラー: ' + (err && err.message ? err.message : err));
+    }
+  }
+
+  async function saveCurrentYoutubeUrl() {
+    if (currentSongId == null) return;
+    const song = await dbGet(currentSongId);
+    if (!song) return;
+    song.youtubeUrl = currentYoutubeUrl;
+    song.updatedAt = Date.now();
+    await dbPut(song);
+  }
+
+  btnToggleYoutube.addEventListener('click', async () => {
+    const opening = youtubePanel.classList.contains('hidden');
+    youtubePanel.classList.toggle('hidden');
+    if (opening) {
+      renderYoutubePanelState();
+      setRewindSec(getRewindSec());
+      await ensureYtPlayer();
+    }
+  });
+
+  btnYoutubeClose.addEventListener('click', () => {
+    youtubePanel.classList.add('hidden');
+    if (ytPlayer) { try { ytPlayer.pauseVideo(); } catch (e) { /* 無視 */ } }
+  });
+
+  async function promptYoutubeUrl() {
+    const input = prompt('YouTubeのURLを入力してください', currentYoutubeUrl || '');
+    if (input === null) return;
+    const trimmed = input.trim();
+    destroyYtPlayer();
+    currentYoutubeUrl = trimmed || null;
+    await saveCurrentYoutubeUrl();
+    renderYoutubePanelState();
+    if (currentYoutubeUrl) await ensureYtPlayer();
+  }
+  btnYoutubeSetUrl.addEventListener('click', promptYoutubeUrl);
+  btnYoutubeChangeUrl.addEventListener('click', promptYoutubeUrl);
+
+  btnYoutubePlayPause.addEventListener('click', () => {
+    if (!ytPlayer) return;
+    const state = ytPlayer.getPlayerState();
+    if (state === window.YT.PlayerState.PLAYING) ytPlayer.pauseVideo();
+    else ytPlayer.playVideo();
+  });
+
+  btnYoutubeRewind.addEventListener('click', () => {
+    if (!ytPlayer) return;
+    const t = Math.max(0, ytPlayer.getCurrentTime() - getRewindSec());
+    ytPlayer.seekTo(t, true);
+  });
+
+  btnYoutubeRewindSecMinus.addEventListener('click', () => setRewindSec(Math.max(1, getRewindSec() - 1)));
+  btnYoutubeRewindSecPlus.addEventListener('click', () => setRewindSec(Math.min(60, getRewindSec() + 1)));
+
+  // パネルのドラッグ移動(画面固定座標。譜面と一緒にスクロールさせないため、
+  // メモ/ストロークが使う分数座標系ではなく素直なCSS px の left/top を使う)。
+  youtubePanelHeader.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return; // ヘッダー内ボタンの操作はドラッグ扱いにしない
+    e.preventDefault();
+    youtubePanelHeader.setPointerCapture(e.pointerId);
+    const rect = youtubePanel.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const startLeft = rect.left, startTop = rect.top;
+    youtubePanel.style.right = 'auto';
+    youtubePanel.style.left = startLeft + 'px';
+    youtubePanel.style.top = startTop + 'px';
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      const maxLeft = window.innerWidth - youtubePanel.offsetWidth;
+      const maxTop = window.innerHeight - youtubePanel.offsetHeight;
+      youtubePanel.style.left = Math.min(Math.max(0, startLeft + dx), Math.max(0, maxLeft)) + 'px';
+      youtubePanel.style.top = Math.min(Math.max(0, startTop + dy), Math.max(0, maxTop)) + 'px';
+    };
+    const onUp = () => {
+      youtubePanelHeader.removeEventListener('pointermove', onMove);
+      youtubePanelHeader.removeEventListener('pointerup', onUp);
+      youtubePanelHeader.removeEventListener('pointercancel', onUp);
+    };
+    youtubePanelHeader.addEventListener('pointermove', onMove);
+    youtubePanelHeader.addEventListener('pointerup', onUp);
+    youtubePanelHeader.addEventListener('pointercancel', onUp);
+  });
+
+  // ==================================================
   // 速度調整(1px/秒刻み、長押しで加速)
   // ==================================================
   let holdTimeout = null;
@@ -1596,8 +1843,13 @@
           });
         }
       } else {
-        main.textContent = '\u{1F4DD} ' + item.text; // MCメモなど。タップでは何も起きない(演奏中に誤操作しないため)
+        main.textContent = '\u{1F4DD} ' + item.text; // MCメモなど
         main.style.opacity = '0.85';
+        main.style.cursor = 'pointer';
+        // 編集画面ではタップで直接編集できる(「編集」ボタンと同じ動作)。
+        // 演奏中の誤操作防止ルールはビューア側(演奏中の表示)にのみ適用し、
+        // ここは元々編集操作をする画面なので対象外。
+        main.addEventListener('click', () => editSetlistMemo(sl, index));
       }
 
       const btnUp = document.createElement('button');
@@ -1762,6 +2014,7 @@
     if (item.type === 'memo') {
       stopPlayback();
       stopMetronome();
+      resetYoutubePanelForSongSwitch();
       viewer.classList.add('setlist-memo-mode');
       showScreen(viewer);
       setlistMemoText.textContent = item.text;
@@ -1999,7 +2252,7 @@
 
     const songManifest = songs.map((s) => ({
       uuid: s.uuid, name: s.name, bpm: s.bpm, speed: s.speed,
-      fileName: s.fileName, mimeType: s.mimeType,
+      fileName: s.fileName, mimeType: s.mimeType, youtubeUrl: s.youtubeUrl || null,
       createdAt: s.createdAt, updatedAt: s.updatedAt,
       // dataは画像メモのバイナリ本体(別途zipエントリで書き出す)。それ以外のフィールドは
       // メモ種別(text/image/stroke)を問わずそのまま引き継ぐ。
@@ -2067,6 +2320,7 @@
           Object.assign(current, {
             name: meta.name, bpm: meta.bpm, speed: meta.speed,
             data, fileName: meta.fileName, mimeType: meta.mimeType,
+            youtubeUrl: meta.youtubeUrl || null,
             memos, updatedAt: meta.updatedAt,
           });
           await dbPut(current);
@@ -2078,6 +2332,7 @@
         await dbAdd({
           uuid: meta.uuid, name: meta.name, bpm: meta.bpm, speed: meta.speed,
           data, fileName: meta.fileName, mimeType: meta.mimeType, memos,
+          youtubeUrl: meta.youtubeUrl || null,
           createdAt: meta.createdAt || Date.now(), updatedAt: meta.updatedAt || Date.now(),
         });
         added++;
@@ -2210,6 +2465,7 @@
     form.set('mimeType', song.mimeType);
     form.set('speed', String(song.speed));
     form.set('bpm', song.bpm != null ? String(song.bpm) : '');
+    form.set('youtubeUrl', song.youtubeUrl || '');
     form.set('memos', JSON.stringify(serializeMemosForUpload(song.memos)));
     form.set('createdAt', String(song.createdAt));
     form.set('updatedAt', String(song.updatedAt));
@@ -2232,6 +2488,7 @@
       Object.assign(existingLocal, {
         name: remote.name, bpm: remote.bpm, speed: remote.speed,
         data, fileName: remote.fileName, mimeType: remote.mimeType,
+        youtubeUrl: remote.youtubeUrl || null,
         memos, updatedAt: remote.updatedAt,
       });
       await dbPut(existingLocal);
@@ -2239,6 +2496,7 @@
       await dbAdd({
         uuid: remote.uuid, name: remote.name, bpm: remote.bpm, speed: remote.speed,
         data, fileName: remote.fileName, mimeType: remote.mimeType, memos,
+        youtubeUrl: remote.youtubeUrl || null,
         createdAt: remote.createdAt, updatedAt: remote.updatedAt,
       });
     }
@@ -2434,10 +2692,12 @@
   async function openSongRecord(song) {
     viewer.classList.remove('setlist-memo-mode');
     song = await ensureSongUuid(song);
+    resetYoutubePanelForSongSwitch();
     currentSongId = song.id;
     speed = song.speed || DEFAULT_SPEED;
     currentMemos = song.memos || [];
     currentBpm = song.bpm ?? null;
+    currentYoutubeUrl = song.youtubeUrl || null;
     speedLabel.textContent = `${speed} px/s`;
     updateBpmLabel();
     const buf = await getSongArrayBuffer(song);
@@ -2472,6 +2732,7 @@
     flushSpeedSave();
     stopPlayback();
     stopMetronome();
+    resetYoutubePanelForSongSwitch();
     clearTiles();
     currentSourceKind = null;
     currentImageEl = null;
@@ -2479,6 +2740,7 @@
     currentSongId = null;
     currentMemos = [];
     currentBpm = null;
+    currentYoutubeUrl = null;
     memoEditMode = false;
     pendingMemoType = null;
     pendingMemoPlacement = null;

@@ -37,6 +37,7 @@ export default {
       speed: row.speed,
       fileName: row.file_name,
       mimeType: row.mime_type,
+      youtubeUrl: row.youtube_url || null,
       memos: row.memos ? JSON.parse(row.memos) : [],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -78,6 +79,7 @@ export default {
         const bpmRaw = form.get('bpm');
         const bpm = bpmRaw ? parseInt(bpmRaw, 10) : null;
         const memosRaw = form.get('memos');
+        const youtubeUrlRaw = form.get('youtubeUrl');
         const createdAt = parseInt(form.get('createdAt'), 10);
         const updatedAt = parseInt(form.get('updatedAt'), 10);
 
@@ -91,13 +93,14 @@ export default {
         });
 
         await env.DB.prepare(
-          `INSERT INTO songs (uuid, name, bpm, speed, file_name, mime_type, r2_key, memos, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO songs (uuid, name, bpm, speed, file_name, mime_type, r2_key, memos, youtube_url, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(uuid) DO UPDATE SET
              name = excluded.name, bpm = excluded.bpm, speed = excluded.speed,
              file_name = excluded.file_name, mime_type = excluded.mime_type,
-             r2_key = excluded.r2_key, memos = excluded.memos, updated_at = excluded.updated_at`
-        ).bind(uuid, name, bpm, speed || 40, fileName, mimeType, r2Key, memosRaw || '[]', createdAt || Date.now(), updatedAt).run();
+             r2_key = excluded.r2_key, memos = excluded.memos, youtube_url = excluded.youtube_url,
+             updated_at = excluded.updated_at`
+        ).bind(uuid, name, bpm, speed || 40, fileName, mimeType, r2Key, memosRaw || '[]', youtubeUrlRaw || null, createdAt || Date.now(), updatedAt).run();
 
         return json({ ok: true });
       }

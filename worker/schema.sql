@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS songs (
   mime_type TEXT NOT NULL,
   r2_key TEXT NOT NULL,
   memos TEXT NOT NULL DEFAULT '[]',
+  youtube_url TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
