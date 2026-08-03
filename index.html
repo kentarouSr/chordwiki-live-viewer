@@ -33,10 +33,10 @@
   #songListHeader h1 { font-size: 18px; margin: 0; margin-right: auto; }
   #songListHeader { gap: 8px; }
   #btnGoSetlists {
-    font-size: 14px; padding: 9px 14px; border-radius: 8px;
-    border: 1px solid #3a3a3a; background: #1e1e1e; color: #ddd; cursor: pointer;
+    font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer;
   }
-  #btnGoSetlists:active { background: #2a2a2a; }
+  #btnGoSetlists:active { background: #444; }
   #btnAddSong {
     font-size: 15px; padding: 10px 16px; border-radius: 8px; border: none;
     background: #6cf; color: #111; font-weight: bold; cursor: pointer;
@@ -52,6 +52,12 @@
     background: #333; color: #eee; cursor: pointer;
   }
   #lastBackupInfo.warn { color: #f77; }
+
+  #songSearchInput {
+    font-size: 15px; padding: 10px 12px; border-radius: 8px; border: 1px solid #333;
+    background: #1c1c1c; color: #eee; margin-bottom: 12px; width: 100%;
+  }
+  #songSearchInput::placeholder { color: #777; }
 
   #songList { display: flex; flex-direction: column; gap: 10px; }
   #songList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
@@ -255,6 +261,7 @@
   }
   #toolbar button:active { background: #6cf; color: #111; }
   #toolbar button:disabled { opacity: 0.35; cursor: default; }
+  #btnMemoEdit.holding { background: #6cf; color: #111; transition: background 0.55s linear; }
   #btnMetronome.active { background: #6cf; color: #111; }
   #btnPlay { min-width: 84px; font-weight: bold; }
   #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
@@ -280,6 +287,7 @@
       <span id="offlineCacheInfo"></span>
       <button id="btnUpdateOfflineCache">オフライン用データを更新</button>
     </div>
+    <input id="songSearchInput" type="search" placeholder="曲名で検索">
     <div id="songList"></div>
     <input id="fileInput" type="file" accept="image/*,application/pdf">
     <input id="zipInput" type="file" accept=".zip,application/zip">
@@ -348,7 +356,7 @@
       <button id="btnBack">&larr; 曲一覧</button>
       <button id="btnPrevSong" class="setlistOnly">&#9198; 前</button>
       <button id="btnNextSong" class="setlistOnly">次 &#9197;</button>
-      <button id="btnMemoEdit">&#9998; 編集</button>
+      <button id="btnMemoEdit">&#128274; 編集(長押し)</button>
       <button id="btnToggleYoutube">&#127909; 動画</button>
       <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
       <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
@@ -402,6 +410,7 @@
   // ---- DOM ----
   const songListScreen = document.getElementById('songListScreen');
   const songListEl = document.getElementById('songList');
+  const songSearchInput = document.getElementById('songSearchInput');
   const btnAddSong = document.getElementById('btnAddSong');
   const fileInput = document.getElementById('fileInput');
   const zipInput = document.getElementById('zipInput');
@@ -1160,13 +1169,41 @@
     await addImageMemoFromFile(file, x, y);
   });
 
-  btnMemoEdit.addEventListener('click', () => {
-    memoEditMode = !memoEditMode;
+  // 編集モードに入る誤操作を防ぐため、入る時だけ長押しを要求する
+  // (演奏中に誤って触れて編集モードに入ってしまうのを防ぐため)。
+  // 抜ける時は誤操作の害が無いので普通のタップでよい。
+  function setMemoEditMode(on) {
+    memoEditMode = on;
     pendingMemoType = null;
     pendingMemoPlacement = null;
     setDrawMode(false);
     viewer.classList.toggle('memo-edit-mode', memoEditMode);
+    btnMemoEdit.textContent = memoEditMode ? '✎ 編集中' : '\u{1F512} 編集(長押し)';
     if (memoEditMode) stopPlayback();
+  }
+  let editHoldTimer = null;
+  let editEnteredViaHold = false;
+  function cancelEditHold() {
+    btnMemoEdit.classList.remove('holding');
+    if (editHoldTimer) { clearTimeout(editHoldTimer); editHoldTimer = null; }
+  }
+  btnMemoEdit.addEventListener('pointerdown', (e) => {
+    if (memoEditMode) return;
+    e.preventDefault();
+    btnMemoEdit.classList.add('holding');
+    editHoldTimer = setTimeout(() => {
+      editHoldTimer = null;
+      editEnteredViaHold = true;
+      setMemoEditMode(true);
+      btnMemoEdit.classList.remove('holding');
+    }, 550);
+  });
+  btnMemoEdit.addEventListener('pointerup', cancelEditHold);
+  btnMemoEdit.addEventListener('pointerleave', cancelEditHold);
+  btnMemoEdit.addEventListener('pointercancel', cancelEditHold);
+  btnMemoEdit.addEventListener('click', () => {
+    if (editEnteredViaHold) { editEnteredViaHold = false; return; }
+    if (memoEditMode) setMemoEditMode(false);
   });
   btnAddTextMemo.addEventListener('click', () => {
     setDrawMode(false);
@@ -1657,14 +1694,18 @@
   async function renderSongList() {
     renderLastBackupInfo();
     renderOfflineCacheInfo();
-    const songs = await dbGetAll();
+    let songs = await dbGetAll();
     await Promise.all(songs.map(ensureSongUuid));
     songs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const query = songSearchInput.value.trim().toLowerCase();
+    if (query) songs = songs.filter((s) => s.name.toLowerCase().includes(query));
     songListEl.innerHTML = '';
     if (songs.length === 0) {
       const p = document.createElement('p');
       p.className = 'empty';
-      p.textContent = 'まだ曲がありません。「＋ 曲を追加」から譜面(画像/PDF)を登録してください。';
+      p.textContent = query
+        ? '該当する曲がありません。'
+        : 'まだ曲がありません。「＋ 曲を追加」から譜面(画像/PDF)を登録してください。';
       songListEl.appendChild(p);
       return;
     }
@@ -1736,6 +1777,8 @@
 
     renderSongList();
   }
+
+  songSearchInput.addEventListener('input', () => renderSongList());
 
   // ==================================================
   // セットリスト
@@ -2757,6 +2800,7 @@
     currentBpm = null;
     currentYoutubeUrl = null;
     memoEditMode = false;
+    btnMemoEdit.textContent = '\u{1F512} 編集(長押し)';
     pendingMemoType = null;
     pendingMemoPlacement = null;
     drawMode = false;
