@@ -274,7 +274,7 @@
       <span id="lastBackupInfo"></span>
       <button id="btnSync">クラウド同期</button>
       <button id="btnSetSyncKey">同期キーを設定</button>
-      <button id="btnCopySetupLink">この端末をセットアップ</button>
+      <button id="btnCopySetupLink">セットアップリンクをコピー</button>
       <button id="btnExportZip">バックアップを書き出す</button>
       <button id="btnImportZip">ZIPを読み込む</button>
       <span id="offlineCacheInfo"></span>
@@ -2651,10 +2651,9 @@
     }
   });
 
-  // 同期キー入り(?key=...)のURLへこの画面自体を切り替える。iOS Safariには
-  // 「ホーム画面に追加」をJSから起動するAPIが無いため、代わりに「追加時に開いている
-  // URL」をキー入りにしておくことで、あとは共有ボタン→ホーム画面に追加、の一手で済むようにする。
-  // 他端末に送りたい場合のためクリップボードへのコピーも一緒に行う。
+  // 他端末のセットアップ用に、同期キー入り(?key=...)のURLをコピーする。
+  // この端末自体でキーが必要な場合は「同期キーを設定」ボタンで直接貼り付ける方が
+  // シンプルなので、ここでは画面遷移などは行わずコピーに徹する。
   btnCopySetupLink.addEventListener('click', async () => {
     const key = localStorage.getItem(SYNC_KEY_STORAGE);
     if (!key) {
@@ -2664,11 +2663,10 @@
     const url = `${location.origin}${location.pathname}?key=${encodeURIComponent(key)}`;
     try {
       await navigator.clipboard.writeText(url);
+      alert('セットアップ用リンクをコピーしました。LINEやメモなどに貼り付けて、他の端末で開いてください。');
     } catch (err) {
-      // クリップボード権限が無い環境でも、以降の画面切り替え自体は続行する。
+      prompt('コピーしてください:', url);
     }
-    alert('この画面をセットアップ用URLに切り替えます。切り替わったら、共有ボタン→「ホーム画面に追加」をタップしてください。(他の端末用にリンクもコピー済みです)');
-    location.href = url;
   });
 
   async function addNewSong(file) {
