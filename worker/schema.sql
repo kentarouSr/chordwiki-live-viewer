@@ -19,3 +19,15 @@ CREATE TABLE IF NOT EXISTS setlists (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- 削除の同期用tombstone。他端末が「サーバーに無い=まだアップロードしていない」と
+-- 誤解して復活アップロードしてしまわないよう、削除された事実と時刻を記録しておく。
+CREATE TABLE IF NOT EXISTS deleted_songs (
+  uuid TEXT PRIMARY KEY,
+  deleted_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS deleted_setlists (
+  uuid TEXT PRIMARY KEY,
+  deleted_at INTEGER NOT NULL
+);

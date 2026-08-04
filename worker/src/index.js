@@ -64,6 +64,13 @@ export default {
         return json(results.map(rowToSong));
       }
 
+      // 曲の削除tombstone一覧(他端末が削除を検知して復活アップロードしないため)
+      if (path === '/api/songs/tombstones' && request.method === 'GET') {
+        if (!requireKey()) return err('invalid key', 401);
+        const { results } = await env.DB.prepare('SELECT uuid, deleted_at FROM deleted_songs').all();
+        return json(results.map((r) => ({ uuid: r.uuid, deletedAt: r.deleted_at })));
+      }
+
       const songIdMatch = path.match(/^\/api\/songs\/([0-9a-f-]{36})$/);
 
       // 曲を追加/更新(メタデータ+ファイル本体をmultipart/form-dataで一度に送る)
@@ -101,6 +108,8 @@ export default {
              r2_key = excluded.r2_key, memos = excluded.memos, youtube_url = excluded.youtube_url,
              updated_at = excluded.updated_at`
         ).bind(uuid, name, bpm, speed || 40, fileName, mimeType, r2Key, memosRaw || '[]', youtubeUrlRaw || null, createdAt || Date.now(), updatedAt).run();
+        // 過去に削除されていても、それより新しい更新なら復活とみなしtombstoneを消す
+        await env.DB.prepare('DELETE FROM deleted_songs WHERE uuid = ?').bind(uuid).run();
 
         return json({ ok: true });
       }
@@ -126,6 +135,10 @@ export default {
         const row = await env.DB.prepare('SELECT r2_key FROM songs WHERE uuid = ?').bind(uuid).first();
         if (row) await env.BUCKET.delete(row.r2_key);
         await env.DB.prepare('DELETE FROM songs WHERE uuid = ?').bind(uuid).run();
+        await env.DB.prepare(
+          `INSERT INTO deleted_songs (uuid, deleted_at) VALUES (?, ?)
+           ON CONFLICT(uuid) DO UPDATE SET deleted_at = excluded.deleted_at`
+        ).bind(uuid, Date.now()).run();
         return json({ ok: true });
       }
 
@@ -134,6 +147,13 @@ export default {
         if (!requireKey()) return err('invalid key', 401);
         const { results } = await env.DB.prepare('SELECT * FROM setlists ORDER BY updated_at DESC').all();
         return json(results.map(rowToSetlist));
+      }
+
+      // セットリストの削除tombstone一覧
+      if (path === '/api/setlists/tombstones' && request.method === 'GET') {
+        if (!requireKey()) return err('invalid key', 401);
+        const { results } = await env.DB.prepare('SELECT uuid, deleted_at FROM deleted_setlists').all();
+        return json(results.map((r) => ({ uuid: r.uuid, deletedAt: r.deleted_at })));
       }
 
       const setlistIdMatch = path.match(/^\/api\/setlists\/([0-9a-f-]{36})$/);
@@ -154,6 +174,7 @@ export default {
            ON CONFLICT(uuid) DO UPDATE SET
              name = excluded.name, items_json = excluded.items_json, updated_at = excluded.updated_at`
         ).bind(uuid, name, JSON.stringify(items), createdAt || Date.now(), updatedAt).run();
+        await env.DB.prepare('DELETE FROM deleted_setlists WHERE uuid = ?').bind(uuid).run();
 
         return json({ ok: true });
       }
@@ -163,6 +184,10 @@ export default {
         if (!requireKey()) return err('invalid key', 401);
         const uuid = setlistIdMatch[1];
         await env.DB.prepare('DELETE FROM setlists WHERE uuid = ?').bind(uuid).run();
+        await env.DB.prepare(
+          `INSERT INTO deleted_setlists (uuid, deleted_at) VALUES (?, ?)
+           ON CONFLICT(uuid) DO UPDATE SET deleted_at = excluded.deleted_at`
+        ).bind(uuid, Date.now()).run();
         return json({ ok: true });
       }
 

@@ -2594,14 +2594,27 @@
     const remoteSongs = await res.json();
     const remoteByUuid = new Map(remoteSongs.map((s) => [s.uuid, s]));
 
+    const tombstoneRes = await fetch(`${SYNC_API_URL}/api/songs/tombstones`, { headers: { 'X-Sync-Key': key } });
+    if (!tombstoneRes.ok) throw new Error(`サーバーエラー(削除情報) (${tombstoneRes.status})`);
+    const songTombstones = await tombstoneRes.json();
+    const songTombstoneByUuid = new Map(songTombstones.map((t) => [t.uuid, t.deletedAt]));
+
     const localSongs = await dbGetAll();
     await Promise.all(localSongs.map(ensureSongUuid));
     const localByUuid = new Map(localSongs.map((s) => [s.uuid, s]));
 
-    let uploaded = 0, downloaded = 0;
+    let uploaded = 0, downloaded = 0, deletedLocally = 0;
 
     for (const song of localSongs) {
       const remote = remoteByUuid.get(song.uuid);
+      const deletedAt = songTombstoneByUuid.get(song.uuid);
+      // 他端末で削除済み(かつローカルでそれより新しく編集されていない)なら、
+      // 「サーバーに無い=未アップロード」と誤解して復活させず、ローカルも削除する。
+      if (deletedAt != null && deletedAt >= song.updatedAt) {
+        await dbDelete(song.id);
+        deletedLocally++;
+        continue;
+      }
       if (!remote || song.updatedAt > remote.updatedAt) {
         await uploadSong(key, song);
         uploaded++;
@@ -2620,12 +2633,23 @@
     const remoteSetlists = await setlistRes.json();
     const remoteSetlistByUuid = new Map(remoteSetlists.map((s) => [s.uuid, s]));
 
+    const setlistTombstoneRes = await fetch(`${SYNC_API_URL}/api/setlists/tombstones`, { headers: { 'X-Sync-Key': key } });
+    if (!setlistTombstoneRes.ok) throw new Error(`サーバーエラー(セットリスト削除情報) (${setlistTombstoneRes.status})`);
+    const setlistTombstones = await setlistTombstoneRes.json();
+    const setlistTombstoneByUuid = new Map(setlistTombstones.map((t) => [t.uuid, t.deletedAt]));
+
     const localSetlists = await slGetAll();
     await Promise.all(localSetlists.map(ensureSetlistUuid));
     const localSetlistByUuid = new Map(localSetlists.map((s) => [s.uuid, s]));
 
     for (const sl of localSetlists) {
       const remote = remoteSetlistByUuid.get(sl.uuid);
+      const deletedAt = setlistTombstoneByUuid.get(sl.uuid);
+      if (deletedAt != null && deletedAt >= sl.updatedAt) {
+        await slDelete(sl.id);
+        deletedLocally++;
+        continue;
+      }
       if (!remote || sl.updatedAt > remote.updatedAt) {
         await uploadSetlist(key, sl);
         uploaded++;
@@ -2639,7 +2663,7 @@
       }
     }
 
-    alert(`同期完了: アップロード${uploaded}件 / ダウンロード${downloaded}件`);
+    alert(`同期完了: アップロード${uploaded}件 / ダウンロード${downloaded}件 / 削除反映${deletedLocally}件`);
     renderSongList();
     renderSetlistList();
   }
