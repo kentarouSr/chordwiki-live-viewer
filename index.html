@@ -372,6 +372,7 @@
       <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
       <input type="range" id="drawWidthInput" class="drawOnly" min="1" max="40" value="4">
       <span id="drawWidthLabel" class="drawOnly">4px</span>
+      <button id="btnUndoStroke" class="drawOnly">&#8617; 元に戻す</button>
       <button id="btnEditBpm" class="memoEditOnly">BPM: --</button>
       <button id="btnMetronome">&#128276; クリック</button>
       <button id="btnSpeedDown">&minus;</button>
@@ -473,6 +474,7 @@
   const drawColorInput = document.getElementById('drawColorInput');
   const drawWidthInput = document.getElementById('drawWidthInput');
   const drawWidthLabel = document.getElementById('drawWidthLabel');
+  const btnUndoStroke = document.getElementById('btnUndoStroke');
   const memoImageInput = document.getElementById('memoImageInput');
   const btnEditBpm = document.getElementById('btnEditBpm');
   const btnMetronome = document.getElementById('btnMetronome');
@@ -1324,6 +1326,17 @@
     strokeLayerEl.addEventListener('pointermove', onMove);
     strokeLayerEl.addEventListener('pointerup', onUp);
     strokeLayerEl.addEventListener('pointercancel', onUp);
+  });
+
+  // 直前に描いた一筆(ペン/蛍光ペン)だけを取り消す。タップでの個別削除より
+  // 手早く直せるように。テキスト/画像メモには影響しない。
+  btnUndoStroke.addEventListener('click', async () => {
+    const strokes = currentMemos.filter((m) => m.type === 'stroke');
+    if (strokes.length === 0) return;
+    const last = strokes.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+    currentMemos = currentMemos.filter((m) => m.id !== last.id);
+    await saveCurrentMemos();
+    renderMemos();
   });
 
   // ==================================================
