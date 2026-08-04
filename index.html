@@ -268,6 +268,7 @@
   #btnMetronome.active { background: #6cf; color: #111; }
   #btnPlay { min-width: 84px; font-weight: bold; }
   #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
+  #setlistPositionLabel { font-size: 13px; color: #999; font-variant-numeric: tabular-nums; }
   #btnBack { margin-right: auto; font-size: 13px; opacity: 0.8; }
 </style>
 </head>
@@ -360,6 +361,7 @@
     <div id="toolbar">
       <button id="btnBack">&larr; 曲一覧</button>
       <button id="btnPrevSong" class="setlistOnly">&#9198; 前</button>
+      <span id="setlistPositionLabel" class="setlistOnly"></span>
       <button id="btnNextSong" class="setlistOnly">次 &#9197;</button>
       <button id="btnMemoEdit" class="appModeEditOnly">&#9998; 編集</button>
       <button id="btnToggleYoutube" class="appModeEditOnly">&#127909; 動画</button>
@@ -449,6 +451,7 @@
   const btnSongPickerDone = document.getElementById('btnSongPickerDone');
 
   const btnPrevSong = document.getElementById('btnPrevSong');
+  const setlistPositionLabel = document.getElementById('setlistPositionLabel');
   const btnNextSong = document.getElementById('btnNextSong');
   const setlistMemoView = document.getElementById('setlistMemoView');
   const setlistMemoText = document.getElementById('setlistMemoText');
@@ -2096,6 +2099,7 @@
     if (!activeSetlist) return;
     btnPrevSong.disabled = activeSetlistIndex <= 0;
     btnNextSong.disabled = activeSetlistIndex >= activeSetlist.items.length - 1;
+    setlistPositionLabel.textContent = `${activeSetlistIndex + 1} / ${activeSetlist.items.length}`;
   }
 
   btnPrevSong.addEventListener('click', async () => {
@@ -2750,6 +2754,8 @@
   async function openSongRecord(song) {
     viewer.classList.remove('setlist-memo-mode');
     song = await ensureSongUuid(song);
+    // 曲を切り替える時、前の曲のメトロノームが違うテンポのまま鳴り続けるのを防ぐ。
+    stopMetronome();
     resetYoutubePanelForSongSwitch();
     currentSongId = song.id;
     speed = song.speed || DEFAULT_SPEED;
