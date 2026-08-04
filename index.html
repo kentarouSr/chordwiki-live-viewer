@@ -527,6 +527,10 @@
   const allScreens = [songListScreen, setlistListScreen, setlistEditScreen, songPickerScreen, viewer];
   function showScreen(screen) {
     for (const s of allScreens) s.classList.toggle('hidden', s !== screen);
+    // 画面消灯防止(Wake Lock)は自動スクロール中だけでなく、ビューア画面にいる間は
+    // ずっと有効にする(手動スクロールでの演奏中や、セットリストのMCメモ表示中に
+    // 画面が暗くならないように)。
+    if (screen === viewer) acquireWakeLock(); else releaseWakeLock();
   }
 
   // ---- 演奏モード/編集モード(曲一覧で切り替える。誤操作対策の本体) ----
@@ -863,7 +867,6 @@
     playing = true;
     lastTs = null;
     rafId = requestAnimationFrame(tick);
-    acquireWakeLock();
     scheduleToolbarHide();
     btnPlay.innerHTML = '&#10074;&#10074; 停止';
   }
@@ -872,7 +875,6 @@
     playing = false;
     if (rafId) cancelAnimationFrame(rafId);
     rafId = null;
-    releaseWakeLock();
     showToolbar();
     btnPlay.innerHTML = '&#9654; 再生';
   }
@@ -1666,7 +1668,7 @@
     if (wakeLockSentinel) { wakeLockSentinel.release(); wakeLockSentinel = null; }
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && playing) acquireWakeLock();
+    if (document.visibilityState === 'visible' && !viewer.classList.contains('hidden')) acquireWakeLock();
   });
 
   // ==================================================
