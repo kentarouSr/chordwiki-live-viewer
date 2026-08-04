@@ -45,7 +45,7 @@
   #fileInput, #zipInput { display: none; }
 
   #backupBar {
-    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 16px;
     font-size: 12px; color: #999;
   }
   #backupBar button, #backupBar a {
@@ -54,6 +54,10 @@
     text-decoration: none; display: inline-block;
   }
   #lastBackupInfo.warn { color: #f77; }
+  /* クラウド同期・バックアップ・オフラインの3系統を見出し付きでグループ化し、
+     何のためのボタンかが一目で分かるようにする。 */
+  .backupGroup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .backupGroupLabel { font-weight: bold; color: #ccc; min-width: 96px; }
 
   #songSearchInput {
     font-size: 15px; padding: 10px 12px; border-radius: 8px; border: 1px solid #333;
@@ -259,6 +263,16 @@
     transition: transform 0.3s ease, opacity 0.3s ease;
   }
   #toolbar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+  /* 機能ごとにボタンをグループ化し、薄い背景の「かたまり」として見せることで
+     「どのボタンとどのボタンが関係しているか」を見た目でも分かるようにする。
+     幅が狭い画面ではグループ単位で折り返すため、区切り線(border)だと折り返し
+     位置によって見た目が崩れる。背景色によるグループ化ならどこで折り返しても
+     常にひとかたまりに見えるので、この方式にしている。 */
+  .toolbarGroup {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 6px 10px; border-radius: 12px;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.09);
+  }
   #toolbar button {
     font-size: 16px; padding: 10px 14px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer;
@@ -284,14 +298,23 @@
     </div>
     <div id="backupBar">
       <a id="btnManual" href="./manual.html">&#128214; 使い方</a>
-      <span id="lastBackupInfo"></span>
-      <button id="btnSync">クラウド同期</button>
-      <button id="btnSetSyncKey">同期キーを設定</button>
-      <button id="btnCopySetupLink">セットアップリンクをコピー</button>
-      <button id="btnExportZip">バックアップを書き出す</button>
-      <button id="btnImportZip">ZIPを読み込む</button>
-      <span id="offlineCacheInfo"></span>
-      <button id="btnUpdateOfflineCache">オフライン用データを更新</button>
+      <div class="backupGroup">
+        <span class="backupGroupLabel">&#9729; クラウド同期</span>
+        <button id="btnSync">今すぐ同期</button>
+        <button id="btnSetSyncKey">同期キーを設定</button>
+        <button id="btnCopySetupLink">他の端末用リンクをコピー</button>
+      </div>
+      <div class="backupGroup">
+        <span class="backupGroupLabel">&#128190; バックアップ</span>
+        <span id="lastBackupInfo"></span>
+        <button id="btnExportZip">書き出す</button>
+        <button id="btnImportZip">読み込む</button>
+      </div>
+      <div class="backupGroup">
+        <span class="backupGroupLabel">&#128246; オフライン</span>
+        <span id="offlineCacheInfo"></span>
+        <button id="btnUpdateOfflineCache">データを更新</button>
+      </div>
     </div>
     <input id="songSearchInput" type="search" placeholder="曲名で検索">
     <div id="songList"></div>
@@ -359,26 +382,36 @@
       </div>
     </div>
     <div id="toolbar">
-      <button id="btnBack">&larr; 曲一覧</button>
-      <button id="btnPrevSong" class="setlistOnly">&#9198; 前</button>
-      <span id="setlistPositionLabel" class="setlistOnly"></span>
-      <button id="btnNextSong" class="setlistOnly">次 &#9197;</button>
-      <button id="btnMemoEdit" class="appModeEditOnly">&#9998; 編集</button>
-      <button id="btnToggleYoutube" class="appModeEditOnly">&#127909; 動画</button>
-      <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
-      <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
-      <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
-      <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
-      <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
-      <input type="range" id="drawWidthInput" class="drawOnly" min="1" max="40" value="4">
-      <span id="drawWidthLabel" class="drawOnly">4px</span>
-      <button id="btnUndoStroke" class="drawOnly">&#8617; 元に戻す</button>
-      <button id="btnEditBpm" class="memoEditOnly">BPM: --</button>
-      <button id="btnMetronome">&#128276; クリック</button>
-      <button id="btnSpeedDown">&minus;</button>
-      <span id="speedLabel">40 px/s</span>
-      <button id="btnSpeedUp">+</button>
-      <button id="btnPlay">&#9654; 再生</button>
+      <div class="toolbarGroup">
+        <button id="btnBack">&larr; 曲一覧</button>
+        <button id="btnPrevSong" class="setlistOnly">&#9198; 前</button>
+        <span id="setlistPositionLabel" class="setlistOnly"></span>
+        <button id="btnNextSong" class="setlistOnly">次 &#9197;</button>
+      </div>
+      <div class="toolbarGroup">
+        <button id="btnMemoEdit" class="appModeEditOnly">&#128221; メモ</button>
+        <button id="btnToggleYoutube" class="appModeEditOnly">&#127909; 動画</button>
+      </div>
+      <div class="toolbarGroup">
+        <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
+        <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
+        <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
+        <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
+        <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
+        <input type="range" id="drawWidthInput" class="drawOnly" min="1" max="40" value="4">
+        <span id="drawWidthLabel" class="drawOnly">4px</span>
+        <button id="btnUndoStroke" class="drawOnly">&#8617; 元に戻す</button>
+      </div>
+      <div class="toolbarGroup">
+        <button id="btnEditBpm" class="memoEditOnly">&#127932; BPM: --</button>
+        <button id="btnMetronome">&#129345; クリック</button>
+      </div>
+      <div class="toolbarGroup">
+        <button id="btnSpeedDown">&minus;</button>
+        <span id="speedLabel">速度 40</span>
+        <button id="btnSpeedUp">+</button>
+        <button id="btnPlay">&#9654; 再生</button>
+      </div>
     </div>
     <input id="memoImageInput" type="file" accept="image/*">
   </div>
@@ -1405,7 +1438,7 @@
 
   function startMetronome() {
     if (!currentBpm) {
-      alert('BPMが未設定です。「編集」を押してBPMを設定してください。');
+      alert('BPMが未設定です。「メモ」を押してから「BPM」ボタンで設定してください。');
       return;
     }
     const ctx = ensureAudioCtx();
@@ -1413,14 +1446,14 @@
     nextClickTime = ctx.currentTime + 0.05;
     metronomePlaying = true;
     metronomeScheduler();
-    btnMetronome.textContent = '\u{1F515} 停止';
+    btnMetronome.textContent = '\u{23F9} 停止';
     btnMetronome.classList.add('active');
   }
 
   function stopMetronome() {
     metronomePlaying = false;
     clearTimeout(metronomeTimerId);
-    btnMetronome.textContent = '\u{1F514} クリック';
+    btnMetronome.textContent = '\u{1F941} クリック';
     btnMetronome.classList.remove('active');
   }
 
@@ -1615,7 +1648,7 @@
   let speedSaveTimer = null;
   function changeSpeed(delta) {
     speed = Math.max(MIN_SPEED, speed + delta);
-    speedLabel.textContent = `${speed} px/s`;
+    speedLabel.textContent = `速度 ${speed}`;
     scheduleSpeedSave();
   }
 
@@ -1738,7 +1771,7 @@
       name.textContent = song.name;
       const meta = document.createElement('div');
       meta.className = 'songMeta';
-      meta.textContent = `${song.speed} px/s` + (song.bpm ? ` / BPM ${song.bpm}` : '');
+      meta.textContent = `速度${song.speed}` + (song.bpm ? ` / BPM ${song.bpm}` : '');
       main.appendChild(name);
       main.appendChild(meta);
       main.addEventListener('click', () => openSong(song.id));
@@ -2801,7 +2834,7 @@
     currentMemos = song.memos || [];
     currentBpm = song.bpm ?? null;
     currentYoutubeUrl = song.youtubeUrl || null;
-    speedLabel.textContent = `${speed} px/s`;
+    speedLabel.textContent = `速度 ${speed}`;
     updateBpmLabel();
     const buf = await getSongArrayBuffer(song);
     const file = new File([buf], song.fileName, { type: song.mimeType });
@@ -2845,7 +2878,6 @@
     currentBpm = null;
     currentYoutubeUrl = null;
     memoEditMode = false;
-    btnMemoEdit.textContent = '\u{1F512} 編集(長押し)';
     pendingMemoType = null;
     pendingMemoPlacement = null;
     drawMode = false;
