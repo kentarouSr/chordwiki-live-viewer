@@ -524,6 +524,11 @@
   const DEFAULT_SPEED = 20; // 曲未選択時・新規追加時の初期値
   const MOMENTUM_FRICTION = 0.0025; // 大きいほど早く止まる(慣性スクロールの減衰係数)
   const MOMENTUM_MIN_VELOCITY = 0.02; // px/ms。これを下回ったら慣性スクロールを終了
+  // テキストメモをリサイズハンドルで拡大/縮小した時、文字サイズも幅に比例させるための基準値
+  const MEMO_TEXT_DEFAULT_WIDTH = 220;
+  const MEMO_TEXT_DEFAULT_FONT_SIZE = 13;
+  const MEMO_TEXT_MIN_FONT_SIZE = 10;
+  const MEMO_TEXT_MAX_FONT_SIZE = 48;
   const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
 
   // ---- Service Worker登録 ----
@@ -879,7 +884,14 @@
     throw new Error('曲データが見つかりません');
   }
 
-  function viewportHeight() { return scrollWrap.clientHeight; }
+  // ツールバーは#scrollWrapの上に重なる固定オーバーレイなので、その高さぶんだけ
+  // 譜面の下側が隠れる。隠れている高さを「見えている範囲」から差し引かないと、
+  // scrollYが理論上のmaxScrollに達しても譜面の最後の数十〜百数十pxがバーの下に
+  // 隠れたまま永遠に見えなくなってしまう(ツールバーが自動で隠れている時は0)。
+  function toolbarOccludedHeight() {
+    return toolbar.classList.contains('hidden') ? 0 : toolbar.offsetHeight;
+  }
+  function viewportHeight() { return scrollWrap.clientHeight - toolbarOccludedHeight(); }
   function viewportWidthCss() { return scrollWrap.clientWidth; }
   function maxScroll() { return Math.max(0, contentHeight - viewportHeight()); }
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
@@ -1166,8 +1178,11 @@
 
       if (memo.type === 'text') {
         el.textContent = memo.text;
-        if (memo.width) el.style.width = memo.width + 'px'; // 未設定なら内容に応じた自動幅のまま
-        el.appendChild(makeResizeHandle(memo, el, 120, 600));
+        if (memo.width) {
+          el.style.width = memo.width + 'px'; // 未設定なら内容に応じた自動幅のまま
+          el.style.fontSize = (memo.fontSize || MEMO_TEXT_DEFAULT_FONT_SIZE) + 'px';
+        }
+        el.appendChild(makeResizeHandle(memo, el, 120, 600, MEMO_TEXT_DEFAULT_FONT_SIZE));
       } else {
         const img = document.createElement('img');
         const url = URL.createObjectURL(new Blob([memo.data], { type: memo.mimeType }));
@@ -1286,7 +1301,9 @@
     });
   }
 
-  function makeResizeHandle(memo, targetEl, minWidth, maxWidth) {
+  // baseFontSizeを渡した場合(テキストメモ)は、幅の変化に比例して文字サイズも
+  // 一緒に拡大/縮小する(画像メモの場合は渡さないので対象外)。
+  function makeResizeHandle(memo, targetEl, minWidth, maxWidth, baseFontSize) {
     const handle = document.createElement('div');
     handle.className = 'memo-resize-handle';
     handle.addEventListener('pointerdown', (e) => {
@@ -1301,12 +1318,20 @@
         const dx = ev.clientX - startClientX;
         const newWidth = clamp(startWidth + dx, minWidth, maxWidth);
         targetEl.style.width = newWidth + 'px';
+        if (baseFontSize) {
+          const fontSize = clamp(
+            baseFontSize * (newWidth / MEMO_TEXT_DEFAULT_WIDTH),
+            MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE
+          );
+          targetEl.style.fontSize = fontSize + 'px';
+        }
       };
       const onUp = async () => {
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onUp);
         handle.removeEventListener('pointercancel', onUp);
         memo.width = parseFloat(targetEl.style.width);
+        if (baseFontSize) memo.fontSize = parseFloat(targetEl.style.fontSize);
         memo.updatedAt = Date.now();
         await saveCurrentMemos();
       };
@@ -1330,7 +1355,8 @@
     ta.value = memo ? memo.text : '';
     ta.style.left = Math.round(x * cssWidth) + 'px';
     ta.style.top = Math.round(y * contentHeight) + 'px';
-    ta.style.width = ((memo && memo.width) || 220) + 'px';
+    ta.style.width = ((memo && memo.width) || MEMO_TEXT_DEFAULT_WIDTH) + 'px';
+    if (memo && memo.fontSize) ta.style.fontSize = memo.fontSize + 'px';
     memoLayerEl.appendChild(ta);
 
     const autoGrow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
