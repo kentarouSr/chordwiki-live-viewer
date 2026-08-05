@@ -107,7 +107,7 @@ export default {
              file_name = excluded.file_name, mime_type = excluded.mime_type,
              r2_key = excluded.r2_key, memos = excluded.memos, youtube_url = excluded.youtube_url,
              updated_at = excluded.updated_at`
-        ).bind(uuid, name, bpm, speed || 40, fileName, mimeType, r2Key, memosRaw || '[]', youtubeUrlRaw || null, createdAt || Date.now(), updatedAt).run();
+        ).bind(uuid, name, bpm, speed || 20, fileName, mimeType, r2Key, memosRaw || '[]', youtubeUrlRaw || null, createdAt || Date.now(), updatedAt).run();
         // 過去に削除されていても、それより新しい更新なら復活とみなしtombstoneを消す
         await env.DB.prepare('DELETE FROM deleted_songs WHERE uuid = ?').bind(uuid).run();
 
