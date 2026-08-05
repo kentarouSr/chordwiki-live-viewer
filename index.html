@@ -117,6 +117,57 @@
     font-size: 13px; padding: 8px 10px; border-radius: 6px; border: none;
     background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
   }
+
+  /* --- 練習ToDoリスト(アプリ全体で1つ、曲に紐付かない練習用チェックリスト) --- */
+  #todoListScreen {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    padding: 20px; padding-top: max(20px, env(safe-area-inset-top));
+    overflow-y: auto; scrollbar-gutter: stable;
+  }
+  #todoListScreen.hidden { display: none; }
+  #todoListHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  #todoListHeader h1 { font-size: 18px; margin: 0; flex: 1; min-width: 0; }
+  #todoListHeader button {
+    font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  #todoAddRow { display: flex; gap: 8px; margin-bottom: 16px; }
+  #todoNewInput {
+    flex: 1; min-width: 0; font-size: 15px; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid #333; background: #1c1c1c; color: #eee;
+  }
+  #btnTodoAdd {
+    font-size: 14px; padding: 10px 16px; border-radius: 8px; border: none;
+    background: #6cf; color: #111; font-weight: bold; cursor: pointer; flex-shrink: 0;
+  }
+  #todoList { display: flex; flex-direction: column; gap: 10px; }
+  #todoList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
+  .todoItem { background: #1c1c1c; border-radius: 10px; padding: 12px 14px; }
+  .todoRow { display: flex; align-items: center; gap: 10px; }
+  .todoRow input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; }
+  .todoText {
+    flex: 1; min-width: 0; font-size: 15px; word-break: break-word;
+    padding: 4px 2px; border-radius: 4px;
+  }
+  .todoRow.done .todoText { color: #888; text-decoration: line-through; }
+  .todoRow button {
+    font-size: 12px; padding: 6px 9px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  .todoSubtasks { margin: 8px 0 0 30px; display: flex; flex-direction: column; gap: 8px; }
+  .todoEditInput {
+    flex: 1; min-width: 0; font-size: 15px; padding: 4px 6px; border-radius: 4px;
+    border: 1px solid #6cf; background: #fff; color: #111;
+  }
+  .todoAddSubtaskRow { margin: 8px 0 0 30px; display: flex; gap: 8px; }
+  .todoAddSubtaskRow input {
+    flex: 1; min-width: 0; font-size: 14px; padding: 6px 8px; border-radius: 6px;
+    border: 1px solid #333; background: #1c1c1c; color: #eee;
+  }
+  .todoAddSubtaskRow button {
+    font-size: 12px; padding: 6px 10px; border-radius: 6px; border: none;
+    background: #6cf; color: #111; font-weight: bold; cursor: pointer; flex-shrink: 0;
+  }
   #setlistEditFooter { display: flex; gap: 10px; margin-top: 16px; }
 
   /* --- ビューア画面 --- */
@@ -311,6 +362,7 @@
       <h1>ChordWiki Live Viewer</h1>
       <button id="btnAppMode">&#9998; 編集モード</button>
       <button id="btnGoSetlists">&#128203; セットリスト</button>
+      <button id="btnGoTodos">&#9989; 練習ToDo</button>
       <button id="btnAddSong">＋ 曲を追加</button>
     </div>
     <div id="backupBar">
@@ -337,6 +389,18 @@
     <div id="songList"></div>
     <input id="fileInput" type="file" accept="image/*,application/pdf">
     <input id="zipInput" type="file" accept=".zip,application/zip">
+  </div>
+
+  <div id="todoListScreen" class="hidden">
+    <div id="todoListHeader">
+      <button id="btnTodoBack">&larr; 曲一覧</button>
+      <h1>練習ToDo</h1>
+    </div>
+    <div id="todoAddRow">
+      <input id="todoNewInput" type="text" placeholder="練習したいこと(例: Bメロのリフを覚える)">
+      <button id="btnTodoAdd">＋ 追加</button>
+    </div>
+    <div id="todoList"></div>
   </div>
 
   <div id="setlistListScreen" class="hidden">
@@ -486,6 +550,13 @@
   const offlineCacheInfo = document.getElementById('offlineCacheInfo');
   const btnUpdateOfflineCache = document.getElementById('btnUpdateOfflineCache');
 
+  const todoListScreen = document.getElementById('todoListScreen');
+  const todoListEl = document.getElementById('todoList');
+  const btnGoTodos = document.getElementById('btnGoTodos');
+  const btnTodoBack = document.getElementById('btnTodoBack');
+  const todoNewInput = document.getElementById('todoNewInput');
+  const btnTodoAdd = document.getElementById('btnTodoAdd');
+
   const setlistListScreen = document.getElementById('setlistListScreen');
   const setlistListEl = document.getElementById('setlistList');
   const btnSetlistBack = document.getElementById('btnSetlistBack');
@@ -580,7 +651,7 @@
   let viewerReturnScreen = null; // ビューアの「戻る」で戻る先の画面
 
   // ---- 画面切り替え ----
-  const allScreens = [songListScreen, setlistListScreen, setlistEditScreen, songPickerScreen, viewer];
+  const allScreens = [songListScreen, todoListScreen, setlistListScreen, setlistEditScreen, songPickerScreen, viewer];
   function showScreen(screen) {
     for (const s of allScreens) s.classList.toggle('hidden', s !== screen);
     // 画面消灯防止(Wake Lock)は自動スクロール中だけでなく、ビューア画面にいる間は
@@ -611,9 +682,10 @@
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
   // ==================================================
   const DB_NAME = 'chordwiki-live-viewer';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const STORE = 'songs';
   const SETLIST_STORE = 'setlists';
+  const TODO_STORE = 'practiceTodos'; // アプリ全体で1レコードのみ(id: 'global')固定で使う
   let dbPromise = null;
 
   function openDb() {
@@ -627,6 +699,9 @@
         }
         if (!db.objectStoreNames.contains(SETLIST_STORE)) {
           db.createObjectStore(SETLIST_STORE, { keyPath: 'id', autoIncrement: true });
+        }
+        if (!db.objectStoreNames.contains(TODO_STORE)) {
+          db.createObjectStore(TODO_STORE, { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -741,6 +816,26 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(SETLIST_STORE, 'readwrite');
       const req = tx.objectStore(SETLIST_STORE).delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // 練習ToDo(アプリ全体で1レコードのみ、id: 'global'固定)
+  async function todoGet() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(TODO_STORE, 'readonly');
+      const req = tx.objectStore(TODO_STORE).get('global');
+      req.onsuccess = () => resolve(req.result || { id: 'global', items: [], updatedAt: 0 });
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function todoPut(record) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(TODO_STORE, 'readwrite');
+      const req = tx.objectStore(TODO_STORE).put(record);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -1958,6 +2053,206 @@
   songSearchInput.addEventListener('input', () => renderSongList());
 
   // ==================================================
+  // 練習ToDo(アプリ全体で1つ。曲/セットリストに紐付かない練習用チェックリスト。
+  // サブタスクは1段階のみ。チェックした項目は自動では消さず、手動で外すまで残す)
+  // ==================================================
+  let practiceTodos = { id: 'global', items: [], updatedAt: 0 };
+
+  btnGoTodos.addEventListener('click', async () => {
+    practiceTodos = await todoGet();
+    showScreen(todoListScreen);
+    renderTodoList();
+  });
+  btnTodoBack.addEventListener('click', () => {
+    showScreen(songListScreen);
+    renderSongList();
+  });
+
+  async function saveTodos() {
+    practiceTodos.updatedAt = Date.now();
+    await todoPut(practiceTodos);
+  }
+
+  function renderTodoList() {
+    todoListEl.innerHTML = '';
+    if (practiceTodos.items.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'まだ練習ToDoがありません。上の欄から追加してください。';
+      todoListEl.appendChild(p);
+      return;
+    }
+    for (const item of practiceTodos.items) {
+      todoListEl.appendChild(buildTodoItemEl(item));
+    }
+  }
+
+  // rowのテキスト部分を、タップで直接書き換えられるinput要素に切り替える
+  // (native prompt()のOKボタンが面倒、というテキストメモと同じ理由で避けている)
+  function makeTodoTextEditable(textEl, item, onSaved) {
+    textEl.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'todoEditInput';
+      input.value = item.text;
+      textEl.replaceWith(input);
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      let settled = false;
+      const commit = async () => {
+        if (settled) return;
+        settled = true;
+        const text = input.value.trim();
+        if (text) {
+          item.text = text;
+          item.updatedAt = Date.now();
+          await saveTodos();
+        }
+        onSaved();
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        else if (e.key === 'Escape') { e.preventDefault(); settled = true; onSaved(); }
+      });
+    });
+  }
+
+  function buildTodoItemEl(item) {
+    const wrap = document.createElement('div');
+    wrap.className = 'todoItem';
+
+    const row = document.createElement('div');
+    row.className = 'todoRow' + (item.done ? ' done' : '');
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = !!item.done;
+    checkbox.addEventListener('change', async () => {
+      item.done = checkbox.checked;
+      await saveTodos();
+      renderTodoList();
+    });
+
+    const text = document.createElement('div');
+    text.className = 'todoText';
+    text.textContent = item.text;
+    makeTodoTextEditable(text, item, renderTodoList);
+
+    const btnAddSub = document.createElement('button');
+    btnAddSub.type = 'button';
+    btnAddSub.textContent = '＋ サブタスク';
+    btnAddSub.addEventListener('click', () => showAddSubtaskRow(wrap, item));
+
+    const btnDel = document.createElement('button');
+    btnDel.type = 'button';
+    btnDel.textContent = '×';
+    btnDel.addEventListener('click', async () => {
+      if (!confirm('このToDoを削除しますか？(サブタスクも消えます)')) return;
+      practiceTodos.items = practiceTodos.items.filter((it) => it.id !== item.id);
+      await saveTodos();
+      renderTodoList();
+    });
+
+    row.appendChild(checkbox);
+    row.appendChild(text);
+    row.appendChild(btnAddSub);
+    row.appendChild(btnDel);
+    wrap.appendChild(row);
+
+    if (item.subtasks && item.subtasks.length > 0) {
+      const subWrap = document.createElement('div');
+      subWrap.className = 'todoSubtasks';
+      for (const sub of item.subtasks) {
+        subWrap.appendChild(buildSubtaskEl(item, sub));
+      }
+      wrap.appendChild(subWrap);
+    }
+
+    return wrap;
+  }
+
+  function buildSubtaskEl(parentItem, sub) {
+    const row = document.createElement('div');
+    row.className = 'todoRow' + (sub.done ? ' done' : '');
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = !!sub.done;
+    checkbox.addEventListener('change', async () => {
+      sub.done = checkbox.checked;
+      await saveTodos();
+      renderTodoList();
+    });
+
+    const text = document.createElement('div');
+    text.className = 'todoText';
+    text.textContent = sub.text;
+    makeTodoTextEditable(text, sub, renderTodoList);
+
+    const btnDel = document.createElement('button');
+    btnDel.type = 'button';
+    btnDel.textContent = '×';
+    btnDel.addEventListener('click', async () => {
+      if (!confirm('このサブタスクを削除しますか？')) return;
+      parentItem.subtasks = parentItem.subtasks.filter((s) => s.id !== sub.id);
+      await saveTodos();
+      renderTodoList();
+    });
+
+    row.appendChild(checkbox);
+    row.appendChild(text);
+    row.appendChild(btnDel);
+    return row;
+  }
+
+  function showAddSubtaskRow(wrap, item) {
+    if (wrap.querySelector('.todoAddSubtaskRow')) return; // 既に表示中なら何もしない
+    const row = document.createElement('div');
+    row.className = 'todoAddSubtaskRow';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'サブタスクを入力';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '追加';
+
+    let settled = false;
+    const commit = async () => {
+      if (settled) return;
+      const text = input.value.trim();
+      if (!text) { settled = true; row.remove(); return; }
+      settled = true;
+      if (!item.subtasks) item.subtasks = [];
+      item.subtasks.push({ id: crypto.randomUUID(), text, done: false, updatedAt: Date.now() });
+      await saveTodos();
+      renderTodoList();
+    };
+    btn.addEventListener('click', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); settled = true; row.remove(); }
+    });
+    row.appendChild(input);
+    row.appendChild(btn);
+    wrap.appendChild(row);
+    input.focus();
+  }
+
+  async function addTopLevelTodo() {
+    const text = todoNewInput.value.trim();
+    if (!text) return;
+    practiceTodos.items.push({ id: crypto.randomUUID(), text, done: false, subtasks: [], updatedAt: Date.now() });
+    todoNewInput.value = '';
+    await saveTodos();
+    renderTodoList();
+  }
+  btnTodoAdd.addEventListener('click', addTopLevelTodo);
+  todoNewInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addTopLevelTodo(); }
+  });
+
+  // ==================================================
   // セットリスト
   // ==================================================
   btnGoSetlists.addEventListener('click', () => {
@@ -2834,6 +3129,22 @@
         await downloadSetlist(remote, local);
         downloaded++;
       }
+    }
+
+    // 練習ToDo(アプリ全体で1つのJSONまるごとを、新しい方が勝つ方式で同期)
+    const localTodos = await todoGet();
+    const todoRes = await fetch(`${SYNC_API_URL}/api/todos`, { headers: { 'X-Sync-Key': key } });
+    if (!todoRes.ok) throw new Error(`サーバーエラー(ToDo) (${todoRes.status})`);
+    const remoteTodos = await todoRes.json();
+    if (remoteTodos.updatedAt > localTodos.updatedAt) {
+      await todoPut({ id: 'global', items: remoteTodos.items, updatedAt: remoteTodos.updatedAt });
+      downloaded++;
+    } else if (localTodos.updatedAt > remoteTodos.updatedAt) {
+      await fetch(`${SYNC_API_URL}/api/todos`, {
+        method: 'PUT', headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: localTodos.items, updatedAt: localTodos.updatedAt }),
+      });
+      uploaded++;
     }
 
     alert(`同期完了: アップロード${uploaded}件 / ダウンロード${downloaded}件 / 削除反映${deletedLocally}件`);

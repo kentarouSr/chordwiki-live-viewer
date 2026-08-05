@@ -31,3 +31,11 @@ CREATE TABLE IF NOT EXISTS deleted_setlists (
   uuid TEXT PRIMARY KEY,
   deleted_at INTEGER NOT NULL
 );
+
+-- 練習ToDoリスト。アプリ全体で1つなので、個別レコードではなく単一行
+-- (id=1固定)にJSONをまるごと保存する、setlistsのitems_jsonと同じ考え方。
+CREATE TABLE IF NOT EXISTS practice_todos (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  items_json TEXT NOT NULL DEFAULT '[]',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
