@@ -160,12 +160,20 @@
     pointer-events: auto; cursor: grab; outline: 2px dashed #6cf; outline-offset: 2px;
   }
   .memo-text {
-    max-width: 220px; padding: 6px 9px; border-radius: 6px; font-size: 13px;
+    max-width: 600px; padding: 6px 9px; border-radius: 6px; font-size: 13px;
     line-height: 1.4; white-space: pre-wrap; background: rgba(255, 224, 130, 0.95);
     color: #111; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   }
   .memo-image img {
     display: block; width: 100%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  /* テキストメモの直接入力欄。ネイティブprompt()の代わりに譜面上にその場で出す。
+     tap outside(blur)で確定するので、いちいちOKを押す手間が要らない。 */
+  .memo-text-editor {
+    max-width: 600px; min-width: 120px; padding: 6px 9px; border-radius: 6px; font-size: 13px;
+    line-height: 1.4; background: #fff9dd; color: #111; box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    border: 2px solid #6cf; font-family: inherit; resize: none; overflow: hidden;
+    cursor: text; outline: none !important;
   }
   .memo-resize-handle {
     position: absolute; right: -6px; bottom: -6px; width: 16px; height: 16px;
@@ -1063,6 +1071,8 @@
 
       if (memo.type === 'text') {
         el.textContent = memo.text;
+        if (memo.width) el.style.width = memo.width + 'px'; // 未設定なら内容に応じた自動幅のまま
+        el.appendChild(makeResizeHandle(memo, el, 120, 600));
       } else {
         const img = document.createElement('img');
         const url = URL.createObjectURL(new Blob([memo.data], { type: memo.mimeType }));
@@ -1070,7 +1080,7 @@
         img.src = url;
         img.style.width = (memo.width || 160) + 'px';
         el.appendChild(img);
-        el.appendChild(makeResizeHandle(memo, img));
+        el.appendChild(makeResizeHandle(memo, img, 40, 600));
       }
 
       const delBtn = document.createElement('button');
@@ -1172,13 +1182,7 @@
           memo.updatedAt = Date.now();
           await saveCurrentMemos();
         } else if (memo.type === 'text') {
-          const newText = prompt('メモを編集', memo.text);
-          if (newText !== null && newText.trim()) {
-            memo.text = newText;
-            memo.updatedAt = Date.now();
-            await saveCurrentMemos();
-            renderMemos();
-          }
+          openTextMemoEditor(memo, memo.x, memo.y, el);
         }
       };
       el.addEventListener('pointermove', onMove);
@@ -1187,7 +1191,7 @@
     });
   }
 
-  function makeResizeHandle(memo, img) {
+  function makeResizeHandle(memo, targetEl, minWidth, maxWidth) {
     const handle = document.createElement('div');
     handle.className = 'memo-resize-handle';
     handle.addEventListener('pointerdown', (e) => {
@@ -1196,18 +1200,18 @@
       e.preventDefault();
       handle.setPointerCapture(e.pointerId);
       const startClientX = e.clientX;
-      const startWidth = memo.width || img.getBoundingClientRect().width || 160;
+      const startWidth = memo.width || targetEl.getBoundingClientRect().width || minWidth;
 
       const onMove = (ev) => {
         const dx = ev.clientX - startClientX;
-        const newWidth = clamp(startWidth + dx, 40, 600);
-        img.style.width = newWidth + 'px';
+        const newWidth = clamp(startWidth + dx, minWidth, maxWidth);
+        targetEl.style.width = newWidth + 'px';
       };
       const onUp = async () => {
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onUp);
         handle.removeEventListener('pointercancel', onUp);
-        memo.width = parseFloat(img.style.width);
+        memo.width = parseFloat(targetEl.style.width);
         memo.updatedAt = Date.now();
         await saveCurrentMemos();
       };
@@ -1216,6 +1220,63 @@
       handle.addEventListener('pointercancel', onUp);
     });
     return handle;
+  }
+
+  // テキストメモの入力欄をその場(譜面上)に出す。ネイティブprompt()だと毎回OKを
+  // 押す必要があって面倒、という要望のため、tap outside(blur)で確定する方式にした。
+  // memoがnullなら新規作成、指定されていれば既存メモの編集(元の表示要素hideElを
+  // 編集中だけ隠し、確定/キャンセル時にrenderMemos()で作り直す)。
+  function openTextMemoEditor(memo, x, y, hideEl) {
+    if (hideEl) hideEl.style.visibility = 'hidden';
+    const cssWidth = viewportWidthCss();
+    const ta = document.createElement('textarea');
+    ta.className = 'memo memo-text-editor';
+    ta.rows = 1;
+    ta.value = memo ? memo.text : '';
+    ta.style.left = Math.round(x * cssWidth) + 'px';
+    ta.style.top = Math.round(y * contentHeight) + 'px';
+    ta.style.width = ((memo && memo.width) || 220) + 'px';
+    memoLayerEl.appendChild(ta);
+
+    const autoGrow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    autoGrow();
+    ta.addEventListener('input', autoGrow);
+    ta.addEventListener('pointerdown', (e) => e.stopPropagation()); // scrollWrap側のドラッグ開始を防ぐ
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    let settled = false;
+    async function commit() {
+      if (settled) return;
+      settled = true;
+      const text = ta.value.trim();
+      const width = parseFloat(ta.style.width) || undefined;
+      ta.remove();
+      if (!text) {
+        if (memo) renderMemos(); // 編集を空にして確定=キャンセル扱い(元の内容を維持)
+        return;
+      }
+      if (memo) {
+        memo.text = text;
+        memo.width = width;
+        memo.updatedAt = Date.now();
+        await saveCurrentMemos();
+        renderMemos();
+      } else {
+        await addMemo({ id: crypto.randomUUID(), type: 'text', x, y, width, text, createdAt: Date.now(), updatedAt: Date.now() });
+      }
+    }
+    function cancel() {
+      if (settled) return;
+      settled = true;
+      ta.remove();
+      if (memo) renderMemos();
+    }
+    ta.addEventListener('blur', commit);
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); } // Shift+Enterで改行、Enter単体で確定
+    });
   }
 
   function placeMemoAt(clientX, clientY, type) {
@@ -1227,9 +1288,7 @@
     const y = contentHeight > 0 ? clamp(yCss / contentHeight, 0, 1) : 0;
 
     if (type === 'text') {
-      const text = prompt('メモの内容を入力してください');
-      if (!text || !text.trim()) return;
-      addMemo({ id: crypto.randomUUID(), type: 'text', x, y, text: text.trim(), createdAt: Date.now(), updatedAt: Date.now() });
+      openTextMemoEditor(null, x, y);
     } else {
       memoImageInput.dataset.pendingX = String(x);
       memoImageInput.dataset.pendingY = String(y);
