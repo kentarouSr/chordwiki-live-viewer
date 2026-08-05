@@ -53,6 +53,7 @@
     background: #333; color: #eee; cursor: pointer;
     text-decoration: none; display: inline-block;
   }
+  #backupBar button:disabled { opacity: 0.5; cursor: default; }
   #lastBackupInfo.warn { color: #f77; }
   /* クラウド同期・バックアップ・オフラインの3系統を見出し付きでグループ化し、
      何のためのボタンかが一目で分かるようにする。 */
@@ -263,6 +264,14 @@
     transition: transform 0.3s ease, opacity 0.3s ease;
   }
   #toolbar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+  /* 編集中は複数グループが3段以上に折り返り譜面を隠してしまうことがあるため、
+     バー自身の中に最小化ボタンを常設し、グループ部分だけ畳めるようにする。 */
+  #btnToolbarMinimize {
+    font-size: 14px; padding: 6px 10px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer; opacity: 0.7;
+  }
+  #toolbar.minimized { gap: 0; padding-top: 6px; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  #toolbar.minimized .toolbarGroup { display: none; }
   /* 機能ごとにボタンをグループ化し、薄い背景の「かたまり」として見せることで
      「どのボタンとどのボタンが関係しているか」を見た目でも分かるようにする。
      幅が狭い画面ではグループ単位で折り返すため、区切り線(border)だと折り返し
@@ -382,6 +391,7 @@
       </div>
     </div>
     <div id="toolbar">
+      <button id="btnToolbarMinimize" title="バーを最小化">&#9207;</button>
       <div class="toolbarGroup">
         <button id="btnBack">&larr; 曲一覧</button>
         <button id="btnPrevSong" class="setlistOnly">&#9198; 前</button>
@@ -408,7 +418,7 @@
       </div>
       <div class="toolbarGroup">
         <button id="btnSpeedDown">&minus;</button>
-        <span id="speedLabel">速度 40</span>
+        <span id="speedLabel">速度 20</span>
         <button id="btnSpeedUp">+</button>
         <button id="btnPlay">&#9654; 再生</button>
       </div>
@@ -440,6 +450,8 @@
   const TILE_HEIGHT_CSS = 1024; // iPad Safariの巨大画像描画問題対策としてタイル分割
   const MIN_SPEED = 1;
   const DEFAULT_SPEED = 20; // 曲未選択時・新規追加時の初期値
+  const MOMENTUM_FRICTION = 0.0025; // 大きいほど早く止まる(慣性スクロールの減衰係数)
+  const MOMENTUM_MIN_VELOCITY = 0.02; // px/ms。これを下回ったら慣性スクロールを終了
   const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
 
   // ---- Service Worker登録 ----
@@ -497,6 +509,7 @@
   const memoLayerEl = document.getElementById('memoLayer');
   const progressFill = document.getElementById('progressFill');
   const toolbar = document.getElementById('toolbar');
+  const btnToolbarMinimize = document.getElementById('btnToolbarMinimize');
   const btnPlay = document.getElementById('btnPlay');
   const btnBack = document.getElementById('btnBack');
   const btnMemoEdit = document.getElementById('btnMemoEdit');
@@ -898,6 +911,7 @@
 
   function startPlayback() {
     if (playing || contentHeight === 0) return;
+    stopMomentumScroll();
     if (scrollY >= maxScroll()) scrollY = 0; // 末尾で止まっていたら先頭から
     playing = true;
     lastTs = null;
@@ -920,14 +934,45 @@
 
   // ==================================================
   // 手動ドラッグ(再生中はドラッグ中一時停止、離すと自動再開)
+  // 指を離した瞬間の速度を引き継いで減速させる、Safariのスクロールに近い
+  // 慣性(モーメンタム)付き。指を素早く払った時だけ効くので、ゆっくり
+  // 動かして止めた場合は今まで通りその場で止まる。
   // ==================================================
   let dragging = false;
   let dragStartX = 0;
   let dragStartY = 0;
   let dragStartScrollY = 0;
   let wasPlayingBeforeDrag = false;
+  let dragHistory = []; // 直近のポインタ位置履歴({t, y})。離した瞬間の速度算出用
+  let momentumRafId = null;
+
+  function stopMomentumScroll() {
+    if (momentumRafId) cancelAnimationFrame(momentumRafId);
+    momentumRafId = null;
+  }
+
+  function startMomentumScroll(v0) {
+    if (Math.abs(v0) < MOMENTUM_MIN_VELOCITY) return;
+    let velocity = v0; // px/ms (scrollY座標系)
+    let lastT = null;
+    function step(ts) {
+      if (lastT === null) lastT = ts;
+      const dt = ts - lastT;
+      lastT = ts;
+      velocity *= Math.exp(-MOMENTUM_FRICTION * dt);
+      scrollY = clamp(scrollY + velocity * dt, 0, maxScroll());
+      applyTransform();
+      if (Math.abs(velocity) < MOMENTUM_MIN_VELOCITY || scrollY <= 0 || scrollY >= maxScroll()) {
+        momentumRafId = null;
+        return;
+      }
+      momentumRafId = requestAnimationFrame(step);
+    }
+    momentumRafId = requestAnimationFrame(step);
+  }
 
   scrollWrap.addEventListener('pointerdown', (e) => {
+    stopMomentumScroll();
     dragging = true;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
@@ -935,6 +980,7 @@
     wasPlayingBeforeDrag = playing;
     if (playing) stopPlayback();
     showToolbar();
+    dragHistory = [{ t: e.timeStamp, y: e.clientY }];
     scrollWrap.setPointerCapture(e.pointerId);
   });
   scrollWrap.addEventListener('pointermove', (e) => {
@@ -942,6 +988,9 @@
     const deltaY = e.clientY - dragStartY;
     scrollY = clamp(dragStartScrollY - deltaY, 0, maxScroll());
     applyTransform();
+    dragHistory.push({ t: e.timeStamp, y: e.clientY });
+    const cutoff = e.timeStamp - 100; // 直近100msだけ見る(離す前に一度止めてから離した場合に古い速度を引きずらないため)
+    while (dragHistory.length > 2 && dragHistory[0].t < cutoff) dragHistory.shift();
   });
   scrollWrap.addEventListener('pointerup', endDrag);
   scrollWrap.addEventListener('pointercancel', endDrag);
@@ -956,7 +1005,16 @@
       placeMemoAt(e.clientX, e.clientY, type);
       return;
     }
-    if (wasPlayingBeforeDrag) startPlayback();
+    if (wasPlayingBeforeDrag) {
+      startPlayback();
+      return;
+    }
+    if (e && dragHistory.length >= 2) {
+      const first = dragHistory[0];
+      const last = dragHistory[dragHistory.length - 1];
+      const dt = last.t - first.t;
+      if (dt > 0) startMomentumScroll(-((last.y - first.y) / dt));
+    }
   }
 
   // マウスホイール/トラックパッド操作(PC検証用)。ドラッグと同様に、操作中は一時停止し
@@ -1731,6 +1789,15 @@
     toolbar.classList.remove('hidden');
     if (playing) scheduleToolbarHide();
   }
+
+  // 編集中はメモ関連のボタンが増えてバーが3段以上になり、譜面の下側を隠して
+  // しまうことがあるため、バー内の折りたたみボタンでグループ部分だけ手動で
+  // 畳めるようにする(曲を切り替えたら毎回展開状態に戻す)。
+  btnToolbarMinimize.addEventListener('click', () => {
+    const minimized = toolbar.classList.toggle('minimized');
+    btnToolbarMinimize.innerHTML = minimized ? '&#9206;' : '&#9207;';
+    btnToolbarMinimize.title = minimized ? 'バーを元に戻す' : 'バーを最小化';
+  });
 
   // ==================================================
   // 曲一覧
@@ -2614,7 +2681,21 @@
     }
   }
 
+  let syncInProgress = false;
   async function syncNow() {
+    // 連打(二重タップ)対策。同時に2回走ると、両方とも「まだローカルに無い」という
+    // 同じ古いスナップショットを見てそれぞれdbAddしてしまい、曲が重複作成される
+    // バグがあったため、実行中は後続の呼び出しを弾く。
+    if (syncInProgress) return;
+    syncInProgress = true;
+    try {
+      await syncNowInner();
+    } finally {
+      syncInProgress = false;
+    }
+  }
+
+  async function syncNowInner() {
     const key = getSyncKey();
     if (!key) return;
 
@@ -2747,11 +2828,20 @@
     }
   }
 
-  btnSync.addEventListener('click', () => {
-    syncNow().catch((err) => {
+  btnSync.addEventListener('click', async () => {
+    if (syncInProgress) return;
+    const originalLabel = btnSync.textContent;
+    btnSync.disabled = true;
+    btnSync.textContent = '同期中...';
+    try {
+      await syncNow();
+    } catch (err) {
       console.error(err);
       alert('同期エラー: ' + (err && err.message ? err.message : err));
-    });
+    } finally {
+      btnSync.disabled = false;
+      btnSync.textContent = originalLabel;
+    }
   });
 
   // URL経由の自動取得がうまくいかない場合(ホーム画面PWAでURLのkeyが渡らない等)の
@@ -2828,6 +2918,7 @@
     song = await ensureSongUuid(song);
     // 曲を切り替える時、前の曲のメトロノームが違うテンポのまま鳴り続けるのを防ぐ。
     stopMetronome();
+    stopMomentumScroll();
     resetYoutubePanelForSongSwitch();
     currentSongId = song.id;
     speed = song.speed || DEFAULT_SPEED;
@@ -2867,6 +2958,7 @@
   btnBack.addEventListener('click', () => {
     flushSpeedSave();
     stopPlayback();
+    stopMomentumScroll();
     stopMetronome();
     resetYoutubePanelForSongSwitch();
     clearTiles();
@@ -2883,6 +2975,9 @@
     drawMode = false;
     activeSetlist = null;
     activeSetlistIndex = -1;
+    toolbar.classList.remove('minimized');
+    btnToolbarMinimize.innerHTML = '&#9207;';
+    btnToolbarMinimize.title = 'バーを最小化';
     viewer.classList.remove('memo-edit-mode');
     viewer.classList.remove('draw-mode');
     viewer.classList.remove('setlist-active');
