@@ -210,6 +210,25 @@ export default {
         return json({ ok: true });
       }
 
+      // メモのスタンプ(アプリ全体で1つ、id=1固定行にまるごとJSONを保存)
+      if (path === '/api/stamps' && request.method === 'GET') {
+        if (!requireKey()) return err('invalid key', 401);
+        const row = await env.DB.prepare('SELECT items_json, updated_at FROM memo_stamps WHERE id = 1').first();
+        if (!row) return json({ items: [], updatedAt: 0 });
+        return json({ items: JSON.parse(row.items_json), updatedAt: row.updated_at });
+      }
+      if (path === '/api/stamps' && request.method === 'PUT') {
+        if (!requireKey()) return err('invalid key', 401);
+        const body = await request.json();
+        const { items, updatedAt } = body;
+        if (!Array.isArray(items) || !Number.isFinite(updatedAt)) return err('missing fields');
+        await env.DB.prepare(
+          `INSERT INTO memo_stamps (id, items_json, updated_at) VALUES (1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET items_json = excluded.items_json, updated_at = excluded.updated_at`
+        ).bind(JSON.stringify(items), updatedAt).run();
+        return json({ ok: true });
+      }
+
       return err('not found', 404);
     } catch (e) {
       return err(e.message || String(e), 500);

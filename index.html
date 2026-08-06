@@ -257,6 +257,30 @@
     100% { box-shadow: 0 0 0 0 rgba(102,204,255,0); }
   }
 
+  /* テキストメモ入力中だけ出すスタンプ(定型文言)バー。画面上部に固定表示し、
+     譜面のどこにメモを置いてもスタンプ選択がはみ出さないようにしている。 */
+  #memoStampBar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; gap: 6px; align-items: center; overflow-x: auto;
+    padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top));
+    background: rgba(17,17,17,0.95); backdrop-filter: blur(4px);
+  }
+  #memoStampBar.hidden { display: none; }
+  .memo-stamp {
+    flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 14px;
+    border: none; background: #333; color: #eee; cursor: pointer;
+  }
+  #memoStampBar.stamp-edit-mode .memo-stamp { background: #722; color: #fdd; }
+  .memo-stamp-add, .memo-stamp-edit-toggle {
+    flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 14px;
+    border: 1px dashed #666; background: transparent; color: #ccc; cursor: pointer;
+  }
+  .memo-stamp-edit-toggle.active { border-color: #6cf; color: #6cf; }
+  .memo-stamp-input {
+    flex-shrink: 0; width: 120px; font-size: 13px; padding: 6px 10px; border-radius: 14px;
+    border: 1px solid #6cf; background: #fff; color: #111;
+  }
+
   #memoImageInput { display: none; }
   .memoEditOnly { display: none; }
   #viewer.memo-edit-mode .memoEditOnly { display: inline-block; }
@@ -455,6 +479,7 @@
   </div>
 
   <div id="viewer" class="hidden">
+    <div id="memoStampBar" class="hidden"></div>
     <div id="scrollWrap">
       <div id="tileContainer"></div>
       <svg id="strokeLayer"></svg>
@@ -611,6 +636,7 @@
   const tileContainer = document.getElementById('tileContainer');
   const strokeLayerEl = document.getElementById('strokeLayer');
   const memoLayerEl = document.getElementById('memoLayer');
+  const memoStampBarEl = document.getElementById('memoStampBar');
   const progressFill = document.getElementById('progressFill');
   const toolbar = document.getElementById('toolbar');
   const btnToolbarMinimize = document.getElementById('btnToolbarMinimize');
@@ -715,10 +741,11 @@
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
   // ==================================================
   const DB_NAME = 'chordwiki-live-viewer';
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   const STORE = 'songs';
   const SETLIST_STORE = 'setlists';
   const TODO_STORE = 'practiceTodos'; // アプリ全体で1レコードのみ(id: 'global')固定で使う
+  const STAMP_STORE = 'memoStamps';   // アプリ全体で1レコードのみ(id: 'global')固定で使う
   let dbPromise = null;
 
   function openDb() {
@@ -735,6 +762,9 @@
         }
         if (!db.objectStoreNames.contains(TODO_STORE)) {
           db.createObjectStore(TODO_STORE, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(STAMP_STORE)) {
+          db.createObjectStore(STAMP_STORE, { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -869,6 +899,27 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(TODO_STORE, 'readwrite');
       const req = tx.objectStore(TODO_STORE).put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // メモのスタンプ(強弱記号・「伸ばす/ビートオフ」などの定型文言をタップ挿入するための
+  // ユーザー定義リスト)。ToDoと同じくアプリ全体で1レコードのみ(id: 'global'固定)。
+  async function stampGet() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STAMP_STORE, 'readonly');
+      const req = tx.objectStore(STAMP_STORE).get('global');
+      req.onsuccess = () => resolve(req.result || { id: 'global', items: [], updatedAt: 0 });
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function stampPut(record) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STAMP_STORE, 'readwrite');
+      const req = tx.objectStore(STAMP_STORE).put(record);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -1399,6 +1450,112 @@
     return handle;
   }
 
+  // ==================================================
+  // メモのスタンプ(強弱記号・「伸ばす/ビートオフ」など定型文言のタップ挿入)
+  // テキストメモ入力中だけ画面上部に表示する。ユーザーが自由に追加/削除する。
+  // ==================================================
+  function insertStampIntoTextarea(ta, stampText) {
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    ta.value = ta.value.slice(0, start) + stampText + ta.value.slice(end);
+    const newPos = start + stampText.length;
+    ta.focus();
+    ta.setSelectionRange(newPos, newPos);
+    ta.dispatchEvent(new Event('input')); // 高さ自動調整(autoGrow)を再トリガー
+  }
+
+  function showAddStampInput(ta) {
+    if (memoStampBarEl.querySelector('.memo-stamp-input')) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'memo-stamp-input';
+    input.placeholder = '例: f / 伸ばす / 3連ノリ';
+    input.addEventListener('pointerdown', (e) => e.stopPropagation());
+    let settled = false;
+    const commitStamp = async () => {
+      if (settled) return;
+      settled = true;
+      const text = input.value.trim();
+      input.remove();
+      if (text) {
+        const stamps = await stampGet();
+        stamps.items.push({ id: crypto.randomUUID(), text });
+        stamps.updatedAt = Date.now();
+        await stampPut(stamps);
+        await renderMemoStampBar(ta);
+      }
+      ta.focus(); // スタンプ追加が終わったらメモの入力に戻れるようにする
+    };
+    input.addEventListener('blur', commitStamp);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitStamp(); }
+      else if (e.key === 'Escape') { e.preventDefault(); settled = true; input.remove(); ta.focus(); }
+    });
+    memoStampBarEl.appendChild(input);
+    input.focus();
+  }
+
+  async function renderMemoStampBar(ta) {
+    const editMode = memoStampBarEl.classList.contains('stamp-edit-mode');
+    const stamps = await stampGet();
+    memoStampBarEl.innerHTML = '';
+    for (const s of stamps.items) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'memo-stamp';
+      btn.textContent = s.text;
+      // pointerdownでpreventDefaultし、タップしてもメモの入力欄(ta)からフォーカスが
+      // 外れないようにする(外れるとblur→confirm()相当の確定処理が先に走ってしまう)。
+      btn.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+      btn.addEventListener('click', async () => {
+        if (editMode) {
+          // スタンプの削除は元に戻すのが簡単(自分用の定型文言なので)、confirm()は省略。
+          // confirm()はネイティブダイアログでtaのフォーカスを問答無用で奪ってしまい、
+          // 入力中のメモがそのまま確定・クローズされてしまう問題があるため。
+          const t = await stampGet();
+          t.items = t.items.filter((it) => it.id !== s.id);
+          t.updatedAt = Date.now();
+          await stampPut(t);
+          await renderMemoStampBar(ta);
+        } else {
+          insertStampIntoTextarea(ta, s.text);
+        }
+      });
+      memoStampBarEl.appendChild(btn);
+    }
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'memo-stamp-add';
+    addBtn.textContent = '＋ スタンプ追加';
+    addBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+    addBtn.addEventListener('click', () => showAddStampInput(ta));
+    memoStampBarEl.appendChild(addBtn);
+
+    if (stamps.items.length > 0) {
+      const editToggle = document.createElement('button');
+      editToggle.type = 'button';
+      editToggle.className = 'memo-stamp-edit-toggle' + (editMode ? ' active' : '');
+      editToggle.textContent = editMode ? '完了' : '編集';
+      editToggle.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+      editToggle.addEventListener('click', () => {
+        memoStampBarEl.classList.toggle('stamp-edit-mode');
+        renderMemoStampBar(ta);
+      });
+      memoStampBarEl.appendChild(editToggle);
+    }
+  }
+
+  function showMemoStampBar(ta) {
+    memoStampBarEl.classList.remove('hidden');
+    memoStampBarEl.classList.remove('stamp-edit-mode');
+    renderMemoStampBar(ta);
+  }
+  function hideMemoStampBar() {
+    memoStampBarEl.classList.add('hidden');
+    memoStampBarEl.innerHTML = '';
+  }
+
   // テキストメモの入力欄をその場(譜面上)に出す。ネイティブprompt()だと毎回OKを
   // 押す必要があって面倒、という要望のため、tap outside(blur)で確定する方式にした。
   // memoがnullなら新規作成、指定されていれば既存メモの編集(元の表示要素hideElを
@@ -1422,11 +1579,13 @@
     ta.addEventListener('pointerdown', (e) => e.stopPropagation()); // scrollWrap側のドラッグ開始を防ぐ
     ta.focus();
     ta.setSelectionRange(ta.value.length, ta.value.length);
+    showMemoStampBar(ta);
 
     let settled = false;
     async function commit() {
       if (settled) return;
       settled = true;
+      hideMemoStampBar();
       const text = ta.value.trim();
       ta.remove();
       if (!text) {
@@ -1450,10 +1609,17 @@
     function cancel() {
       if (settled) return;
       settled = true;
+      hideMemoStampBar();
       ta.remove();
       if (memo) renderMemos();
     }
-    ta.addEventListener('blur', commit);
+    ta.addEventListener('blur', (e) => {
+      // スタンプバー内(スタンプ追加欄など)へのフォーカス移動では確定しない。
+      // ここで即commit()してしまうと、スタンプを追加しようとしただけで
+      // 入力中のメモが確定・クローズされてしまう。
+      if (e.relatedTarget && memoStampBarEl.contains(e.relatedTarget)) return;
+      commit();
+    });
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); cancel(); }
       else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); } // Shift+Enterで改行、Enter単体で確定
@@ -3285,6 +3451,22 @@
       uploaded++;
     }
 
+    // メモのスタンプ(同じくアプリ全体で1つのJSONまるごとを、新しい方が勝つ方式で同期)
+    const localStamps = await stampGet();
+    const stampRes = await fetch(`${SYNC_API_URL}/api/stamps`, { headers: { 'X-Sync-Key': key } });
+    if (!stampRes.ok) throw new Error(`サーバーエラー(スタンプ) (${stampRes.status})`);
+    const remoteStamps = await stampRes.json();
+    if (remoteStamps.updatedAt > localStamps.updatedAt) {
+      await stampPut({ id: 'global', items: remoteStamps.items, updatedAt: remoteStamps.updatedAt });
+      downloaded++;
+    } else if (localStamps.updatedAt > remoteStamps.updatedAt) {
+      await fetch(`${SYNC_API_URL}/api/stamps`, {
+        method: 'PUT', headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: localStamps.items, updatedAt: localStamps.updatedAt }),
+      });
+      uploaded++;
+    }
+
     alert(`同期完了: アップロード${uploaded}件 / ダウンロード${downloaded}件 / 削除反映${deletedLocally}件`);
     renderSongList();
     renderSetlistList();
@@ -3485,6 +3667,7 @@
     drawMode = false;
     activeSetlist = null;
     activeSetlistIndex = -1;
+    hideMemoStampBar();
     toolbar.classList.remove('minimized');
     btnToolbarMinimize.innerHTML = '&#9207;';
     btnToolbarMinimize.title = 'バーを最小化';

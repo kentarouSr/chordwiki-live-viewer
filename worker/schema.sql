@@ -39,3 +39,10 @@ CREATE TABLE IF NOT EXISTS practice_todos (
   items_json TEXT NOT NULL DEFAULT '[]',
   updated_at INTEGER NOT NULL DEFAULT 0
 );
+
+-- メモのスタンプ(定型文言)一覧。practice_todosと同じく単一行にJSONをまるごと保存。
+CREATE TABLE IF NOT EXISTS memo_stamps (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  items_json TEXT NOT NULL DEFAULT '[]',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
