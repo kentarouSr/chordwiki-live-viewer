@@ -721,11 +721,15 @@
   let memoEditMode = false;
   let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
   // 配置待ち状態をalert()で毎回案内するとタップ回数が増えて面倒なので、
-  // 代わりに該当ボタンをハイライトすることで「配置待ち中」を示す。
+  // 代わりに該当ボタンをハイライト+ラベル変更することで「配置待ち中」を示す。
+  // ラベルを変えるのは、alert()を無くした結果「次に何をすればいいか」が
+  // 初見だと分かりにくくなるため(「譜面をタップ」で次の操作を明示する)。
   function setPendingMemoType(type) {
     pendingMemoType = type;
     btnAddTextMemo.classList.toggle('pending', type === 'text');
     btnAddImageMemo.classList.toggle('pending', type === 'image');
+    btnAddTextMemo.textContent = type === 'text' ? '譜面をタップ' : '+ テキスト';
+    btnAddImageMemo.textContent = type === 'image' ? '譜面をタップ' : '+ 画像';
   }
   let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
   let drawMode = false;         // 手書き(ペン/蛍光ペン)モード中か
