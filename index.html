@@ -578,8 +578,19 @@
 
   // ---- Service Worker登録 ----
   // オフライン起動用。file://等では登録できないためhttp(s)の時だけ試みる。
+  // 2026-08-06〜完全自動更新方針: 新しいService Workerが有効化されて
+  // ページの制御を引き継いだ(controllerchange)ら、その場でリロードして
+  // 最新コードを反映する。演奏中(ビューア画面)でも例外なく自動リロード
+  // する方針を明示的に選んでいる(ユーザーが「裏で勝手に更新しても良い」
+  // と明言、ビューア中も含めて完全自動を選択済み)。
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
+    let swReloadedOnce = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (swReloadedOnce) return; // 短時間に何度もcontrollerchangeが来た場合の多重リロード防止
+      swReloadedOnce = true;
+      location.reload();
+    });
   }
 
   // ---- DOM ----

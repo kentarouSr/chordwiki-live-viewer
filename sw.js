@@ -1,7 +1,12 @@
 // ChordWikiライブビューア: オフライン起動用Service Worker
-// キャッシュ更新は自動バージョン切替ではなく、アプリ内の「オフライン用データを更新」ボタンから
-// 明示的に行う方式。CACHE_NAMEはアセット構成を大きく変えた時のみ手動で変更する。
+// 「裏で勝手に更新されるのが不安」という初期の要望で長らく手動更新オンリー
+// (キャッシュ優先)だったが、「F5でリロードしても古いキャッシュのまま」で
+// 混乱を招いたため、2026-08-06に完全自動更新へ方針転換した。
+// オンライン時は常にネットワークを優先し(タイムアウト付き)、取得できたら
+// キャッシュも更新する。オフライン時やネットワークが遅い時だけキャッシュに
+// フォールバックすることで、機内モードでの起動性は維持する。
 const CACHE_NAME = 'cwlv-shell-v1';
+const NETWORK_TIMEOUT_MS = 3000;
 
 const ASSET_LIST = [
   './',
@@ -30,14 +35,37 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  const path = url.pathname.endsWith('/') ? url.pathname : url.pathname;
+  const path = url.pathname;
   const isAsset = ASSET_LIST.some((asset) => {
     const assetUrl = new URL(asset, self.location.href);
     return assetUrl.pathname === path;
   });
   if (!isAsset) return;
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
+  event.respondWith(networkFirstWithTimeout(event.request));
 });
+
+async function networkFirstWithTimeout(request) {
+  const cache = await caches.open(CACHE_NAME);
+
+  const networkPromise = fetch(request)
+    .then((response) => {
+      if (response && response.ok) cache.put(request, response.clone());
+      return response;
+    })
+    .catch(() => null);
+
+  const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), NETWORK_TIMEOUT_MS));
+  const fast = await Promise.race([networkPromise, timeoutPromise]);
+  if (fast && fast.ok) return fast;
+
+  // ネットワークが遅い/失敗した場合はキャッシュにフォールバック(機内モード対応)。
+  // ネットワーク取得自体は裏で継続していて、成功すれば上のthenで次回用にキャッシュへ反映される。
+  const cached = await cache.match(request);
+  if (cached) return cached;
+
+  // キャッシュが無い初回オフライン等では、遅くてもネットワークの結果を待つしかない
+  const late = await networkPromise;
+  if (late) return late;
+  throw new Error('offline and no cache available');
+}
