@@ -143,7 +143,7 @@
   #todoList { display: flex; flex-direction: column; gap: 10px; }
   #todoList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
   .todoItem { background: #1c1c1c; border-radius: 10px; padding: 12px 14px; }
-  .todoRow { display: flex; align-items: center; gap: 10px; }
+  .todoRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .todoRow input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; }
   .todoText {
     flex: 1; min-width: 0; font-size: 15px; word-break: break-word;
@@ -153,6 +153,10 @@
   .todoRow button {
     font-size: 12px; padding: 6px 9px; border-radius: 6px; border: none;
     background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  .todoJumpToSong {
+    background: #6cf !important; color: #111 !important; font-weight: bold;
+    max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .todoSubtasks { margin: 8px 0 0 30px; display: flex; flex-direction: column; gap: 8px; }
   .todoEditInput {
@@ -238,6 +242,20 @@
     font-size: 14px; line-height: 1; cursor: pointer; display: none;
   }
   #viewer.memo-edit-mode .memo-delete { display: block; }
+  .memo-add-todo {
+    position: absolute; top: -10px; left: -10px; width: 22px; height: 22px;
+    border-radius: 50%; border: none; background: #333; color: #fff;
+    font-size: 12px; line-height: 1; cursor: pointer; display: none;
+    transition: background 0.2s, transform 0.2s;
+  }
+  #viewer.memo-edit-mode .memo-add-todo { display: block; }
+  .memo-add-todo.done-flash { background: #6cf; transform: scale(1.3); }
+  /* ToDoからジャンプしてきた時に対象のメモを一時的に目立たせる */
+  .memo.memo-highlight { outline: 3px solid #6cf; outline-offset: 3px; animation: memoHighlightPulse 1.4s ease-out 2; }
+  @keyframes memoHighlightPulse {
+    0% { box-shadow: 0 0 0 6px rgba(102,204,255,0.6); }
+    100% { box-shadow: 0 0 0 0 rgba(102,204,255,0); }
+  }
 
   #memoImageInput { display: none; }
   .memoEditOnly { display: none; }
@@ -641,6 +659,7 @@
   let currentImageEl = null;    // kind==='image' 用。リサイズ時の再タイル化に使う
   let currentPdfDoc = null;     // kind==='pdf' 用
   let currentSongId = null;     // IndexedDBに保存されている曲のid(未保存時はnull)
+  let currentSongUuid = null;   // 開いている曲のuuid(ToDo↔メモの紐付け先特定に使う)
   let currentMemos = [];        // 開いている曲のメモ配列
   let currentBpm = null;        // 開いている曲のBPM(未設定はnull)
   let currentYoutubeUrl = null; // 開いている曲の参考動画URL(未設定はnull)
@@ -1182,6 +1201,7 @@
 
       const el = document.createElement('div');
       el.className = memo.type === 'text' ? 'memo memo-text' : 'memo memo-image';
+      el.dataset.memoId = memo.id; // ToDoからジャンプしてきた時にハイライトする対象を探すため
       el.style.left = Math.round(memo.x * cssWidth) + 'px';
       el.style.top = Math.round(memo.y * contentHeight) + 'px';
 
@@ -1215,6 +1235,22 @@
         renderMemos();
       });
       el.appendChild(delBtn);
+
+      if (memo.type === 'text') {
+        const todoBtn = document.createElement('button');
+        todoBtn.type = 'button';
+        todoBtn.className = 'memo-add-todo';
+        todoBtn.textContent = '✅';
+        todoBtn.title = '練習ToDoに追加';
+        todoBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+        todoBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await addTodoLinkedToMemo(memo);
+          todoBtn.classList.add('done-flash');
+          setTimeout(() => todoBtn.classList.remove('done-flash'), 700);
+        });
+        el.appendChild(todoBtn);
+      }
 
       bindMemoDrag(el, memo);
       memoLayerEl.appendChild(el);
@@ -2108,7 +2144,7 @@
     await todoPut(practiceTodos);
   }
 
-  function renderTodoList() {
+  async function renderTodoList() {
     todoListEl.innerHTML = '';
     if (practiceTodos.items.length === 0) {
       const p = document.createElement('p');
@@ -2117,8 +2153,11 @@
       todoListEl.appendChild(p);
       return;
     }
+    // リンク先の曲名をその場で表示するため、曲一覧をuuidで引けるよう先に用意しておく
+    const songs = await dbGetAll();
+    const songsByUuid = new Map(songs.map((s) => [s.uuid, s]));
     for (const item of practiceTodos.items) {
-      todoListEl.appendChild(buildTodoItemEl(item));
+      todoListEl.appendChild(buildTodoItemEl(item, songsByUuid));
     }
   }
 
@@ -2153,7 +2192,7 @@
     });
   }
 
-  function buildTodoItemEl(item) {
+  function buildTodoItemEl(item, songsByUuid) {
     const wrap = document.createElement('div');
     wrap.className = 'todoItem';
 
@@ -2191,6 +2230,16 @@
 
     row.appendChild(checkbox);
     row.appendChild(text);
+    if (item.link && item.link.songUuid) {
+      const song = songsByUuid && songsByUuid.get(item.link.songUuid);
+      const btnJump = document.createElement('button');
+      btnJump.type = 'button';
+      btnJump.className = 'todoJumpToSong';
+      btnJump.textContent = song ? `🎵 ${song.name}` : '🎵 曲を開く';
+      btnJump.title = 'この曲の該当箇所を開く';
+      btnJump.addEventListener('click', () => openSongAndJumpToMemo(item.link.songUuid, item.link.memoId));
+      row.appendChild(btnJump);
+    }
     row.appendChild(btnAddSub);
     row.appendChild(btnDel);
     wrap.appendChild(row);
@@ -2286,6 +2335,45 @@
   todoNewInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); addTopLevelTodo(); }
   });
+
+  // 曲のテキストメモから直接ToDoを作る(練習中に気づいたことをその場で拾える)。
+  // ToDo画面を開いていなくても動くよう、practiceTodos変数には依存せずDBを直接読み書きする。
+  async function addTodoLinkedToMemo(memo) {
+    if (!currentSongUuid) return;
+    const todos = await todoGet();
+    todos.items.push({
+      id: crypto.randomUUID(), text: memo.text, done: false, subtasks: [],
+      link: { songUuid: currentSongUuid, memoId: memo.id },
+      updatedAt: Date.now(),
+    });
+    todos.updatedAt = Date.now();
+    await todoPut(todos);
+  }
+
+  // ToDo項目の「🎵 曲を開く」から呼ばれる。該当曲を開き、紐付けられたメモの位置まで
+  // スクロールして一時的にハイライトする(メモが既に削除されていた場合は曲だけ開く)。
+  async function openSongAndJumpToMemo(songUuid, memoId) {
+    const song = await findSongByUuid(songUuid);
+    if (!song) {
+      alert('リンク先の曲が見つかりませんでした(削除された可能性があります)');
+      return;
+    }
+    activeSetlist = null;
+    activeSetlistIndex = -1;
+    viewerReturnScreen = todoListScreen;
+    viewer.classList.remove('setlist-active');
+    await openSongRecord(song);
+    if (!memoId) return;
+    const memo = currentMemos.find((m) => m.id === memoId);
+    if (!memo) return;
+    scrollY = clamp(memo.y * contentHeight - viewportHeight() / 2, 0, maxScroll());
+    applyTransform();
+    const el = memoLayerEl.querySelector(`[data-memo-id="${memoId}"]`);
+    if (el) {
+      el.classList.add('memo-highlight');
+      setTimeout(() => el.classList.remove('memo-highlight'), 2800);
+    }
+  }
 
   // ==================================================
   // セットリスト
@@ -3326,6 +3414,7 @@
     stopMomentumScroll();
     resetYoutubePanelForSongSwitch();
     currentSongId = song.id;
+    currentSongUuid = song.uuid;
     speed = song.speed || DEFAULT_SPEED;
     currentMemos = song.memos || [];
     currentBpm = song.bpm ?? null;
@@ -3371,6 +3460,7 @@
     currentImageEl = null;
     currentPdfDoc = null;
     currentSongId = null;
+    currentSongUuid = null;
     currentMemos = [];
     currentBpm = null;
     currentYoutubeUrl = null;
@@ -3390,6 +3480,7 @@
     showScreen(viewerReturnScreen || songListScreen);
     renderSongList();
     renderSetlistList();
+    if (viewerReturnScreen === todoListScreen) renderTodoList();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushSpeedSave();
