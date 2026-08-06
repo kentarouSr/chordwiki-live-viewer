@@ -216,8 +216,8 @@
   }
   .memo-text {
     max-width: 600px; padding: 6px 9px; border-radius: 6px; font-size: 13px;
-    line-height: 1.4; white-space: pre-wrap; background: rgba(255, 224, 130, 0.95);
-    color: #111; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    line-height: 1.4; white-space: pre-wrap; background: rgba(255, 224, 130, 0.85);
+    color: #111; box-shadow: 0 2px 6px rgba(0,0,0,0.35);
   }
   .memo-image img {
     display: block; width: 100%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
@@ -1193,10 +1193,21 @@
     memoLayerEl.style.height = contentHeight + 'px';
     strokeLayerEl.style.height = contentHeight + 'px';
     const cssWidth = viewportWidthCss();
+    let needsRepair = false;
     for (const memo of currentMemos) {
       if (memo.type === 'stroke') {
         renderStroke(memo, cssWidth);
         continue;
+      }
+
+      // 過去のバグで、リサイズハンドルを一度も使っていないテキストメモにまで
+      // 編集欄の既定幅(220px)がそのままmemo.widthとして焼き付いてしまい、
+      // 本来もっと短く収まるはずの文言が不必要に折り返される事例があった。
+      // fontSizeはリサイズ操作時にしかセットされないので、widthだけが既定値と
+      // 一致していれば「実際にはリサイズされていない」とみなして自動修復する。
+      if (memo.type === 'text' && memo.width === MEMO_TEXT_DEFAULT_WIDTH && !memo.fontSize) {
+        memo.width = undefined;
+        needsRepair = true;
       }
 
       const el = document.createElement('div');
@@ -1255,6 +1266,7 @@
       bindMemoDrag(el, memo);
       memoLayerEl.appendChild(el);
     }
+    if (needsRepair) saveCurrentMemos();
   }
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -1416,20 +1428,23 @@
       if (settled) return;
       settled = true;
       const text = ta.value.trim();
-      const width = parseFloat(ta.style.width) || undefined;
       ta.remove();
       if (!text) {
         if (memo) renderMemos(); // 編集を空にして確定=キャンセル扱い(元の内容を維持)
         return;
       }
       if (memo) {
+        // widthはここでは触らない。編集用テキストエリアの表示幅(既定220px)を
+        // そのままmemo.widthに焼き付けてしまうと、リサイズハンドルで一度も
+        // 調整していないメモまで一律220px固定になり、本来なら内容に応じて
+        // 自動で収まるはずの短い文言まで不必要に折り返される原因になっていた。
         memo.text = text;
-        memo.width = width;
         memo.updatedAt = Date.now();
         await saveCurrentMemos();
         renderMemos();
       } else {
-        await addMemo({ id: crypto.randomUUID(), type: 'text', x, y, width, text, createdAt: Date.now(), updatedAt: Date.now() });
+        // 新規メモもwidthを指定しない=内容に応じた自動幅(CSSのmax-width)に任せる。
+        await addMemo({ id: crypto.randomUUID(), type: 'text', x, y, text, createdAt: Date.now(), updatedAt: Date.now() });
       }
     }
     function cancel() {
