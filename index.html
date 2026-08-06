@@ -2287,7 +2287,7 @@
     const key = localStorage.getItem(SYNC_KEY_STORAGE);
     if (key && song.uuid) {
       try {
-        const res = await fetch(`${SYNC_API_URL}/api/songs/${song.uuid}`, {
+        const res = await syncFetch(`${SYNC_API_URL}/api/songs/${song.uuid}`, {
           method: 'DELETE', headers: { 'X-Sync-Key': key },
         });
         if (!res.ok && res.status !== 404) {
@@ -3234,6 +3234,22 @@
   // ==================================================
   const SYNC_API_URL = 'https://chordwiki-live-viewer.kento-kawamura-730.workers.dev';
   const SYNC_KEY_STORAGE = 'cwlv_sync_key';
+  const SYNC_FETCH_TIMEOUT_MS = 20000;
+
+  // 通常のfetch()はネットワークが固まった時に永遠に待ち続けてしまい、
+  // 「今すぐ同期」ボタンが「同期中...」のまま二度と戻らなくなる不具合が
+  // 実際に発生した。タイムアウトしたら必ずエラーとして失敗させることで、
+  // ボタンが確実に元の状態に戻るようにする。
+  function syncFetch(url, options) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SYNC_FETCH_TIMEOUT_MS);
+    return fetch(url, { ...options, signal: controller.signal })
+      .catch((err) => {
+        if (err.name === 'AbortError') throw new Error('通信がタイムアウトしました(電波状況を確認してもう一度お試しください)');
+        throw err;
+      })
+      .finally(() => clearTimeout(timer));
+  }
 
   // URLに ?key=... が付いていたら自動保存する。
   // 新しい端末でキーを手入力しなくて済むよう、このURLをLINE/メモ等で自分に送って
@@ -3308,14 +3324,14 @@
     form.set('updatedAt', String(song.updatedAt));
     const buf = await getSongArrayBuffer(song);
     form.set('file', new Blob([buf], { type: song.mimeType }), song.fileName);
-    const res = await fetch(`${SYNC_API_URL}/api/songs/${song.uuid}`, {
+    const res = await syncFetch(`${SYNC_API_URL}/api/songs/${song.uuid}`, {
       method: 'PUT', headers: { 'X-Sync-Key': key }, body: form,
     });
     if (!res.ok) throw new Error(`アップロード失敗: ${song.name} (${res.status})`);
   }
 
   async function downloadSong(key, remote, existingLocal) {
-    const res = await fetch(`${SYNC_API_URL}/api/songs/${remote.uuid}/file`, {
+    const res = await syncFetch(`${SYNC_API_URL}/api/songs/${remote.uuid}/file`, {
       headers: { 'X-Sync-Key': key },
     });
     if (!res.ok) throw new Error(`ダウンロード失敗: ${remote.name} (${res.status})`);
@@ -3357,7 +3373,7 @@
     const key = getSyncKey();
     if (!key) return;
 
-    const res = await fetch(`${SYNC_API_URL}/api/songs`, { headers: { 'X-Sync-Key': key } });
+    const res = await syncFetch(`${SYNC_API_URL}/api/songs`, { headers: { 'X-Sync-Key': key } });
     if (res.status === 401) {
       localStorage.removeItem(SYNC_KEY_STORAGE);
       throw new Error('同期キーが正しくありません(再度お試しください)');
@@ -3366,7 +3382,7 @@
     const remoteSongs = await res.json();
     const remoteByUuid = new Map(remoteSongs.map((s) => [s.uuid, s]));
 
-    const tombstoneRes = await fetch(`${SYNC_API_URL}/api/songs/tombstones`, { headers: { 'X-Sync-Key': key } });
+    const tombstoneRes = await syncFetch(`${SYNC_API_URL}/api/songs/tombstones`, { headers: { 'X-Sync-Key': key } });
     if (!tombstoneRes.ok) throw new Error(`サーバーエラー(削除情報) (${tombstoneRes.status})`);
     const songTombstones = await tombstoneRes.json();
     const songTombstoneByUuid = new Map(songTombstones.map((t) => [t.uuid, t.deletedAt]));
@@ -3400,12 +3416,12 @@
       }
     }
 
-    const setlistRes = await fetch(`${SYNC_API_URL}/api/setlists`, { headers: { 'X-Sync-Key': key } });
+    const setlistRes = await syncFetch(`${SYNC_API_URL}/api/setlists`, { headers: { 'X-Sync-Key': key } });
     if (!setlistRes.ok) throw new Error(`サーバーエラー(セットリスト) (${setlistRes.status})`);
     const remoteSetlists = await setlistRes.json();
     const remoteSetlistByUuid = new Map(remoteSetlists.map((s) => [s.uuid, s]));
 
-    const setlistTombstoneRes = await fetch(`${SYNC_API_URL}/api/setlists/tombstones`, { headers: { 'X-Sync-Key': key } });
+    const setlistTombstoneRes = await syncFetch(`${SYNC_API_URL}/api/setlists/tombstones`, { headers: { 'X-Sync-Key': key } });
     if (!setlistTombstoneRes.ok) throw new Error(`サーバーエラー(セットリスト削除情報) (${setlistTombstoneRes.status})`);
     const setlistTombstones = await setlistTombstoneRes.json();
     const setlistTombstoneByUuid = new Map(setlistTombstones.map((t) => [t.uuid, t.deletedAt]));
@@ -3437,14 +3453,14 @@
 
     // 練習ToDo(アプリ全体で1つのJSONまるごとを、新しい方が勝つ方式で同期)
     const localTodos = await todoGet();
-    const todoRes = await fetch(`${SYNC_API_URL}/api/todos`, { headers: { 'X-Sync-Key': key } });
+    const todoRes = await syncFetch(`${SYNC_API_URL}/api/todos`, { headers: { 'X-Sync-Key': key } });
     if (!todoRes.ok) throw new Error(`サーバーエラー(ToDo) (${todoRes.status})`);
     const remoteTodos = await todoRes.json();
     if (remoteTodos.updatedAt > localTodos.updatedAt) {
       await todoPut({ id: 'global', items: remoteTodos.items, updatedAt: remoteTodos.updatedAt });
       downloaded++;
     } else if (localTodos.updatedAt > remoteTodos.updatedAt) {
-      await fetch(`${SYNC_API_URL}/api/todos`, {
+      await syncFetch(`${SYNC_API_URL}/api/todos`, {
         method: 'PUT', headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: localTodos.items, updatedAt: localTodos.updatedAt }),
       });
@@ -3453,14 +3469,14 @@
 
     // メモのスタンプ(同じくアプリ全体で1つのJSONまるごとを、新しい方が勝つ方式で同期)
     const localStamps = await stampGet();
-    const stampRes = await fetch(`${SYNC_API_URL}/api/stamps`, { headers: { 'X-Sync-Key': key } });
+    const stampRes = await syncFetch(`${SYNC_API_URL}/api/stamps`, { headers: { 'X-Sync-Key': key } });
     if (!stampRes.ok) throw new Error(`サーバーエラー(スタンプ) (${stampRes.status})`);
     const remoteStamps = await stampRes.json();
     if (remoteStamps.updatedAt > localStamps.updatedAt) {
       await stampPut({ id: 'global', items: remoteStamps.items, updatedAt: remoteStamps.updatedAt });
       downloaded++;
     } else if (localStamps.updatedAt > remoteStamps.updatedAt) {
-      await fetch(`${SYNC_API_URL}/api/stamps`, {
+      await syncFetch(`${SYNC_API_URL}/api/stamps`, {
         method: 'PUT', headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: localStamps.items, updatedAt: localStamps.updatedAt }),
       });
@@ -3473,7 +3489,7 @@
   }
 
   async function uploadSetlist(key, setlist) {
-    const res = await fetch(`${SYNC_API_URL}/api/setlists/${setlist.uuid}`, {
+    const res = await syncFetch(`${SYNC_API_URL}/api/setlists/${setlist.uuid}`, {
       method: 'PUT',
       headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3506,7 +3522,7 @@
     const key = localStorage.getItem(SYNC_KEY_STORAGE);
     if (!key) return;
     try {
-      const res = await fetch(`${SYNC_API_URL}/api/setlists/${setlist.uuid}`, {
+      const res = await syncFetch(`${SYNC_API_URL}/api/setlists/${setlist.uuid}`, {
         method: 'DELETE', headers: { 'X-Sync-Key': key },
       });
       if (!res.ok && res.status !== 404) {
