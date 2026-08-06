@@ -348,6 +348,8 @@
   #toolbar button:active { background: #6cf; color: #111; }
   #toolbar button:disabled { opacity: 0.35; cursor: default; }
   #btnMetronome.active { background: #6cf; color: #111; }
+  /* 配置待ち中(alert()での案内をやめた代わりの目印)。もう一度押すとキャンセルできる */
+  #btnAddTextMemo.pending, #btnAddImageMemo.pending { background: #6cf; color: #111; }
   #btnPlay { min-width: 84px; font-weight: bold; }
   #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
   #setlistPositionLabel { font-size: 13px; color: #999; font-variant-numeric: tabular-nums; }
@@ -646,6 +648,13 @@
   let ytApiLoadPromise = null;
   let memoEditMode = false;
   let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
+  // 配置待ち状態をalert()で毎回案内するとタップ回数が増えて面倒なので、
+  // 代わりに該当ボタンをハイライトすることで「配置待ち中」を示す。
+  function setPendingMemoType(type) {
+    pendingMemoType = type;
+    btnAddTextMemo.classList.toggle('pending', type === 'text');
+    btnAddImageMemo.classList.toggle('pending', type === 'image');
+  }
   let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
   let drawMode = false;         // 手書き(ペン/蛍光ペン)モード中か
   let currentDrawTool = 'pen';  // 'pen' | 'highlighter'
@@ -1116,7 +1125,7 @@
     // メモ編集モードで種類を選択済みなら、ほぼ動いていないタップを配置操作として扱う
     if (memoEditMode && pendingMemoType && moved < 8 && e) {
       const type = pendingMemoType;
-      pendingMemoType = null;
+      setPendingMemoType(null);
       placeMemoAt(e.clientX, e.clientY, type);
       return;
     }
@@ -1476,22 +1485,22 @@
   // 演奏モード中はそもそもこのボタンごと表示されない(#viewer.app-mode-perform .appModeEditOnly)。
   function setMemoEditMode(on) {
     memoEditMode = on;
-    pendingMemoType = null;
+    setPendingMemoType(null);
     pendingMemoPlacement = null;
     setDrawMode(false);
     viewer.classList.toggle('memo-edit-mode', memoEditMode);
     if (memoEditMode) stopPlayback();
   }
   btnMemoEdit.addEventListener('click', () => setMemoEditMode(!memoEditMode));
+  // もう一度押すと配置待ちをキャンセルできる(トグル)。alert()での案内をやめた分、
+  // ボタン自体のハイライト(.pending)が「配置待ち中」の目印になる。
   btnAddTextMemo.addEventListener('click', () => {
     setDrawMode(false);
-    pendingMemoType = 'text';
-    alert('配置したい場所を譜面上でタップしてください');
+    setPendingMemoType(pendingMemoType === 'text' ? null : 'text');
   });
   btnAddImageMemo.addEventListener('click', () => {
     setDrawMode(false);
-    pendingMemoType = 'image';
-    alert('配置したい場所を譜面上でタップしてください');
+    setPendingMemoType(pendingMemoType === 'image' ? null : 'image');
   });
 
   // ==================================================
@@ -1519,7 +1528,7 @@
   function setDrawMode(on, tool) {
     drawMode = on;
     if (tool) currentDrawTool = tool;
-    if (on) pendingMemoType = null; // テキスト/画像配置待ちと排他
+    if (on) setPendingMemoType(null); // テキスト/画像配置待ちと排他
     viewer.classList.toggle('draw-mode', drawMode);
     btnDrawPen.classList.toggle('active', drawMode && currentDrawTool === 'pen');
     btnDrawHighlighter.classList.toggle('active', drawMode && currentDrawTool === 'highlighter');
@@ -3366,7 +3375,7 @@
     currentBpm = null;
     currentYoutubeUrl = null;
     memoEditMode = false;
-    pendingMemoType = null;
+    setPendingMemoType(null);
     pendingMemoPlacement = null;
     drawMode = false;
     activeSetlist = null;
