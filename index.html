@@ -576,6 +576,22 @@
   const MEMO_TEXT_MAX_FONT_SIZE = 48;
   const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
 
+  // メモのスタンプ初期セット。ユーザーと相談して決めた、実際の楽譜記法に
+  // 寄せた記号(強弱記号・レットリング・カット・3連符)。スタンプが1件も
+  // 無い状態(初回起動、または全部消してしまった後)の時だけ、1回きりで
+  // 自動投入する(localStorageのフラグで、二度と勝手に復活させない)。
+  const DEFAULT_STAMPS = ['p', 'mp', 'mf', 'f', 'ff', 'cresc.', 'dim.', '〜', '✂', '♪3', 'Shuffle'];
+  const STAMPS_SEEDED_KEY = 'cwlv_stamps_seeded';
+  async function ensureDefaultStamps() {
+    if (localStorage.getItem(STAMPS_SEEDED_KEY)) return;
+    localStorage.setItem(STAMPS_SEEDED_KEY, '1');
+    const stamps = await stampGet();
+    if (stamps.items.length > 0) return; // 既に何か登録済みなら上書きしない
+    stamps.items = DEFAULT_STAMPS.map((text) => ({ id: crypto.randomUUID(), text }));
+    stamps.updatedAt = Date.now();
+    await stampPut(stamps);
+  }
+
   // ---- Service Worker登録 ----
   // オフライン起動用。file://等では登録できないためhttp(s)の時だけ試みる。
   // 2026-08-06〜完全自動更新方針: 新しいService Workerが有効化されて
@@ -1557,10 +1573,11 @@
     }
   }
 
-  function showMemoStampBar(ta) {
+  async function showMemoStampBar(ta) {
     memoStampBarEl.classList.remove('hidden');
     memoStampBarEl.classList.remove('stamp-edit-mode');
-    renderMemoStampBar(ta);
+    await ensureDefaultStamps();
+    await renderMemoStampBar(ta);
   }
   function hideMemoStampBar() {
     memoStampBarEl.classList.add('hidden');
