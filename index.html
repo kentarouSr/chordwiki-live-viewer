@@ -3566,7 +3566,10 @@
     }
   }
 
-  btnSync.addEventListener('click', async () => {
+  // silent: trueだとエラーをalert()で出さずconsoleに残すだけにする。
+  // 起動時の自動同期は、ユーザーが明示的に押した操作ではないので、
+  // 機内モード等で失敗しても勝手にエラーダイアログを出さないようにするため。
+  async function runSync({ silent } = {}) {
     if (syncInProgress) return;
     const originalLabel = btnSync.textContent;
     btnSync.disabled = true;
@@ -3575,12 +3578,21 @@
       await syncNow();
     } catch (err) {
       console.error(err);
-      alert('同期エラー: ' + (err && err.message ? err.message : err));
+      if (!silent) alert('同期エラー: ' + (err && err.message ? err.message : err));
     } finally {
       btnSync.disabled = false;
       btnSync.textContent = originalLabel;
     }
-  });
+  }
+  btnSync.addEventListener('click', () => runSync({ silent: false }));
+
+  // 同期キーが既に設定されている端末では、起動時に自動でも同期する。
+  // 「毎回ボタンを押さなくても良いのでは」というフィードバックのため。
+  // getSyncKey()は未設定時にprompt()を出してしまうので、ここでは直接
+  // localStorageを見て「既にキーがある場合だけ」に限定している。
+  if (localStorage.getItem(SYNC_KEY_STORAGE)) {
+    runSync({ silent: true });
+  }
 
   // URL経由の自動取得がうまくいかない場合(ホーム画面PWAでURLのkeyが渡らない等)の
   // 手動フォールバック。現在の値を初期値にして入力し直せる。空にすれば解除。
