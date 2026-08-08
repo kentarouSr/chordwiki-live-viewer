@@ -533,6 +533,11 @@
         <button id="btnEditBpm" class="memoEditOnly">&#127932; BPM: --</button>
         <button id="btnMetronome">&#129345; クリック</button>
       </div>
+      <div class="toolbarGroup appModeEditOnly">
+        <button id="btnZoomOut">&minus;</button>
+        <span id="zoomLabel">100%</span>
+        <button id="btnZoomIn">+</button>
+      </div>
       <div class="toolbarGroup">
         <button id="btnSpeedDown">&minus;</button>
         <span id="speedLabel">速度 20</span>
@@ -574,6 +579,9 @@
   const MEMO_TEXT_DEFAULT_FONT_SIZE = 13;
   const MEMO_TEXT_MIN_FONT_SIZE = 10;
   const MEMO_TEXT_MAX_FONT_SIZE = 48;
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 3;
+  const ZOOM_STEP = 0.25;
   const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
 
   // メモのスタンプ初期セット。ユーザーと相談して決めた、実際の楽譜記法に
@@ -684,6 +692,9 @@
   const btnSpeedUp = document.getElementById('btnSpeedUp');
   const btnSpeedDown = document.getElementById('btnSpeedDown');
   const speedLabel = document.getElementById('speedLabel');
+  const btnZoomIn = document.getElementById('btnZoomIn');
+  const btnZoomOut = document.getElementById('btnZoomOut');
+  const zoomLabel = document.getElementById('zoomLabel');
   const btnToggleYoutube = document.getElementById('btnToggleYoutube');
   const youtubePanel = document.getElementById('youtubePanel');
   const youtubePanelHeader = document.getElementById('youtubePanelHeader');
@@ -701,8 +712,10 @@
   const youtubeRewindSecLabel = document.getElementById('youtubeRewindSecLabel');
 
   // ---- 状態 ----
-  let contentHeight = 0;   // タイル全体のCSS高さ
+  let contentHeight = 0;   // タイル全体のCSS高さ(ズーム後の実際の高さ)
   let scrollY = 0;         // 現在のスクロール位置(0=先頭)
+  let scrollX = 0;         // 現在の横スクロール位置(ズーム時のみ意味を持つ、0=左端)
+  let zoomLevel = 1;       // 1=画面幅にフィット。曲ごとに保存する。編集モード限定
   let playing = false;
   let speed = DEFAULT_SPEED; // px/秒。曲を開くと保存済みの値に置き換わる
   let rafId = null;
@@ -1003,7 +1016,12 @@
   }
   function viewportHeight() { return scrollWrap.clientHeight - toolbarOccludedHeight(); }
   function viewportWidthCss() { return scrollWrap.clientWidth; }
+  // タイル・メモの座標計算に使う「コンテンツの実幅」。ズームしていない時は
+  // viewportWidthCss()と同じ(=画面幅にフィット)。ズームすると画面より広くなり、
+  // その分は横スクロール(scrollX)で見る。
+  function contentWidthCss() { return viewportWidthCss() * zoomLevel; }
   function maxScroll() { return Math.max(0, contentHeight - viewportHeight()); }
+  function maxScrollX() { return Math.max(0, contentWidthCss() - viewportWidthCss()); }
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
   // ==================================================
@@ -1021,7 +1039,7 @@
   // <img> などの描画可能ソースから、スケールしつつタイルへ直接描画する。
   // 拡大後の画像全体を中間キャンバスに一度に描かない(それ自体が巨大描画問題の原因になるため)。
   function tileFromDrawableSource(img, naturalWidth, naturalHeight) {
-    const cssWidth = viewportWidthCss();
+    const cssWidth = contentWidthCss();
     const scale = cssWidth / naturalWidth;
     const cssHeight = naturalHeight * scale;
     const tileCount = Math.ceil(cssHeight / TILE_HEIGHT_CSS);
@@ -1071,7 +1089,7 @@
 
   async function buildTilesFromPdf(pdf) {
     clearTiles();
-    const cssWidth = viewportWidthCss();
+    const cssWidth = contentWidthCss();
     let total = 0;
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
@@ -1102,14 +1120,15 @@
     } else if (currentSourceKind === 'pdf' && currentPdfDoc) {
       p = buildTilesFromPdf(currentPdfDoc);
     }
-    if (p) p.then(renderMemos); // 画面幅が変わるとメモの位置も再計算が必要
+    if (!p) return Promise.resolve();
+    return p.then(renderMemos); // 画面幅が変わるとメモの位置も再計算が必要
   }
 
   // ==================================================
   // スクロール再生
   // ==================================================
   function applyTransform() {
-    const t = `translate3d(0, ${-scrollY}px, 0)`;
+    const t = `translate3d(${-scrollX}px, ${-scrollY}px, 0)`;
     tileContainer.style.transform = t;
     strokeLayerEl.style.transform = t;
     memoLayerEl.style.transform = t;
@@ -1166,9 +1185,10 @@
   let dragging = false;
   let dragStartX = 0;
   let dragStartY = 0;
+  let dragStartScrollX = 0;
   let dragStartScrollY = 0;
   let wasPlayingBeforeDrag = false;
-  let dragHistory = []; // 直近のポインタ位置履歴({t, y})。離した瞬間の速度算出用
+  let dragHistory = []; // 直近のポインタ位置履歴({t, x, y})。離した瞬間の速度算出用
   let momentumRafId = null;
 
   function stopMomentumScroll() {
@@ -1176,18 +1196,23 @@
     momentumRafId = null;
   }
 
-  function startMomentumScroll(v0) {
-    if (Math.abs(v0) < MOMENTUM_MIN_VELOCITY) return;
-    let velocity = v0; // px/ms (scrollY座標系)
+  // ズームしている時は横方向にも慣性スクロールできるよう、縦横同時に扱う。
+  function startMomentumScroll(vx0, vy0) {
+    if (Math.abs(vx0) < MOMENTUM_MIN_VELOCITY && Math.abs(vy0) < MOMENTUM_MIN_VELOCITY) return;
+    let velocityX = vx0, velocityY = vy0; // px/ms
     let lastT = null;
     function step(ts) {
       if (lastT === null) lastT = ts;
       const dt = ts - lastT;
       lastT = ts;
-      velocity *= Math.exp(-MOMENTUM_FRICTION * dt);
-      scrollY = clamp(scrollY + velocity * dt, 0, maxScroll());
+      velocityX *= Math.exp(-MOMENTUM_FRICTION * dt);
+      velocityY *= Math.exp(-MOMENTUM_FRICTION * dt);
+      scrollX = clamp(scrollX + velocityX * dt, 0, maxScrollX());
+      scrollY = clamp(scrollY + velocityY * dt, 0, maxScroll());
       applyTransform();
-      if (Math.abs(velocity) < MOMENTUM_MIN_VELOCITY || scrollY <= 0 || scrollY >= maxScroll()) {
+      const doneX = Math.abs(velocityX) < MOMENTUM_MIN_VELOCITY || scrollX <= 0 || scrollX >= maxScrollX();
+      const doneY = Math.abs(velocityY) < MOMENTUM_MIN_VELOCITY || scrollY <= 0 || scrollY >= maxScroll();
+      if (doneX && doneY) {
         momentumRafId = null;
         return;
       }
@@ -1201,19 +1226,22 @@
     dragging = true;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
+    dragStartScrollX = scrollX;
     dragStartScrollY = scrollY;
     wasPlayingBeforeDrag = playing;
     if (playing) stopPlayback();
     showToolbar();
-    dragHistory = [{ t: e.timeStamp, y: e.clientY }];
+    dragHistory = [{ t: e.timeStamp, x: e.clientX, y: e.clientY }];
     scrollWrap.setPointerCapture(e.pointerId);
   });
   scrollWrap.addEventListener('pointermove', (e) => {
     if (!dragging) return;
+    const deltaX = e.clientX - dragStartX;
     const deltaY = e.clientY - dragStartY;
+    scrollX = clamp(dragStartScrollX - deltaX, 0, maxScrollX());
     scrollY = clamp(dragStartScrollY - deltaY, 0, maxScroll());
     applyTransform();
-    dragHistory.push({ t: e.timeStamp, y: e.clientY });
+    dragHistory.push({ t: e.timeStamp, x: e.clientX, y: e.clientY });
     const cutoff = e.timeStamp - 100; // 直近100msだけ見る(離す前に一度止めてから離した場合に古い速度を引きずらないため)
     while (dragHistory.length > 2 && dragHistory[0].t < cutoff) dragHistory.shift();
   });
@@ -1238,7 +1266,7 @@
       const first = dragHistory[0];
       const last = dragHistory[dragHistory.length - 1];
       const dt = last.t - first.t;
-      if (dt > 0) startMomentumScroll(-((last.y - first.y) / dt));
+      if (dt > 0) startMomentumScroll(-((last.x - first.x) / dt), -((last.y - first.y) / dt));
     }
   }
 
@@ -1249,6 +1277,7 @@
     e.preventDefault();
     const wasPlaying = playing;
     if (playing) stopPlayback();
+    scrollX = clamp(scrollX + e.deltaX, 0, maxScrollX());
     scrollY = clamp(scrollY + e.deltaY, 0, maxScroll());
     applyTransform();
     showToolbar();
@@ -1274,7 +1303,7 @@
     clearMemoLayer();
     memoLayerEl.style.height = contentHeight + 'px';
     strokeLayerEl.style.height = contentHeight + 'px';
-    const cssWidth = viewportWidthCss();
+    const cssWidth = contentWidthCss();
     let needsRepair = false;
     for (const memo of currentMemos) {
       if (memo.type === 'stroke') {
@@ -1425,7 +1454,7 @@
         el.removeEventListener('pointerup', onUp);
         el.removeEventListener('pointercancel', onUp);
         if (moved) {
-          const cssWidth = viewportWidthCss();
+          const cssWidth = contentWidthCss();
           memo.x = clamp(parseFloat(el.style.left) / cssWidth, 0, 1);
           memo.y = contentHeight > 0 ? clamp(parseFloat(el.style.top) / contentHeight, 0, 1) : 0;
           memo.updatedAt = Date.now();
@@ -1594,7 +1623,7 @@
   // 編集中だけ隠し、確定/キャンセル時にrenderMemos()で作り直す)。
   function openTextMemoEditor(memo, x, y, hideEl) {
     if (hideEl) hideEl.style.visibility = 'hidden';
-    const cssWidth = viewportWidthCss();
+    const cssWidth = contentWidthCss();
     const ta = document.createElement('textarea');
     ta.className = 'memo memo-text-editor';
     ta.rows = 1;
@@ -1660,9 +1689,9 @@
 
   function placeMemoAt(clientX, clientY, type) {
     const rect = scrollWrap.getBoundingClientRect();
-    const xCss = clientX - rect.left;
-    const yCss = (clientY - rect.top) + scrollY; // ビューポート座標→コンテンツ座標に変換
-    const cssWidth = viewportWidthCss();
+    const xCss = (clientX - rect.left) + scrollX; // ビューポート座標→コンテンツ座標に変換(ズーム時の横スクロール分も加算)
+    const yCss = (clientY - rect.top) + scrollY;
+    const cssWidth = contentWidthCss();
     const x = clamp(xCss / cssWidth, 0, 1);
     const y = contentHeight > 0 ? clamp(yCss / contentHeight, 0, 1) : 0;
 
@@ -1810,9 +1839,9 @@
     strokeLayerEl.setPointerCapture(e.pointerId);
 
     const rect = scrollWrap.getBoundingClientRect();
-    const cssWidth = viewportWidthCss();
+    const cssWidth = contentWidthCss();
     const toPoint = (ev) => ({
-      x: (ev.clientX - rect.left) / cssWidth,
+      x: ((ev.clientX - rect.left) + scrollX) / cssWidth,
       y: contentHeight > 0 ? ((ev.clientY - rect.top) + scrollY) / contentHeight : 0,
     });
 
@@ -2196,6 +2225,35 @@
   }
   bindHold(btnSpeedUp, +1);
   bindHold(btnSpeedDown, -1);
+
+  // ==================================================
+  // ズーム(縦に長い/密度の高い譜面を拡大して読めるように。編集モードのみ)
+  // 曲ごとに保存する。ズーム後は横スクロール(scrollX)で左右も見られる。
+  // ==================================================
+  async function saveSongZoom(songId, zoomValue) {
+    const song = await dbGet(songId);
+    if (!song) return;
+    song.zoomLevel = zoomValue;
+    song.updatedAt = Date.now();
+    await dbPut(song);
+  }
+
+  function setZoomLevel(newZoom) {
+    const clamped = Math.round(clamp(newZoom, ZOOM_MIN, ZOOM_MAX) * 100) / 100; // 丸め誤差対策
+    if (clamped === zoomLevel) return;
+    // ズーム前後で「今見ていた縦位置」が大きくズレないよう、割合を保って復元する。
+    const scrollFraction = contentHeight > 0 ? scrollY / contentHeight : 0;
+    zoomLevel = clamped;
+    zoomLabel.textContent = `${Math.round(zoomLevel * 100)}%`;
+    if (currentSongId != null) saveSongZoom(currentSongId, zoomLevel);
+    rebuildCurrentSource().then(() => {
+      scrollY = clamp(scrollFraction * contentHeight, 0, maxScroll());
+      scrollX = clamp(scrollX, 0, maxScrollX());
+      applyTransform();
+    });
+  }
+  btnZoomIn.addEventListener('click', () => setZoomLevel(zoomLevel + ZOOM_STEP));
+  btnZoomOut.addEventListener('click', () => setZoomLevel(zoomLevel - ZOOM_STEP));
 
   // ==================================================
   // Wake Lock
@@ -3677,6 +3735,9 @@
     currentBpm = song.bpm ?? null;
     currentYoutubeUrl = song.youtubeUrl || null;
     speedLabel.textContent = `速度 ${speed}`;
+    zoomLevel = clamp(song.zoomLevel || ZOOM_MIN, ZOOM_MIN, ZOOM_MAX);
+    scrollX = 0;
+    zoomLabel.textContent = `${Math.round(zoomLevel * 100)}%`;
     updateBpmLabel();
     const buf = await getSongArrayBuffer(song);
     const file = new File([buf], song.fileName, { type: song.mimeType });
