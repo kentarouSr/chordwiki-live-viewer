@@ -175,7 +175,11 @@
   #setlistEditFooter { display: flex; gap: 10px; margin-top: 16px; }
 
   /* --- ビューア画面 --- */
-  #viewer { position: absolute; inset: 0; }
+  /* touch-action:noneでビューア全体(譜面・ツールバー・スタンプバー等)への
+     ネイティブなピンチズームを止める。iOSはmeta viewportのuser-scalable=no
+     だけではピンチズームを止めきれない(アクセシビリティのため意図的に無視
+     される)ので、こちらが本命の対策。ズームは+/-ボタン経由のみに一本化する。 */
+  #viewer { position: absolute; inset: 0; touch-action: none; }
   #viewer.hidden { display: none; }
   #scrollWrap {
     position: absolute; inset: 0; overflow: hidden; touch-action: none;
