@@ -589,6 +589,7 @@
   const TILE_HEIGHT_CSS = 1024; // iPad Safariの巨大画像描画問題対策としてタイル分割
   const MIN_SPEED = 1;
   const DEFAULT_SPEED = 20; // 曲未選択時・新規追加時の初期値
+  const SPEED_STEP = 5; // 速度±ボタン1回あたりの増減幅
   // 表示上の「速度」の数値はそのままに、実際の動きだけ遅くするための係数。
   // 「速度20」という数字自体は変えず、1あたりの実ピクセル移動量を減らすことで
   // 体感速度を落とす(数字を直接20→10のように下げるのではなく、こちらで調整する)。
@@ -2227,11 +2228,11 @@
   function bindHold(button, sign) {
     const start = (e) => {
       e.preventDefault();
-      changeSpeed(sign);
+      changeSpeed(sign * SPEED_STEP);
       let step = 1;
       holdTimeout = setTimeout(() => {
         holdInterval = setInterval(() => {
-          changeSpeed(sign * step);
+          changeSpeed(sign * SPEED_STEP * step);
           step += 1; // 長押しで刻み加速
         }, 120);
       }, 500);
