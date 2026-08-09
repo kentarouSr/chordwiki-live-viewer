@@ -589,6 +589,10 @@
   const TILE_HEIGHT_CSS = 1024; // iPad Safariの巨大画像描画問題対策としてタイル分割
   const MIN_SPEED = 1;
   const DEFAULT_SPEED = 20; // 曲未選択時・新規追加時の初期値
+  // 表示上の「速度」の数値はそのままに、実際の動きだけ遅くするための係数。
+  // 「速度20」という数字自体は変えず、1あたりの実ピクセル移動量を減らすことで
+  // 体感速度を落とす(数字を直接20→10のように下げるのではなく、こちらで調整する)。
+  const SPEED_TO_PXPERSEC = 0.5;
   const MOMENTUM_FRICTION = 0.0025; // 大きいほど早く止まる(慣性スクロールの減衰係数)
   const MOMENTUM_MIN_VELOCITY = 0.02; // px/ms。これを下回ったら慣性スクロールを終了
   // テキストメモをリサイズハンドルで拡大/縮小した時、文字サイズも幅に比例させるための基準値
@@ -735,7 +739,7 @@
   let scrollX = 0;         // 現在の横スクロール位置(ズーム時のみ意味を持つ、0=左端)
   let zoomLevel = 1;       // 1=画面幅にフィット。曲ごとに保存する。編集モード限定
   let playing = false;
-  let speed = DEFAULT_SPEED; // px/秒。曲を開くと保存済みの値に置き換わる
+  let speed = DEFAULT_SPEED; // 表示上の速度の値(実際のpx/秒はSPEED_TO_PXPERSEC倍した値)。曲を開くと保存済みの値に置き換わる
   let rafId = null;
   let lastTs = null;
   let wakeLockSentinel = null;
@@ -1159,7 +1163,7 @@
     if (lastTs === null) lastTs = ts;
     const dt = (ts - lastTs) / 1000;
     lastTs = ts;
-    scrollY += speed * dt;
+    scrollY += speed * SPEED_TO_PXPERSEC * dt;
     const m = maxScroll();
     if (scrollY >= m) {
       scrollY = m;
