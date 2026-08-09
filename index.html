@@ -435,7 +435,7 @@
     </div>
     <input id="songSearchInput" type="search" placeholder="曲名で検索">
     <div id="songList"></div>
-    <input id="fileInput" type="file" accept="image/*,application/pdf">
+    <input id="fileInput" type="file" accept="image/*,application/pdf" multiple>
     <input id="zipInput" type="file" accept=".zip,application/zip">
   </div>
 
@@ -3698,9 +3698,8 @@
     const defaultName = file.name.replace(/\.[^.]+$/, '');
     const name = prompt('曲名を入力してください', defaultName);
     if (name === null) return; // キャンセル
-    const bpmStr = prompt('BPM(任意、空欄可)', '');
-    if (bpmStr === null) return;
-    const bpm = bpmStr.trim() ? parseInt(bpmStr, 10) : null;
+    // BPMは「毎回聞かれるのが面倒」という要望のため聞かない。未設定のまま追加し、
+    // 必要ならビューアの「BPM」ボタンから後で個別に設定する。
 
     const song = {
       uuid: crypto.randomUUID(),
@@ -3709,7 +3708,7 @@
       mimeType: file.type || (isPdfFile(file) ? 'application/pdf' : 'image/png'),
       fileName: file.name,
       speed: DEFAULT_SPEED,
-      bpm: Number.isFinite(bpm) ? bpm : null,
+      bpm: null,
       memos: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -3721,6 +3720,32 @@
     viewerReturnScreen = songListScreen;
     viewer.classList.remove('setlist-active');
     await openSongRecord(song);
+  }
+
+  // 複数ファイルの一括追加。1件ずつ名前を聞いているとファイル数分ダイアログが
+  // 出て現実的でないため、ファイル名(拡張子抜き)をそのまま曲名として自動登録する。
+  // 曲名は曲一覧の「編集」、BPMはビューアの「BPM」ボタンから後で個別に調整できる。
+  async function addNewSongsBulk(files) {
+    let added = 0, skipped = 0;
+    for (const file of files) {
+      if (!isPdfFile(file) && !isImageFile(file)) { skipped++; continue; }
+      const song = {
+        uuid: crypto.randomUUID(),
+        name: file.name.replace(/\.[^.]+$/, ''),
+        data: await file.arrayBuffer(),
+        mimeType: file.type || (isPdfFile(file) ? 'application/pdf' : 'image/png'),
+        fileName: file.name,
+        speed: DEFAULT_SPEED,
+        bpm: null,
+        memos: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      await dbAdd(song);
+      added++;
+    }
+    renderSongList();
+    alert(`${added}曲を追加しました${skipped > 0 ? `(${skipped}件は画像/PDFではないためスキップしました)` : ''}`);
   }
 
   // 曲レコード(dbGetAllやfindSongByUuidで取得済みのもの)からビューアを開く共通処理。
@@ -3760,15 +3785,17 @@
 
   btnAddSong.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
-    const file = fileInput.files && fileInput.files[0];
+    const files = Array.from(fileInput.files || []);
     fileInput.value = '';
-    if (file) addNewSong(file);
+    if (files.length === 1) addNewSong(files[0]);
+    else if (files.length > 1) addNewSongsBulk(files);
   });
   songListScreen.addEventListener('dragover', (e) => e.preventDefault());
   songListScreen.addEventListener('drop', (e) => {
     e.preventDefault();
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) addNewSong(file);
+    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+    if (files.length === 1) addNewSong(files[0]);
+    else if (files.length > 1) addNewSongsBulk(files);
   });
 
   btnBack.addEventListener('click', () => {
