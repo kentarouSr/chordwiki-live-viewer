@@ -60,11 +60,16 @@
   .backupGroup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .backupGroupLabel { font-weight: bold; color: #ccc; min-width: 96px; }
 
+  #songSearchRow { display: flex; gap: 8px; margin-bottom: 12px; }
   #songSearchInput {
     font-size: 15px; padding: 10px 12px; border-radius: 8px; border: 1px solid #333;
-    background: #1c1c1c; color: #eee; margin-bottom: 12px; width: 100%;
+    background: #1c1c1c; color: #eee; flex: 1; min-width: 0;
   }
   #songSearchInput::placeholder { color: #777; }
+  #songSortSelect {
+    font-size: 14px; padding: 10px 8px; border-radius: 8px; border: 1px solid #333;
+    background: #1c1c1c; color: #eee; flex-shrink: 0;
+  }
 
   #songList { display: flex; flex-direction: column; gap: 10px; }
   #songList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
@@ -433,7 +438,15 @@
         <button id="btnUpdateOfflineCache">データを更新</button>
       </div>
     </div>
-    <input id="songSearchInput" type="search" placeholder="曲名で検索">
+    <div id="songSearchRow">
+      <input id="songSearchInput" type="search" placeholder="曲名で検索">
+      <select id="songSortSelect">
+        <option value="updatedDesc">更新が新しい順</option>
+        <option value="nameAsc">曲名順</option>
+        <option value="createdDesc">追加が新しい順</option>
+        <option value="createdAsc">追加が古い順</option>
+      </select>
+    </div>
     <div id="songList"></div>
     <input id="fileInput" type="file" accept="image/*,application/pdf" multiple>
     <input id="zipInput" type="file" accept=".zip,application/zip">
@@ -625,6 +638,7 @@
   const songListScreen = document.getElementById('songListScreen');
   const songListEl = document.getElementById('songList');
   const songSearchInput = document.getElementById('songSearchInput');
+  const songSortSelect = document.getElementById('songSortSelect');
   const btnAddSong = document.getElementById('btnAddSong');
   const fileInput = document.getElementById('fileInput');
   const zipInput = document.getElementById('zipInput');
@@ -2309,12 +2323,26 @@
     return file.type.startsWith('image/');
   }
 
+  const SONG_SORT_KEY = 'cwlv_song_sort';
+  function getSongSortMode() {
+    return localStorage.getItem(SONG_SORT_KEY) || 'updatedDesc';
+  }
+  function sortSongs(songs, mode) {
+    switch (mode) {
+      case 'nameAsc': return songs.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+      case 'createdDesc': return songs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      case 'createdAsc': return songs.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      case 'updatedDesc':
+      default: return songs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    }
+  }
+
   async function renderSongList() {
     renderLastBackupInfo();
     renderOfflineCacheInfo();
     let songs = await dbGetAll();
     await Promise.all(songs.map(ensureSongUuid));
-    songs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    sortSongs(songs, getSongSortMode());
     const query = songSearchInput.value.trim().toLowerCase();
     if (query) songs = songs.filter((s) => s.name.toLowerCase().includes(query));
     songListEl.innerHTML = '';
@@ -2397,6 +2425,11 @@
   }
 
   songSearchInput.addEventListener('input', () => renderSongList());
+  songSortSelect.value = getSongSortMode();
+  songSortSelect.addEventListener('change', () => {
+    localStorage.setItem(SONG_SORT_KEY, songSortSelect.value);
+    renderSongList();
+  });
 
   // ==================================================
   // 練習ToDo(アプリ全体で1つ。曲/セットリストに紐付かない練習用チェックリスト。
