@@ -311,9 +311,11 @@
   #viewer.setlist-memo-mode #btnMemoEdit,
   #viewer.setlist-memo-mode #btnEditBpm,
   #viewer.setlist-memo-mode #btnMetronome,
+  #viewer.setlist-memo-mode #btnSpeedDown5,
   #viewer.setlist-memo-mode #btnSpeedDown,
   #viewer.setlist-memo-mode #speedLabel,
   #viewer.setlist-memo-mode #btnSpeedUp,
+  #viewer.setlist-memo-mode #btnSpeedUp5,
   #viewer.setlist-memo-mode #btnPlay,
   #viewer.setlist-memo-mode #btnToggleYoutube,
   #viewer.setlist-memo-mode #youtubePanel {
@@ -556,9 +558,11 @@
         <button id="btnZoomIn">+</button>
       </div>
       <div class="toolbarGroup">
+        <button id="btnSpeedDown5">&minus;5</button>
         <button id="btnSpeedDown">&minus;</button>
         <span id="speedLabel">速度 20</span>
         <button id="btnSpeedUp">+</button>
+        <button id="btnSpeedUp5">+5</button>
         <button id="btnPlay">&#9654; 再生</button>
       </div>
     </div>
@@ -589,7 +593,6 @@
   const TILE_HEIGHT_CSS = 1024; // iPad Safariの巨大画像描画問題対策としてタイル分割
   const MIN_SPEED = 1;
   const DEFAULT_SPEED = 20; // 曲未選択時・新規追加時の初期値
-  const SPEED_STEP = 5; // 速度±ボタン1回あたりの増減幅
   // 表示上の「速度」の数値はそのままに、実際の動きだけ遅くするための係数。
   // 「速度20」という数字自体は変えず、1あたりの実ピクセル移動量を減らすことで
   // 体感速度を落とす(数字を直接20→10のように下げるのではなく、こちらで調整する)。
@@ -714,6 +717,8 @@
   const btnMetronome = document.getElementById('btnMetronome');
   const btnSpeedUp = document.getElementById('btnSpeedUp');
   const btnSpeedDown = document.getElementById('btnSpeedDown');
+  const btnSpeedUp5 = document.getElementById('btnSpeedUp5');
+  const btnSpeedDown5 = document.getElementById('btnSpeedDown5');
   const speedLabel = document.getElementById('speedLabel');
   const btnZoomIn = document.getElementById('btnZoomIn');
   const btnZoomOut = document.getElementById('btnZoomOut');
@@ -2225,14 +2230,15 @@
     await dbPut(song);
   }
 
-  function bindHold(button, sign) {
+  // unit: 1タップあたりの増減幅(通常の±ボタンは1、±5ボタンはまとめて5ずつ動かす用)
+  function bindHold(button, sign, unit) {
     const start = (e) => {
       e.preventDefault();
-      changeSpeed(sign * SPEED_STEP);
+      changeSpeed(sign * unit);
       let step = 1;
       holdTimeout = setTimeout(() => {
         holdInterval = setInterval(() => {
-          changeSpeed(sign * SPEED_STEP * step);
+          changeSpeed(sign * unit * step);
           step += 1; // 長押しで刻み加速
         }, 120);
       }, 500);
@@ -2246,8 +2252,10 @@
     button.addEventListener('pointerleave', stop);
     button.addEventListener('pointercancel', stop);
   }
-  bindHold(btnSpeedUp, +1);
-  bindHold(btnSpeedDown, -1);
+  bindHold(btnSpeedUp, +1, 1);
+  bindHold(btnSpeedDown, -1, 1);
+  bindHold(btnSpeedUp5, +1, 5);
+  bindHold(btnSpeedDown5, -1, 5);
 
   // ==================================================
   // ズーム(縦に長い/密度の高い譜面を拡大して読めるように。編集モードのみ)
