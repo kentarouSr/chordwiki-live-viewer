@@ -2153,17 +2153,22 @@
     await addImageMemoFromFile(file, x, y);
   });
 
-  // 段が複数あっても、どの段をタップしても「段内の相対位置」から音の高さを決める
-  // (常に末尾に追記されるため、タップした段そのものは無視して良い)。
-  function scoreYToStepAnySystem(y) {
-    const period = SCORE_SYSTEM_HEIGHT + SCORE_SYSTEM_GAP;
-    const rel = ((y - SCORE_TOP_MARGIN) % period + period) % period;
-    return scoreYToStep(SCORE_TOP_MARGIN + rel, scoreSystemBaseY(0));
+  // 新しい音符は常に末尾(＝現在最後の段)に追記される。段が複数あるとき、
+  // 既に確定した前の段や段と段の間の余白をタップしても反応しないようにする
+  // (どの段をタップしても常に「今の段」の相対位置として解釈していたv1は、
+  // スクロールで複数の段が画面に見えている時に別の段を誤タップしても普通に
+  // 音符が追加されてしまい、意図しない音高の音符が紛れ込むバグになっていた)。
+  function currentSystemTapBand() {
+    const layout = computeScoreLayout();
+    const baseY = scoreSystemBaseY(layout.systems.length - 1);
+    return { baseY, top: baseY - SCORE_SYSTEM_TOP_PAD - SCORE_STAFF_LINES_SPAN, bottom: baseY + SCORE_SYSTEM_BOTTOM_PAD };
   }
   scoreEditorCanvas.addEventListener('pointerdown', (e) => {
     const rect = scoreEditorCanvas.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    const step = scoreYToStepAnySystem(y);
+    const band = currentSystemTapBand();
+    if (y < band.top || y > band.bottom) return; // 今編集中の段の外(前の段や段間の余白)は無視
+    const step = scoreYToStep(y, band.baseY);
     const mods = consumeScoreModifiers();
     scoreElements.push({
       type: 'note', step, accidental: mods.accidental, duration: scoreSelectedDuration,
@@ -2277,6 +2282,14 @@
     ctx.lineWidth = 1.5;
 
     const { measures, displayAccidental, beamGroupOf, systems } = layout;
+
+    // 今タップすると音符が追加される段(常に最後の段)だけ薄く色を付け、
+    // ユーザーがどこをタップすればよいか一目で分かるようにする。
+    const activeSysIdx = systems.length - 1;
+    const activeBaseY = scoreSystemBaseY(activeSysIdx);
+    ctx.fillStyle = 'rgba(108, 204, 255, 0.12)';
+    ctx.fillRect(0, activeBaseY - SCORE_SYSTEM_TOP_PAD - SCORE_STAFF_LINES_SPAN, cssWidth, SCORE_SYSTEM_HEIGHT);
+    ctx.fillStyle = '#111';
 
     systems.forEach((measureIdxs, sysIdx) => {
       const baseY = scoreSystemBaseY(sysIdx);
