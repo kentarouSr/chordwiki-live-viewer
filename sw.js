@@ -5,7 +5,7 @@
 // オンライン時は常にネットワークを優先し(タイムアウト付き)、取得できたら
 // キャッシュも更新する。オフライン時やネットワークが遅い時だけキャッシュに
 // フォールバックすることで、機内モードでの起動性は維持する。
-const CACHE_NAME = 'cwlv-shell-v1';
+const CACHE_NAME = 'cwlv-shell-v2'; // v2: Bravuraフォント(vendor/bravura/)を追加
 const NETWORK_TIMEOUT_MS = 3000;
 
 const ASSET_LIST = [
@@ -15,6 +15,7 @@ const ASSET_LIST = [
   './manifest.json',
   './vendor/pdfjs/pdf.min.js',
   './vendor/pdfjs/pdf.worker.min.js',
+  './vendor/bravura/BravuraText.woff2',
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
