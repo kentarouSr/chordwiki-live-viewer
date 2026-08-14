@@ -368,6 +368,47 @@
   }
   #youtubeRewindSecLabel { font-size: 12px; color: #ccc; min-width: 34px; text-align: center; }
 
+  /* --- 楽譜エディタ(簡易・単音メロディー用) --- */
+  #scoreEditorOverlay {
+    position: fixed; inset: 0; z-index: 20; background: #181818;
+    display: flex; flex-direction: column;
+  }
+  #scoreEditorOverlay.hidden { display: none; }
+  #scoreEditorHeader {
+    display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+    padding-top: max(14px, env(safe-area-inset-top));
+  }
+  #scoreEditorHeader h1 { font-size: 16px; margin: 0; flex: 1; text-align: center; }
+  #scoreEditorHeader button {
+    font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #btnScoreDone { background: #6cf; color: #111; font-weight: bold; }
+  #scoreEditorCanvasWrap {
+    flex: 1; overflow-x: auto; overflow-y: hidden; background: #fff;
+    display: flex; align-items: center;
+  }
+  #scoreEditorCanvas { display: block; touch-action: none; }
+  #scoreEditorToolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .scoreEditorGroup {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 12px;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.09);
+  }
+  #scoreEditorToolbar button {
+    font-size: 14px; padding: 9px 12px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #scoreEditorToolbar button.active { background: #6cf; color: #111; font-weight: bold; }
+  #scoreChordInput {
+    font-size: 14px; padding: 9px 10px; border-radius: 8px; border: 1px solid #333;
+    background: #1c1c1c; color: #eee; width: 160px;
+  }
+  #scoreEditorHint { margin: 0 16px 10px; font-size: 12px; color: #999; }
+
   #toolbar {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px;
@@ -541,6 +582,7 @@
       <div class="toolbarGroup">
         <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
         <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
+        <button id="btnAddScoreMemo" class="memoEditOnly">+ 楽譜</button>
         <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
         <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
         <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
@@ -567,6 +609,39 @@
       </div>
     </div>
     <input id="memoImageInput" type="file" accept="image/*">
+
+    <div id="scoreEditorOverlay" class="hidden">
+      <div id="scoreEditorHeader">
+        <button id="btnScoreCancel">キャンセル</button>
+        <h1>楽譜作成</h1>
+        <button id="btnScoreDone">完了</button>
+      </div>
+      <div id="scoreEditorCanvasWrap">
+        <canvas id="scoreEditorCanvas"></canvas>
+      </div>
+      <div id="scoreEditorToolbar">
+        <div class="scoreEditorGroup">
+          <button class="scoreDurationBtn" data-duration="whole">全</button>
+          <button class="scoreDurationBtn" data-duration="half">2分</button>
+          <button class="scoreDurationBtn active" data-duration="quarter">4分</button>
+          <button class="scoreDurationBtn" data-duration="eighth">8分</button>
+          <button class="scoreDurationBtn" data-duration="sixteenth">16分</button>
+        </div>
+        <div class="scoreEditorGroup">
+          <button id="btnScoreDot">付点</button>
+          <button id="btnScoreTriplet">3連</button>
+          <button id="btnScoreSharp">&#9839;</button>
+          <button id="btnScoreFlat">&#9837;</button>
+          <button id="btnScoreRest">休符</button>
+        </div>
+        <div class="scoreEditorGroup">
+          <input id="scoreChordInput" type="text" placeholder="コード名(次の音符に付く)">
+          <button id="btnScoreUndo">&#8617; 直前を削除</button>
+          <button id="btnScoreClearAll">全消去</button>
+        </div>
+      </div>
+      <p id="scoreEditorHint">五線譜をタップして音の高さを入力してください。休符は「休符」ボタンで直接追加できます。</p>
+    </div>
   </div>
 
 </div>
@@ -706,6 +781,19 @@
   const btnMemoEdit = document.getElementById('btnMemoEdit');
   const btnAddTextMemo = document.getElementById('btnAddTextMemo');
   const btnAddImageMemo = document.getElementById('btnAddImageMemo');
+  const btnAddScoreMemo = document.getElementById('btnAddScoreMemo');
+  const scoreEditorOverlay = document.getElementById('scoreEditorOverlay');
+  const scoreEditorCanvas = document.getElementById('scoreEditorCanvas');
+  const btnScoreCancel = document.getElementById('btnScoreCancel');
+  const btnScoreDone = document.getElementById('btnScoreDone');
+  const btnScoreDot = document.getElementById('btnScoreDot');
+  const btnScoreTriplet = document.getElementById('btnScoreTriplet');
+  const btnScoreSharp = document.getElementById('btnScoreSharp');
+  const btnScoreFlat = document.getElementById('btnScoreFlat');
+  const btnScoreRest = document.getElementById('btnScoreRest');
+  const scoreChordInput = document.getElementById('scoreChordInput');
+  const btnScoreUndo = document.getElementById('btnScoreUndo');
+  const btnScoreClearAll = document.getElementById('btnScoreClearAll');
   const btnDrawPen = document.getElementById('btnDrawPen');
   const btnDrawHighlighter = document.getElementById('btnDrawHighlighter');
   const drawColorInput = document.getElementById('drawColorInput');
@@ -760,7 +848,7 @@
   let ytPlayer = null;          // YT.Playerインスタンス(パネルを開いた時だけ生成)
   let ytApiLoadPromise = null;
   let memoEditMode = false;
-  let pendingMemoType = null;   // 'text' | 'image' | null。配置待ちの種類
+  let pendingMemoType = null;   // 'text' | 'image' | 'score' | null。配置待ちの種類
   // 配置待ち状態をalert()で毎回案内するとタップ回数が増えて面倒なので、
   // 代わりに該当ボタンをハイライト+ラベル変更することで「配置待ち中」を示す。
   // ラベルを変えるのは、alert()を無くした結果「次に何をすればいいか」が
@@ -769,8 +857,10 @@
     pendingMemoType = type;
     btnAddTextMemo.classList.toggle('pending', type === 'text');
     btnAddImageMemo.classList.toggle('pending', type === 'image');
+    btnAddScoreMemo.classList.toggle('pending', type === 'score');
     btnAddTextMemo.textContent = type === 'text' ? '譜面をタップ' : '+ テキスト';
     btnAddImageMemo.textContent = type === 'image' ? '譜面をタップ' : '+ 画像';
+    btnAddScoreMemo.textContent = type === 'score' ? '譜面をタップ' : '+ 楽譜';
   }
   let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
   let drawMode = false;         // 手書き(ペン/蛍光ペン)モード中か
@@ -1725,6 +1815,8 @@
 
     if (type === 'text') {
       openTextMemoEditor(null, x, y);
+    } else if (type === 'score') {
+      openScoreEditor(x, y);
     } else {
       memoImageInput.dataset.pendingX = String(x);
       memoImageInput.dataset.pendingY = String(y);
@@ -1784,6 +1876,341 @@
     pendingMemoPlacement = null;
     if (!file) return;
     await addImageMemoFromFile(file, x, y);
+  });
+
+  // ==================================================
+  // 楽譜エディタ(簡易・単音メロディー用)
+  // ト音記号固定、音の高さは「E4(五線譜の一番下の線)を基準(staffStep=0)とした
+  // ダイアトニックの段数」で表現する。1段=線から隣の間(またはその逆)。
+  // 臨時記号(♯/♭)は段の位置には影響させず、記号だけ別途表示する(実際の楽譜と同じ)。
+  // v1のスコープは単音メロディー一本、和音・複数声部・キー入力(MIDI)は非対応。
+  // ==================================================
+  const SCORE_LETTER_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+  const SCORE_LINE_SPACING = 18; // 隣接する五線の間隔(px)
+  const SCORE_STEP_HEIGHT = SCORE_LINE_SPACING / 2; // 1段の高さ
+  const SCORE_NOTE_SPACING = 46; // 音符/休符1つあたりの横幅
+  const SCORE_LEFT_MARGIN = 56; // ト音記号のスペース
+  const SCORE_RIGHT_MARGIN = 30;
+  const SCORE_CANVAS_HEIGHT = 220;
+  const SCORE_STAFF_BOTTOM_Y = 150; // E4(一番下の線)のY座標
+  const SCORE_DURATION_LABEL = { whole: '全', half: '2分', quarter: '4分', eighth: '8分', sixteenth: '16分' };
+
+  function scoreStaffStepToLetterOctave(step) {
+    const E4_ABS = 7 * 4 + SCORE_LETTER_ORDER.indexOf('E');
+    const absIndex = step + E4_ABS;
+    const octave = Math.floor(absIndex / 7);
+    const letterIdx = ((absIndex % 7) + 7) % 7;
+    return { letter: SCORE_LETTER_ORDER[letterIdx], octave };
+  }
+  function scoreStepToY(step) { return SCORE_STAFF_BOTTOM_Y - step * SCORE_STEP_HEIGHT; }
+  function scoreYToStep(y) { return Math.round((SCORE_STAFF_BOTTOM_Y - y) / SCORE_STEP_HEIGHT); }
+  function scoreCanvasWidth() {
+    return Math.max(520, SCORE_LEFT_MARGIN + (scoreElements.length + 1) * SCORE_NOTE_SPACING + SCORE_RIGHT_MARGIN);
+  }
+
+  let scoreElements = []; // { type:'note', step, accidental, duration, dotted, triplet, tripletGroup, chord } | { type:'rest', ... }
+  let scorePlacementXY = null; // 完了時に画像メモとして置く先の相対座標({x,y})
+  let scoreSelectedDuration = 'quarter';
+  let scorePendingDot = false;
+  let scorePendingTripletCount = 0; // 3連符として残り何個入力すればグループが完成するか
+  let scoreTripletGroupSeq = 0;
+  let scorePendingAccidental = null; // 'sharp' | 'flat' | null
+
+  function openScoreEditor(x, y) {
+    scorePlacementXY = { x, y };
+    scoreElements = [];
+    scoreSelectedDuration = 'quarter';
+    scorePendingDot = false;
+    scorePendingTripletCount = 0;
+    scorePendingAccidental = null;
+    scoreChordInput.value = '';
+    updateScoreToolbarUI();
+    scoreEditorOverlay.classList.remove('hidden');
+    renderScoreCanvas();
+  }
+  function closeScoreEditor() {
+    scoreEditorOverlay.classList.add('hidden');
+    scorePlacementXY = null;
+  }
+
+  function updateScoreToolbarUI() {
+    document.querySelectorAll('.scoreDurationBtn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.duration === scoreSelectedDuration);
+    });
+    btnScoreDot.classList.toggle('active', scorePendingDot);
+    btnScoreTriplet.classList.toggle('active', scorePendingTripletCount > 0);
+    btnScoreSharp.classList.toggle('active', scorePendingAccidental === 'sharp');
+    btnScoreFlat.classList.toggle('active', scorePendingAccidental === 'flat');
+  }
+
+  document.querySelectorAll('.scoreDurationBtn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      scoreSelectedDuration = btn.dataset.duration;
+      updateScoreToolbarUI();
+    });
+  });
+  btnScoreDot.addEventListener('click', () => { scorePendingDot = !scorePendingDot; updateScoreToolbarUI(); });
+  btnScoreTriplet.addEventListener('click', () => {
+    scorePendingTripletCount = scorePendingTripletCount > 0 ? 0 : 3;
+    updateScoreToolbarUI();
+  });
+  btnScoreSharp.addEventListener('click', () => {
+    scorePendingAccidental = scorePendingAccidental === 'sharp' ? null : 'sharp';
+    updateScoreToolbarUI();
+  });
+  btnScoreFlat.addEventListener('click', () => {
+    scorePendingAccidental = scorePendingAccidental === 'flat' ? null : 'flat';
+    updateScoreToolbarUI();
+  });
+
+  // 音符/休符を1つ確定させる時に呼ぶ。付点・臨時記号・コード名は単発、3連符は
+  // 「あと何個」を数えて自動で3個ぶん適用してからリセットする。
+  function consumeScoreModifiers() {
+    const dotted = scorePendingDot;
+    const accidental = scorePendingAccidental;
+    let triplet = false, tripletGroup = null, tripletFirst = false;
+    if (scorePendingTripletCount > 0) {
+      triplet = true;
+      tripletGroup = scoreTripletGroupSeq;
+      tripletFirst = scorePendingTripletCount === 3; // グループの1個目だけ「3」ラベルを出す
+      scorePendingTripletCount -= 1;
+      if (scorePendingTripletCount === 0) scoreTripletGroupSeq += 1;
+    }
+    const chord = scoreChordInput.value.trim() || null;
+    scorePendingDot = false;
+    scorePendingAccidental = null;
+    scoreChordInput.value = '';
+    updateScoreToolbarUI();
+    return { dotted, accidental, triplet, tripletGroup, tripletFirst, chord };
+  }
+
+  btnScoreRest.addEventListener('click', () => {
+    const mods = consumeScoreModifiers();
+    scoreElements.push({
+      type: 'rest', duration: scoreSelectedDuration, dotted: mods.dotted,
+      triplet: mods.triplet, tripletGroup: mods.tripletGroup, tripletFirst: mods.tripletFirst,
+    });
+    renderScoreCanvas();
+  });
+  btnScoreUndo.addEventListener('click', () => {
+    scoreElements.pop();
+    renderScoreCanvas();
+  });
+  btnScoreClearAll.addEventListener('click', () => {
+    if (scoreElements.length > 0 && !confirm('全ての音符・休符を削除しますか？')) return;
+    scoreElements = [];
+    renderScoreCanvas();
+  });
+  btnScoreCancel.addEventListener('click', () => {
+    if (scoreElements.length > 0 && !confirm('作成中の楽譜を破棄しますか？')) return;
+    closeScoreEditor();
+  });
+  btnScoreDone.addEventListener('click', async () => {
+    if (scoreElements.length === 0) {
+      if (!confirm('音符が1つもありません。空のまま挿入しますか？')) return;
+    }
+    const { x, y } = scorePlacementXY;
+    const blob = await scoreCanvasToBlob();
+    closeScoreEditor();
+    const file = new File([blob], 'score.png', { type: 'image/png' });
+    await addImageMemoFromFile(file, x, y);
+  });
+
+  scoreEditorCanvas.addEventListener('pointerdown', (e) => {
+    const rect = scoreEditorCanvas.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const step = scoreYToStep(y);
+    const mods = consumeScoreModifiers();
+    scoreElements.push({
+      type: 'note', step, accidental: mods.accidental, duration: scoreSelectedDuration,
+      dotted: mods.dotted, triplet: mods.triplet, tripletGroup: mods.tripletGroup,
+      tripletFirst: mods.tripletFirst, chord: mods.chord,
+    });
+    renderScoreCanvas();
+  });
+
+  function scoreSetupCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssWidth = scoreCanvasWidth();
+    scoreEditorCanvas.width = Math.round(cssWidth * dpr);
+    scoreEditorCanvas.height = Math.round(SCORE_CANVAS_HEIGHT * dpr);
+    scoreEditorCanvas.style.width = cssWidth + 'px';
+    scoreEditorCanvas.style.height = SCORE_CANVAS_HEIGHT + 'px';
+    const ctx = scoreEditorCanvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, cssWidth };
+  }
+
+  // 五線・ト音記号(絵文字で簡易表示)・音符・休符・臨時記号・付点・3連符括弧・
+  // コード名を描画する。実際の彫刻譜のような美しさより、簡潔さと分かりやすさを優先。
+  function drawScore(ctx, cssWidth) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cssWidth, SCORE_CANVAS_HEIGHT);
+    ctx.strokeStyle = '#111';
+    ctx.fillStyle = '#111';
+    ctx.lineWidth = 1.5;
+
+    // 五線(E4,G4,B4,D5,F5 = step 0,2,4,6,8)
+    for (let s = 0; s <= 8; s += 2) {
+      const y = scoreStepToY(s);
+      ctx.beginPath();
+      ctx.moveTo(SCORE_LEFT_MARGIN - 14, y);
+      ctx.lineTo(cssWidth - SCORE_RIGHT_MARGIN, y);
+      ctx.stroke();
+    }
+    // ト音記号(専用フォント無しでも確実に出るよう絵文字で代用)
+    ctx.font = '32px sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🎼', 10, scoreStepToY(4));
+
+    let x = SCORE_LEFT_MARGIN + SCORE_NOTE_SPACING / 2;
+    for (const el of scoreElements) {
+      drawScoreElement(ctx, el, x);
+      x += SCORE_NOTE_SPACING;
+    }
+  }
+
+  function drawLedgerLines(ctx, step, x) {
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1.5;
+    const HALF_LEDGER = 12;
+    if (step > 8) {
+      for (let s = 10; s <= step; s += 2) {
+        const y = scoreStepToY(s);
+        ctx.beginPath(); ctx.moveTo(x - HALF_LEDGER, y); ctx.lineTo(x + HALF_LEDGER, y); ctx.stroke();
+      }
+    } else if (step < 0) {
+      for (let s = -2; s >= step; s -= 2) {
+        const y = scoreStepToY(s);
+        ctx.beginPath(); ctx.moveTo(x - HALF_LEDGER, y); ctx.lineTo(x + HALF_LEDGER, y); ctx.stroke();
+      }
+    }
+  }
+
+  function drawScoreElement(ctx, el, x) {
+    if (el.triplet && el.tripletFirst) {
+      // グループの1個目だけ「3」を表示する(1音ごとに出すと本物の連符記号と違って見えるため)
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('3', x + SCORE_NOTE_SPACING, scoreStepToY(9) - 4);
+      ctx.textAlign = 'left';
+    }
+    if (el.type === 'rest') {
+      drawScoreRest(ctx, el, x);
+      return;
+    }
+    const y = scoreStepToY(el.step);
+    drawLedgerLines(ctx, el.step, x);
+
+    // 臨時記号
+    if (el.accidental === 'sharp') {
+      ctx.font = '16px sans-serif';
+      ctx.fillText('♯', x - 16, y);
+    } else if (el.accidental === 'flat') {
+      ctx.font = '16px sans-serif';
+      ctx.fillText('♭', x - 16, y);
+    }
+
+    // コード名(符頭の上、五線の外側に表示)
+    if (el.chord) {
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(el.chord, x, scoreStepToY(10) - 4);
+      ctx.textAlign = 'left';
+    }
+
+    // 符頭(全音符・2分音符は白抜き、4分音符以下は塗りつぶし)
+    const headRx = 6, headRy = 4.5;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.25);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, headRx, headRy, 0, 0, Math.PI * 2);
+    if (el.duration === 'whole' || el.duration === 'half') {
+      ctx.stroke();
+    } else {
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 付点
+    if (el.dotted) {
+      ctx.beginPath();
+      ctx.arc(x + 10, y - 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 符幹・旗(全音符以外)。中央線(step4)より上の音は下向き、それ以外は上向き。
+    if (el.duration !== 'whole') {
+      const stemUp = el.step < 4;
+      const stemX = stemUp ? x + headRx - 1 : x - headRx + 1;
+      const stemLen = 34;
+      const stemEndY = stemUp ? y - stemLen : y + stemLen;
+      ctx.beginPath();
+      ctx.moveTo(stemX, y);
+      ctx.lineTo(stemX, stemEndY);
+      ctx.stroke();
+
+      const flagCount = el.duration === 'eighth' ? 1 : el.duration === 'sixteenth' ? 2 : 0;
+      for (let i = 0; i < flagCount; i++) {
+        const fy = stemEndY + (stemUp ? 1 : -1) * i * 7;
+        ctx.beginPath();
+        ctx.moveTo(stemX, fy);
+        if (stemUp) {
+          ctx.quadraticCurveTo(stemX + 10, fy + 6, stemX + 2, fy + 16);
+        } else {
+          ctx.quadraticCurveTo(stemX - 10, fy - 6, stemX - 2, fy - 16);
+        }
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 休符は本格的な専用グリフを持たないシンプル記号で代用し、種類は小さい数字ラベルで明示する。
+  function drawScoreRest(ctx, el, x) {
+    const midY = scoreStepToY(4);
+    ctx.fillStyle = '#111';
+    if (el.duration === 'whole') {
+      ctx.fillRect(x - 6, scoreStepToY(6) - 3, 12, 5);
+    } else if (el.duration === 'half') {
+      ctx.fillRect(x - 6, scoreStepToY(4), 12, 5);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(x - 3, midY - 14);
+      ctx.quadraticCurveTo(x + 6, midY - 6, x - 2, midY);
+      ctx.quadraticCurveTo(x - 8, midY + 6, x + 4, midY + 14);
+      ctx.stroke();
+      const flagCount = el.duration === 'eighth' ? 1 : el.duration === 'sixteenth' ? 2 : 0;
+      for (let i = 0; i < flagCount; i++) {
+        ctx.beginPath();
+        ctx.arc(x + 2, midY - 10 + i * 8, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    if (el.dotted) {
+      ctx.beginPath();
+      ctx.arc(x + 10, midY, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.font = '10px sans-serif';
+    ctx.fillText(SCORE_DURATION_LABEL[el.duration], x - 8, midY + 26);
+  }
+
+  function renderScoreCanvas() {
+    const { ctx, cssWidth } = scoreSetupCanvas();
+    drawScore(ctx, cssWidth);
+    // 入力した音符の位置までスクロール(横書きで右に追加されていくので追従)
+    scoreEditorCanvas.parentElement.scrollLeft = scoreEditorCanvas.parentElement.scrollWidth;
+  }
+
+  function scoreCanvasToBlob() {
+    // 画像メモとして貼るのは白背景の実際のcanvas内容そのもの(高DPIで既に描画済み)
+    return new Promise((resolve) => scoreEditorCanvas.toBlob((blob) => resolve(blob), 'image/png'));
+  }
+
+  btnAddScoreMemo.addEventListener('click', () => {
+    setDrawMode(false);
+    setPendingMemoType(pendingMemoType === 'score' ? null : 'score');
   });
 
   // 誤操作対策は演奏モード/編集モード(アプリ全体の切り替え、曲一覧で選ぶ)側で
