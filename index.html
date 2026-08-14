@@ -1888,12 +1888,17 @@
   const SCORE_LETTER_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
   const SCORE_LINE_SPACING = 18; // 隣接する五線の間隔(px)
   const SCORE_STEP_HEIGHT = SCORE_LINE_SPACING / 2; // 1段の高さ
-  const SCORE_NOTE_SPACING = 46; // 音符/休符1つあたりの横幅
   const SCORE_LEFT_MARGIN = 56; // ト音記号のスペース
   const SCORE_RIGHT_MARGIN = 30;
   const SCORE_CANVAS_HEIGHT = 220;
   const SCORE_STAFF_BOTTOM_Y = 150; // E4(一番下の線)のY座標
   const SCORE_DURATION_LABEL = { whole: '全', half: '2分', quarter: '4分', eighth: '8分', sixteenth: '16分' };
+  // 実際の楽譜は音価に比例して横幅が変わる(全音符は8分音符よりずっと幅を取る)。
+  // 4分音符=1単位を基準に、他の音価を相対的な単位で表した簡易版(等比ではなく
+  // 見やすさ優先で少し詰め気味の値にしている)。
+  const SCORE_DURATION_WIDTH_UNITS = { whole: 4, half: 2.2, quarter: 1.3, eighth: 0.85, sixteenth: 0.6 };
+  const SCORE_BASE_NOTE_WIDTH = 36; // 4分音符(1単位)あたりの基本幅(px)
+  const SCORE_MIN_NOTE_WIDTH = 26; // 詰まりすぎて符頭や臨時記号が重ならないようにする下限
 
   function scoreStaffStepToLetterOctave(step) {
     const E4_ABS = 7 * 4 + SCORE_LETTER_ORDER.indexOf('E');
@@ -1904,8 +1909,15 @@
   }
   function scoreStepToY(step) { return SCORE_STAFF_BOTTOM_Y - step * SCORE_STEP_HEIGHT; }
   function scoreYToStep(y) { return Math.round((SCORE_STAFF_BOTTOM_Y - y) / SCORE_STEP_HEIGHT); }
+  function scoreElementWidth(el) {
+    let w = SCORE_BASE_NOTE_WIDTH * SCORE_DURATION_WIDTH_UNITS[el.duration];
+    if (el.dotted) w *= 1.3; // 付点は音価が1.5倍延びる分、見た目のスペースも広げる
+    return Math.max(SCORE_MIN_NOTE_WIDTH, w);
+  }
   function scoreCanvasWidth() {
-    return Math.max(520, SCORE_LEFT_MARGIN + (scoreElements.length + 1) * SCORE_NOTE_SPACING + SCORE_RIGHT_MARGIN);
+    let total = SCORE_LEFT_MARGIN + 20;
+    for (const el of scoreElements) total += scoreElementWidth(el);
+    return Math.max(520, total + SCORE_RIGHT_MARGIN);
   }
 
   let scoreElements = []; // { type:'note', step, accidental, duration, dotted, triplet, tripletGroup, chord } | { type:'rest', ... }
@@ -2063,11 +2075,85 @@
     ctx.textBaseline = 'middle';
     ctx.fillText('🎼', 10, scoreStepToY(4));
 
-    let x = SCORE_LEFT_MARGIN + SCORE_NOTE_SPACING / 2;
+    // 音価に比例した幅で各要素のX座標を先に確定させる
+    const xs = [];
+    let x = SCORE_LEFT_MARGIN + 20;
     for (const el of scoreElements) {
-      drawScoreElement(ctx, el, x);
-      x += SCORE_NOTE_SPACING;
+      const w = scoreElementWidth(el);
+      xs.push(x + w / 2);
+      x += w;
     }
+
+    // 連続する同じ音価(8分/16分)の音符は連桁でまとめ、対象は個別の旗を描かない
+    const beamGroupOf = computeBeamGroups(scoreElements);
+    const beamedIndices = new Set();
+    let gi = 0;
+    while (gi < scoreElements.length) {
+      if (beamGroupOf[gi] === null) { gi++; continue; }
+      let gj = gi + 1;
+      while (gj < scoreElements.length && beamGroupOf[gj] === beamGroupOf[gi]) gj++;
+      drawBeamGroup(ctx, scoreElements.slice(gi, gj), xs.slice(gi, gj));
+      for (let k = gi; k < gj; k++) beamedIndices.add(k);
+      gi = gj;
+    }
+
+    for (let i = 0; i < scoreElements.length; i++) {
+      drawScoreElement(ctx, scoreElements[i], xs[i], beamedIndices.has(i));
+    }
+  }
+
+  // 連続する「音符・休符ではない・音価が8分/16分で揃っている」区間を連桁グループとして
+  // 検出する。実際の拍節(何拍目か)は見ておらず、あくまで連続した同音価のみを対象にした
+  // 簡易版(小節線・拍子は今のところ無いため)。休符や音価の変化で自動的に区切られる。
+  function computeBeamGroups(elements) {
+    const groupOf = new Array(elements.length).fill(null);
+    let i = 0, seq = 0;
+    while (i < elements.length) {
+      const el = elements[i];
+      if (el.type === 'note' && (el.duration === 'eighth' || el.duration === 'sixteenth')) {
+        let j = i + 1;
+        while (j < elements.length && elements[j].type === 'note' && elements[j].duration === el.duration) j++;
+        if (j - i >= 2) {
+          for (let k = i; k < j; k++) groupOf[k] = seq;
+          seq++;
+        }
+        i = j;
+      } else {
+        i++;
+      }
+    }
+    return groupOf;
+  }
+
+  // 連桁でまとめる音符群の符幹+連桁本体をまとめて描画する。符幹の高さを全員揃えた
+  // フラットな連桁にする簡易版(本来は音の高さに合わせて斜めにするのが一般的)。
+  function drawBeamGroup(ctx, elements, xs) {
+    const upCount = elements.filter((e) => e.step < 4).length;
+    const stemUp = upCount >= elements.length / 2;
+    const STEM_LEN = 34;
+    const headRx = 6;
+    const ys = elements.map((e) => scoreStepToY(e.step));
+    const stemEndY = stemUp ? Math.min(...ys) - STEM_LEN : Math.max(...ys) + STEM_LEN;
+    const stemXs = xs.map((x) => (stemUp ? x + headRx - 1 : x - headRx + 1));
+
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < elements.length; i++) {
+      ctx.beginPath();
+      ctx.moveTo(stemXs[i], ys[i]);
+      ctx.lineTo(stemXs[i], stemEndY);
+      ctx.stroke();
+    }
+    const beamCount = elements[0].duration === 'sixteenth' ? 2 : 1;
+    ctx.lineWidth = 4;
+    for (let b = 0; b < beamCount; b++) {
+      const yOff = (stemUp ? 1 : -1) * b * 6;
+      ctx.beginPath();
+      ctx.moveTo(stemXs[0], stemEndY + yOff);
+      ctx.lineTo(stemXs[stemXs.length - 1], stemEndY + yOff);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1.5;
   }
 
   function drawLedgerLines(ctx, step, x) {
@@ -2087,12 +2173,12 @@
     }
   }
 
-  function drawScoreElement(ctx, el, x) {
+  function drawScoreElement(ctx, el, x, beamed) {
     if (el.triplet && el.tripletFirst) {
       // グループの1個目だけ「3」を表示する(1音ごとに出すと本物の連符記号と違って見えるため)
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('3', x + SCORE_NOTE_SPACING, scoreStepToY(9) - 4);
+      ctx.fillText('3', x + 14, scoreStepToY(9) - 4);
       ctx.textAlign = 'left';
     }
     if (el.type === 'rest') {
@@ -2140,8 +2226,9 @@
       ctx.fill();
     }
 
-    // 符幹・旗(全音符以外)。中央線(step4)より上の音は下向き、それ以外は上向き。
-    if (el.duration !== 'whole') {
+    // 符幹・旗(全音符以外、かつ連桁でまとめて描画済みの音符は個別には描かない)。
+    // 中央線(step4)より上の音は下向き、それ以外は上向き。
+    if (el.duration !== 'whole' && !beamed) {
       const stemUp = el.step < 4;
       const stemX = stemUp ? x + headRx - 1 : x - headRx + 1;
       const stemLen = 34;
@@ -2171,9 +2258,11 @@
     const midY = scoreStepToY(4);
     ctx.fillStyle = '#111';
     if (el.duration === 'whole') {
-      ctx.fillRect(x - 6, scoreStepToY(6) - 3, 12, 5);
+      // 全休符: 第4線(D5)からぶら下がる
+      ctx.fillRect(x - 6, scoreStepToY(6), 12, 5);
     } else if (el.duration === 'half') {
-      ctx.fillRect(x - 6, scoreStepToY(4), 12, 5);
+      // 2分休符: 第3線(B4、中央線)の上に乗る
+      ctx.fillRect(x - 6, scoreStepToY(4) - 5, 12, 5);
     } else {
       ctx.beginPath();
       ctx.moveTo(x - 3, midY - 14);
