@@ -1927,7 +1927,16 @@
   function scoreGlyph(name) { return String.fromCodePoint(SCORE_GLYPH_CODE[name]); }
   const SCORE_FONT_PX = SCORE_LINE_SPACING * 4; // SMuFLフォントは4スペース=1emで設計されている
   function scoreSetFont(ctx, scale) { ctx.font = Math.round(SCORE_FONT_PX * (scale || 1)) + 'px "Bravura Text", serif'; }
-  const SCORE_NOTEHEAD_HALF_WIDTH = SCORE_LINE_SPACING * 0.52; // 符幹の接続位置の目安
+  // 符頭の描画原点・符幹の接続位置は、Bravuraの公式メタデータ(redist/Bravura.json の
+  // glyphsWithAnchors)にある実際のアンカー座標(スタッフスペース単位)から算出した値。
+  // noteheadBlack/Half: cutOutNW=[0.208,0.3]/[0.204,0.296]・cutOutSE=[0.94,-0.296]/[0.98,-0.3]
+  // (見た目の重心 ≒ 中間値) / stemUpSE=[1.18,0.168]・stemDownNW=[0.0,-0.168](符幹接続点)。
+  // 目分量の値(旧SCORE_NOTEHEAD_HALF_WIDTH=0.52固定)だと符幹と符頭の間に隙間ができて
+  // いたため、実データに基づく非対称なオフセットに修正した(2026-08-15)。
+  const SCORE_NOTEHEAD_CENTER = SCORE_LINE_SPACING * 0.58; // 4分・2分符頭の描画原点からの重心オフセット
+  const SCORE_NOTEHEAD_WHOLE_CENTER = SCORE_LINE_SPACING * 0.85; // 全音符符頭は横に広く重心も右寄り
+  const SCORE_STEM_ATTACH_UP = SCORE_LINE_SPACING * 0.60; // 符頭の重心から符幹接続点まで(上向き=右)
+  const SCORE_STEM_ATTACH_DOWN = SCORE_LINE_SPACING * 0.58; // 同(下向き=左。符号は呼び出し側で反転)
   // 標準的な記譜法の寸法比率(SMuFL engravingDefaults・一般的な慣習)。スタッフ
   // スペース(SCORE_LINE_SPACING)を基準単位にしている。
   const SCORE_STEM_LEN = SCORE_LINE_SPACING * 3.5; // 符幹の長さ(標準比率)
@@ -2524,8 +2533,8 @@
     const bulge = offset * 1.6;
     ctx.lineWidth = SCORE_LINE_SPACING * 0.1;
     ctx.beginPath();
-    ctx.moveTo(x1 + SCORE_NOTEHEAD_HALF_WIDTH * 0.6, y0);
-    ctx.quadraticCurveTo((x1 + x2) / 2, y0 + bulge, x2 - SCORE_NOTEHEAD_HALF_WIDTH * 0.6, y0);
+    ctx.moveTo(x1 + SCORE_NOTEHEAD_CENTER * 0.6, y0);
+    ctx.quadraticCurveTo((x1 + x2) / 2, y0 + bulge, x2 - SCORE_NOTEHEAD_CENTER * 0.6, y0);
     ctx.stroke();
   }
 
@@ -2575,7 +2584,7 @@
     const ys = group.map((e) => scoreStepToY(e.step, baseY));
     const upCount = group.filter((e) => e.step < 4).length;
     const stemUp = upCount >= group.length / 2;
-    const headOffset = stemUp ? SCORE_NOTEHEAD_HALF_WIDTH : -SCORE_NOTEHEAD_HALF_WIDTH;
+    const headOffset = stemUp ? SCORE_STEM_ATTACH_UP : -SCORE_STEM_ATTACH_DOWN;
     const stemXs = xs.map((x) => x + headOffset);
 
     const flatY = stemUp ? Math.min(...ys) - SCORE_STEM_LEN : Math.max(...ys) + SCORE_STEM_LEN;
@@ -2690,7 +2699,8 @@
     scoreSetFont(ctx);
     ctx.textBaseline = 'middle';
     const headGlyph = el.duration === 'whole' ? 'noteheadWhole' : el.duration === 'half' ? 'noteheadHalf' : 'noteheadBlack';
-    ctx.fillText(scoreGlyph(headGlyph), x - SCORE_NOTEHEAD_HALF_WIDTH, y);
+    const headCenter = el.duration === 'whole' ? SCORE_NOTEHEAD_WHOLE_CENTER : SCORE_NOTEHEAD_CENTER;
+    ctx.fillText(scoreGlyph(headGlyph), x - headCenter, y);
     ctx.textBaseline = 'alphabetic';
 
     // 付点(タイで繋がれた音符には付けない方が自然な場合もあるが、入力どおりに表示する)
@@ -2704,7 +2714,7 @@
     // 中央線(step4)より上の音は下向き、それ以外は上向き。
     if (el.duration !== 'whole' && !beamed) {
       const stemUp = el.step < 4;
-      const stemX = x + (stemUp ? SCORE_NOTEHEAD_HALF_WIDTH : -SCORE_NOTEHEAD_HALF_WIDTH);
+      const stemX = x + (stemUp ? SCORE_STEM_ATTACH_UP : -SCORE_STEM_ATTACH_DOWN);
       const stemEndY = stemUp ? y - SCORE_STEM_LEN : y + SCORE_STEM_LEN;
       ctx.lineWidth = SCORE_LINE_SPACING * 0.1;
       ctx.beginPath();
