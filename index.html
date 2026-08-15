@@ -12,6 +12,13 @@
 <meta name="apple-mobile-web-app-title" content="ChordWiki Live">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* iPadなど横幅に余裕がある端末では気づかなかったが、iPhoneの狭い画面幅では
+     flexコンテナ内のボタンがデフォルトのflex-shrinkで押し縮められ、ラベルの
+     日本語が1文字ずつ縦に折り返されて縦長のボタンになる不具合があった。
+     ボタンは基本的に中の文言を折り返したくないので、ここで一括してnowrap化し、
+     入りきらない場合は(既にflex-wrap: wrapが設定されている各グループ単位で)
+     ボタンごと次の行に折り返させる。 */
+  button { white-space: nowrap; flex-shrink: 0; }
   html, body {
     margin: 0; padding: 0; height: 100%; overflow: hidden;
     background: #111; color: #eee; font-family: system-ui, sans-serif;
@@ -27,16 +34,16 @@
   }
   #songListScreen.hidden { display: none; }
   #songListHeader {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
     margin-bottom: 16px;
   }
   #songListHeader h1 { font-size: 18px; margin: 0; margin-right: auto; }
   #songListHeader { gap: 8px; }
-  #btnGoSetlists, #btnAppMode {
+  #btnGoSetlists, #btnAppMode, #btnGoTodos {
     font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer;
   }
-  #btnGoSetlists:active, #btnAppMode:active { background: #444; }
+  #btnGoSetlists:active, #btnAppMode:active, #btnGoTodos:active { background: #444; }
   #btnAppMode.mode-perform { background: #6cf; color: #111; font-weight: bold; }
   #btnAddSong {
     font-size: 15px; padding: 10px 16px; border-radius: 8px; border: none;
@@ -588,6 +595,7 @@
         <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
         <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
         <button id="btnAddScoreMemo" class="memoEditOnly">+ 楽譜</button>
+        <button id="btnMemoCalibrate" class="memoEditOnly">&#128207; この見た目を基準にする</button>
         <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
         <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
         <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
@@ -689,12 +697,14 @@
   const MEMO_TEXT_DEFAULT_FONT_SIZE = 13;
   const MEMO_TEXT_MIN_FONT_SIZE = 10;
   const MEMO_TEXT_MAX_FONT_SIZE = 48;
-  // メモのwidth/fontSizeはこのコンテンツ幅(iPad想定)を基準に保存する。
-  // 実際の描画時はcontentWidthCss()との比率でスケールするので、画面の狭いスマホで
-  // 開いてもメモがコンテンツに対して同じ相対サイズに見える(位置は既にx/yを
-  // コンテンツ幅の割合で持っているのでスケール問題がなかったが、サイズは
-  // pxの生値のままだったため、狭い画面ほどメモが相対的に巨大化して重なっていた)。
-  const MEMO_REFERENCE_CONTENT_WIDTH = 800;
+  // メモのwidth/fontSizeは「memo.baseWidthに保存されているcontentWidthCss()の値」を
+  // 基準として保存し、実際の描画時は今のcontentWidthCss()との比率でスケールする
+  // (位置x/yは元々コンテンツ幅の割合で持っていたのでスケール問題がなかったが、
+  // サイズはpxの生値のままだったため、狭い画面ほどメモが相対的に巨大化して
+  // 重なっていた)。baseWidthが無い(=まだ一度もこの仕組みで保存されていない)
+  // 古いメモはscale=1として扱い、勝手にサイズを変えない(端末ごとに"正しい"基準
+  // 幅を決め打ちで推測するのは不可能なため、ユーザーが「この見た目を基準にする」
+  // ボタンを押した端末での見た目をそのまま基準として焼き込む方式にした)。
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
@@ -798,6 +808,7 @@
   const btnAddTextMemo = document.getElementById('btnAddTextMemo');
   const btnAddImageMemo = document.getElementById('btnAddImageMemo');
   const btnAddScoreMemo = document.getElementById('btnAddScoreMemo');
+  const btnMemoCalibrate = document.getElementById('btnMemoCalibrate');
   const scoreEditorOverlay = document.getElementById('scoreEditorOverlay');
   const scoreEditorCanvas = document.getElementById('scoreEditorCanvas');
   const btnScoreCancel = document.getElementById('btnScoreCancel');
@@ -1442,7 +1453,6 @@
     memoLayerEl.style.height = contentHeight + 'px';
     strokeLayerEl.style.height = contentHeight + 'px';
     const cssWidth = contentWidthCss();
-    const memoScale = cssWidth / MEMO_REFERENCE_CONTENT_WIDTH;
     let needsRepair = false;
     for (const memo of currentMemos) {
       if (memo.type === 'stroke') {
@@ -1459,6 +1469,10 @@
         memo.width = undefined;
         needsRepair = true;
       }
+
+      // baseWidthが無い(=端末サイズ基準がまだ決まっていない)メモはscale=1で
+      // 従来通り生の値を描画する(推測で勝手に大きさを変えない)。
+      const memoScale = memo.baseWidth ? cssWidth / memo.baseWidth : 1;
 
       const el = document.createElement('div');
       el.className = memo.type === 'text' ? 'memo memo-text' : 'memo memo-image';
@@ -1481,7 +1495,7 @@
         } else {
           el.style.maxWidth = Math.round(clamp(600 * memoScale, 120, 600)) + 'px';
         }
-        el.appendChild(makeResizeHandle(memo, el, 120, 600, MEMO_TEXT_DEFAULT_FONT_SIZE, memoScale));
+        el.appendChild(makeResizeHandle(memo, el, 120, 600, MEMO_TEXT_DEFAULT_FONT_SIZE, cssWidth));
       } else {
         const img = document.createElement('img');
         const url = URL.createObjectURL(new Blob([memo.data], { type: memo.mimeType }));
@@ -1489,7 +1503,7 @@
         img.src = url;
         img.style.width = Math.round(clamp((memo.width || 160) * memoScale, 40, 600)) + 'px';
         el.appendChild(img);
-        el.appendChild(makeResizeHandle(memo, img, 40, 600, null, memoScale));
+        el.appendChild(makeResizeHandle(memo, img, 40, 600, null, cssWidth));
       }
 
       const delBtn = document.createElement('button');
@@ -1619,10 +1633,11 @@
 
   // baseFontSizeを渡した場合(テキストメモ)は、幅の変化に比例して文字サイズも
   // 一緒に拡大/縮小する(画像メモの場合は渡さないので対象外)。
-  // scaleは現在の端末での表示スケール(contentWidthCss()/MEMO_REFERENCE_CONTENT_WIDTH)。
-  // memo.width/fontSizeは端末非依存の基準サイズで保存するので、ドラッグ中の見た目(画面px)と
-  // 保存値の間でscale分の変換をここで行う。
-  function makeResizeHandle(memo, targetEl, minWidth, maxWidth, baseFontSize, scale) {
+  // cssWidthは今のこの端末のcontentWidthCss()。ドラッグ操作は「今この端末でどう
+  // 見えているか」がそのまま基準になるので、ドラッグ終了時にmemo.baseWidthを
+  // このcssWidthで上書きし(=この端末を新しい基準として焼き直す)、width/fontSizeは
+  // 画面pxの生値をそのまま保存する(スケール換算は不要)。
+  function makeResizeHandle(memo, targetEl, minWidth, maxWidth, baseFontSize, cssWidth) {
     const handle = document.createElement('div');
     handle.className = 'memo-resize-handle';
     handle.addEventListener('pointerdown', (e) => {
@@ -1631,6 +1646,7 @@
       e.preventDefault();
       handle.setPointerCapture(e.pointerId);
       const startClientX = e.clientX;
+      const scale = memo.baseWidth ? cssWidth / memo.baseWidth : 1;
       const startWidth = (memo.width != null ? memo.width * scale : null)
         || targetEl.getBoundingClientRect().width || minWidth;
 
@@ -1650,8 +1666,9 @@
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onUp);
         handle.removeEventListener('pointercancel', onUp);
-        memo.width = parseFloat(targetEl.style.width) / scale;
-        if (baseFontSize) memo.fontSize = parseFloat(targetEl.style.fontSize) / scale;
+        memo.width = parseFloat(targetEl.style.width);
+        if (baseFontSize) memo.fontSize = parseFloat(targetEl.style.fontSize);
+        memo.baseWidth = cssWidth;
         memo.updatedAt = Date.now();
         await saveCurrentMemos();
       };
@@ -1776,7 +1793,7 @@
   function openTextMemoEditor(memo, x, y, hideEl) {
     if (hideEl) hideEl.style.visibility = 'hidden';
     const cssWidth = contentWidthCss();
-    const memoScale = cssWidth / MEMO_REFERENCE_CONTENT_WIDTH;
+    const memoScale = (memo && memo.baseWidth) ? cssWidth / memo.baseWidth : 1;
     const ta = document.createElement('textarea');
     ta.className = 'memo memo-text-editor';
     ta.rows = 1;
@@ -1820,7 +1837,11 @@
         renderMemos();
       } else {
         // 新規メモもwidthを指定しない=内容に応じた自動幅(CSSのmax-width)に任せる。
-        await addMemo({ id: crypto.randomUUID(), type: 'text', x, y, text, createdAt: Date.now(), updatedAt: Date.now() });
+        // baseWidthは今のこの端末のcssWidthを焼き込む(=作成時点の見た目が基準になる)。
+        await addMemo({
+          id: crypto.randomUUID(), type: 'text', x, y, text, baseWidth: cssWidth,
+          createdAt: Date.now(), updatedAt: Date.now(),
+        });
       }
     }
     function cancel() {
@@ -1868,7 +1889,7 @@
     const data = await file.arrayBuffer();
     await addMemo({
       id: crypto.randomUUID(), type: 'image', x, y,
-      data, mimeType: file.type || 'image/png', width: 160,
+      data, mimeType: file.type || 'image/png', width: 160, baseWidth: contentWidthCss(),
       createdAt: Date.now(), updatedAt: Date.now(),
     });
   }
@@ -2701,6 +2722,29 @@
   btnAddImageMemo.addEventListener('click', () => {
     setDrawMode(false);
     setPendingMemoType(pendingMemoType === 'image' ? null : 'image');
+  });
+  // 端末ごとにメモの相対サイズがバラつく問題への対処。位置(x/y)はコンテンツ幅に
+  // 対する割合で持っているので端末を選ばないが、大きさ(width/fontSize)は
+  // 「どのくらいのpx幅を基準に決めたか」(memo.baseWidth)が無いと他の端末で
+  // 正しく拡大縮小できない。古いメモやbaseWidthが無いメモは今の見た目のまま
+  // (scale=1)描画されるので、「今表示中の端末での見た目が正しい」と判断した時に
+  // このボタンを押すと、その端末のcontentWidthCss()を全メモのbaseWidthとして
+  // 焼き込み、以後は他の端末でもそれを基準に自動でスケールされるようになる。
+  btnMemoCalibrate.addEventListener('click', async () => {
+    if (!currentMemos.some((m) => m.type === 'text' || m.type === 'image')) {
+      alert('この曲にはメモがありません。');
+      return;
+    }
+    if (!confirm('今この端末で見えているメモの大きさを基準として保存します。\n他の端末ではこの端末に合わせて自動的に拡大/縮小されるようになります。\nよろしいですか?')) return;
+    const cssWidth = contentWidthCss();
+    for (const memo of currentMemos) {
+      if (memo.type !== 'text' && memo.type !== 'image') continue;
+      memo.baseWidth = cssWidth;
+      memo.updatedAt = Date.now();
+    }
+    await saveCurrentMemos();
+    renderMemos();
+    alert('この端末を基準にしました。');
   });
 
   // ==================================================
