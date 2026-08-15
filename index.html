@@ -1927,6 +1927,14 @@
   function scoreGlyph(name) { return String.fromCodePoint(SCORE_GLYPH_CODE[name]); }
   const SCORE_FONT_PX = SCORE_LINE_SPACING * 4; // SMuFLフォントは4スペース=1emで設計されている
   function scoreSetFont(ctx, scale) { ctx.font = Math.round(SCORE_FONT_PX * (scale || 1)) + 'px "Bravura Text", serif'; }
+  // Canvasの textBaseline='middle' はSMuFLグリフの見た目の重心を正確には中央に
+  // 揃えてくれない(フォント全体のascent/descentベースの中央であって、個々の
+  // グリフの実際のインクの中心ではないため)。実際にCanvasへ描画してピクセル
+  // スキャンで測定したところ、符頭(noteheadBlack)は約7.5px(フォントサイズ72pxの
+  // 時)上にずれることが分かったため、その分だけYを補正する。フォントサイズに
+  // 比例してスケールする(2026-08-15、レジャー線と符頭がズレる不具合の実測修正)。
+  const SCORE_GLYPH_Y_FIX_RATIO = 7.5 / SCORE_FONT_PX;
+  function scoreGlyphYFix(scale) { return SCORE_FONT_PX * (scale || 1) * SCORE_GLYPH_Y_FIX_RATIO; }
   // 符頭の描画原点・符幹の接続位置は、Bravuraの公式メタデータ(redist/Bravura.json の
   // glyphsWithAnchors)にある実際のアンカー座標(スタッフスペース単位)から算出した値。
   // noteheadBlack/Half: cutOutNW=[0.208,0.3]/[0.204,0.296]・cutOutSE=[0.94,-0.296]/[0.98,-0.3]
@@ -2545,8 +2553,9 @@
     const glyph = scoreGlyph(scoreKeyFifths > 0 ? 'accidentalSharp' : 'accidentalFlat');
     scoreSetFont(ctx, 0.85);
     ctx.textBaseline = 'middle';
+    const yFix = scoreGlyphYFix(0.85);
     for (let i = 0; i < n; i++) {
-      ctx.fillText(glyph, startX + i * SCORE_LINE_SPACING * 0.95, scoreStepToY(steps[i], baseY));
+      ctx.fillText(glyph, startX + i * SCORE_LINE_SPACING * 0.95, scoreStepToY(steps[i], baseY) + yFix);
     }
   }
 
@@ -2683,7 +2692,7 @@
       scoreSetFont(ctx, 0.8);
       ctx.textBaseline = 'middle';
       const glyphName = dispAcc === 'sharp' ? 'accidentalSharp' : dispAcc === 'flat' ? 'accidentalFlat' : 'accidentalNatural';
-      ctx.fillText(scoreGlyph(glyphName), x - SCORE_LINE_SPACING * 1.3, y);
+      ctx.fillText(scoreGlyph(glyphName), x - SCORE_LINE_SPACING * 1.3, y + scoreGlyphYFix(0.8));
     }
 
     // コード名(符頭の上、五線の外側に表示)
@@ -2700,7 +2709,7 @@
     ctx.textBaseline = 'middle';
     const headGlyph = el.duration === 'whole' ? 'noteheadWhole' : el.duration === 'half' ? 'noteheadHalf' : 'noteheadBlack';
     const headCenter = el.duration === 'whole' ? SCORE_NOTEHEAD_WHOLE_CENTER : SCORE_NOTEHEAD_CENTER;
-    ctx.fillText(scoreGlyph(headGlyph), x - headCenter, y);
+    ctx.fillText(scoreGlyph(headGlyph), x - headCenter, y + scoreGlyphYFix());
     ctx.textBaseline = 'alphabetic';
 
     // 付点(タイで繋がれた音符には付けない方が自然な場合もあるが、入力どおりに表示する)
@@ -2743,7 +2752,7 @@
     const duration = isFullMeasureRest ? 'whole' : el.duration;
     const glyphName = { whole: 'restWhole', half: 'restHalf', quarter: 'restQuarter', eighth: 'rest8th', sixteenth: 'rest16th' }[duration];
     const glyphY = { whole: 6, half: 5, quarter: 4, eighth: 4, sixteenth: 4 }[duration];
-    ctx.fillText(scoreGlyph(glyphName), x - SCORE_LINE_SPACING * 0.4, scoreStepToY(glyphY, baseY));
+    ctx.fillText(scoreGlyph(glyphName), x - SCORE_LINE_SPACING * 0.4, scoreStepToY(glyphY, baseY) + scoreGlyphYFix());
     ctx.textBaseline = 'alphabetic';
     if (el.dotted && !isFullMeasureRest) {
       ctx.beginPath();
