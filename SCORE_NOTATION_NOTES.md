@@ -16,6 +16,98 @@
 にまとめてある。実装をこのファイルの内容と食い違う形に変更する時は、まずそちらを
 確認すること。**
 
+## 【最重要】2026-08-15: 描画エンジンをVexFlow(記譜ライブラリ)へ全面移行
+
+Bravuraフォント直描画への移行後も、「加線音符の符幹延長」「臨時記号の横幅未考慮」
+「未完成の小節にも小節線が出る」等、記譜法の細かい不具合が次々見つかった。ユーザーが
+「記譜のルールをAIで実装するのむずそうだな。ネットで流用出来そうなものないか探して」
+と提案し、調査の結果 **[VexFlow](https://github.com/0xfe/vexflow)**(MITライセンス、
+2010年開始・16年の実績・週4万DL、`vendor/vexflow/`に同梱)へ全面移行した。
+
+**これ以降、このファイルの「◯◯を自前で描画する」「◯◯のバグを直した」系の記述の
+大半は歴史的経緯として残しているだけで、現在の実装には当てはまらない。** 現在の実装は
+下記の「現在のアーキテクチャ」を参照すること。
+
+### なぜVexFlowか
+
+- 連桁のグループ化・傾き、符幹の向きと長さ(加線での延長含む)、臨時記号の表示要否、
+  レジャー線、小節線、3連符ブラケット、タイの曲線 — このセッションで延々と手で
+  直し続けていた項目を**全部ライブラリ側が正しく処理する**
+- MITライセンスで無料・改変・同梱可。pdf.js(Apache 2.0)・Bravura単体(SIL OFL)と
+  同じ「vendor/に固定バージョンを同梱する」パターンがそのまま使え、
+  「完全オフライン動作必須」という要件も維持できる
+- 候補比較(abcjs/OpenSheetMusicDisplay/Verovio/alphaTab)の結果、VexFlowは
+  オブジェクトを組み立てるAPIで`scoreElements`からの変換が自然、Verovioは
+  WASM込み約7MBと重すぎる、Flat.io/Soundslice等はオンライン専用SaaSでオフライン
+  要件に反する、という判断だった
+
+### 現在のアーキテクチャ
+
+- `vendor/vexflow/vexflow.js`(約1.1MB、UMDビルド。プレーンな`<script>`タグ読み込みで
+  `window.VexFlow`が使える)を`loadVexFlow()`で遅延読み込みする(スコアエディタを
+  開くまでは読み込まない)。
+- VexFlow 5は内部でBravura(記譜フォント)+Academico(補助テキスト用フォント)を
+  必要とするが、CDNからの`loadFonts()`は使わずオフライン対応のため
+  `vendor/vexflow/fonts/`に自前でホスティングし、`@font-face`+`VexFlow.setFonts()`
+  (同期・fetchなし)で読み込む。フォント自体はどちらもSIL OFL 1.1
+  (`@vexflow-fonts/bravura`・`@vexflow-fonts/academico`パッケージから取得)。
+- **このアプリ側が引き続き自前で担当する部分**(VexFlowが自動でやってくれない):
+  - タップ入力→`scoreElements`(step・duration・accidental等)の蓄積は従来どおり
+  - 小節線をまたぐ音価の自動タイ分割(`buildScoreRenderQueue`、`scoreDecomposeToNotatable`)
+    はVexFlowの範囲外なので継続して自前で行う(VexFlowは「小節ごとに正しい音価の
+    音符を渡してもらう」ことを前提にしたAPIで、勝手にタイ分割はしてくれない)
+  - 実効臨時記号(調号+その小節内の直前の臨時記号を考慮した「実際に鳴っている音」)の
+    計算(`computeScoreLayout`内)。**表示するかどうか**(調号どおりなら省略、等)は
+    `VF.Accidental.applyAccidentals(voices, keyName)`が自動判定するので、こちらは
+    「正しい音を渡す」ことだけ考えればよい
+  - 複数段(システム)への折り返し(`scoreComputeSystems`)。VexFlowは1段の幅計算
+    (`Formatter.preCalculateMinTotalWidth`・`Stave.getNoteStartX`)はしてくれるが、
+    どこで折り返すかの判断はしない
+  - タップ入力のY座標→音高(step)変換。VexFlowが実際に描画した`Stave`の
+    `getYForLine()`/`getSpacingBetweenLines()`から逆算する(`currentSystemTapBand()`)
+- **VexFlowに完全に任せている部分**: 五線・ト音記号・調号・拍子記号・小節線・符頭・
+  休符・臨時記号の表示要否と位置・付点・符幹の向きと長さ・連桁のグループ化と傾き・
+  3連符のブラケット・タイの曲線・コード名注記(`VF.Annotation`)
+
+### 実装時にハマった不具合(2026-08-15)
+
+- **`ctx.fillStyle`の汚染でVexFlowの文字・符頭が透明に近い色で描かれる**: 「今タップ
+  すると音符が入る段」を示す薄い水色ハイライト(`ctx.fillStyle='rgba(108,204,255,0.12)'`)
+  を描いた後、リセットせずに`VF.CanvasContext`を作って渡していたため、VexFlowの
+  `fillText`ベースの描画(符頭・ト音記号・数字・注記等、フォントに依存する全て)が
+  この薄い色を継承してしまい、ほぼ見えない状態になっていた(符幹・連桁・タイ・
+  ブラケットのようなベクター線画だけは`strokeStyle`を使うため影響を受けず、結果的に
+  「符頭が消えて棒だけ残る」という分かりにくい壊れ方になった)。**教訓: Canvas 2D
+  contextの`fillStyle`/`strokeStyle`はグローバルな状態なので、外部ライブラリに
+  contextを渡す前に必ず既知の状態にリセットする。**
+  修正: ハイライト矩形を描いた直後に`ctx.fillStyle = '#000'`へ戻してから
+  `new VF.CanvasContext(ctx)`を作るようにした。
+- **Formatterインスタンスの使い回しで描画が二重に崩れる**: 段への折り返し幅を見積もる
+  段階で`new VF.Formatter().joinVoices([voice]).preCalculateMinTotalWidth([voice])`を
+  呼んだ後、同じFormatterインスタンスを実際の描画用`format()`にも使い回していたところ、
+  符頭・臨時記号・注記が二重に配置されたような崩れた見た目になった。
+  修正: 幅の見積もり専用のFormatterと、実際の描画用のFormatterを完全に分離した
+  (`drawScoreFromLayout`側で毎回`new VF.Formatter()`を作り直す)。
+- **音符が1つも無い(入力前・全消去直後)状態でタップが一切効かない**: 段への折り返し
+  ロジックが「小節が1つも無い時は空のシステム(`[]`)を1つ入れる」という形で五線の
+  存在自体は保証していたつもりだったが、実際の描画ループ(`measureIdxs.forEach`)は
+  小節数が0だと1回も実行されず、`Stave`オブジェクトが一切作られない
+  (`scoreLastStaves`に`null`が入る)ままだった。タップ処理は`currentSystemTapBand()`
+  が返す`Stave`を前提にしているため、空の状態では永久にタップが無視され、
+  最初の1音すら入力できないという致命的な不具合だった。ヘッドレスブラウザで実際に
+  タップをシミュレートして`computeScoreLayout().queue`が空のままなことに気づき発覚。
+  修正: 小節が0個の段では、音符無しの「空のStave」(ト音記号・調号・拍子記号だけ)を
+  明示的に作って`scoreLastStaves`に入れるようにした。
+- **VexFlowのAPIはバージョンで大きく変わる**: `StaveTie`のプロパティ名は
+  `first_note`/`last_note`(v3/v4系)ではなく`firstNote`/`lastNote`(v5、キャメルケース)。
+  幅の事前計算は`Formatter`の**静的メソッドではなくインスタンスメソッド**
+  (`new Formatter().joinVoices([voice]).preCalculateMinTotalWidth([voice])`)。
+  フォントは`VexFlow.loadFonts()`(CDN、非同期)と`VexFlow.setFonts()`
+  (既に`@font-face`で読み込み済みのフォント名を渡すだけ、同期)の2通りがある。
+  **教訓: ライブラリのAPIは記憶や一般的な思い込みに頼らず、実際にヘッドレスブラウザで
+  小さいコード片を動かして検証してから本実装に組み込む**(このセッションを通して
+  何度も出てきた教訓だが、外部ライブラリ導入時は特に重要だった)。
+
 ## スコープの前提
 
 - 単音メロディー一本のみ(和音進行やポリフォニーは非対応)。コードネームは

@@ -11,14 +11,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ChordWiki Live">
 <style>
-  /* 楽譜エディタの符頭・ト音記号・休符・臨時記号・旗はSMuFL準拠の記譜フォント
-     Bravura(SIL Open Font License、vendor/bravura/に同梱)で描画する。詳細は
-     SCORE_ENGRAVING_RULES.md参照。 */
-  @font-face {
-    font-family: 'Bravura Text';
-    src: url('./vendor/bravura/BravuraText.woff2') format('woff2');
-    font-display: swap;
-  }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0; height: 100%; overflow: hidden;
@@ -1906,74 +1898,24 @@
   // ダイアトニックの段数」で表現する。1段=線から隣の間(またはその逆)。
   // 拍子・調号を持ち、小節線の自動挿入・拍を跨がない連桁・調号に基づく臨時記号の
   // 省略(実際の記譜法どおり)・長い曲の複数段への自動改行に対応する。
+  // 描画は記譜ライブラリVexFlow(vendor/vexflow/、MITライセンス)に全面移行した
+  // (2026-08-15)。連桁・臨時記号の衝突回避・符幹の向きと長さ・タイ・レジャー線・
+  // 小節線・3連符ブラケットは全てVexFlowが自動で正しく処理する。このアプリ側の
+  // 役割は「タップ入力→VexFlowの音符オブジェクトへの変換」と「小節線をまたぐ
+  // 音価の自動タイ分割・複数段への折り返し」だけに絞られる。
   // 詳しい設計判断・既知の簡略化は SCORE_NOTATION_NOTES.md を参照。
   // ==================================================
   const SCORE_LETTER_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-  const SCORE_LINE_SPACING = 18; // 隣接する五線の間隔(px)=スタッフスペース1つぶん
-  const SCORE_STEP_HEIGHT = SCORE_LINE_SPACING / 2; // 1段の高さ
-  const SCORE_LEFT_MARGIN = 62; // ト音記号のスペース
-  const SCORE_RIGHT_MARGIN = 30;
-  // 符頭・ト音記号・休符・臨時記号・旗はSMuFL準拠の記譜フォントBravura(vendor/bravura/、
-  // SIL Open Font License)のグリフで描画する。コードポイントはW3C SMuFLの公式
-  // glyphnames.jsonで確認済み(詳細はSCORE_ENGRAVING_RULES.md参照)。
-  const SCORE_GLYPH_CODE = {
-    gClef: 0xE050,
-    noteheadWhole: 0xE0A2, noteheadHalf: 0xE0A3, noteheadBlack: 0xE0A4,
-    restWhole: 0xE4E3, restHalf: 0xE4E4, restQuarter: 0xE4E5, rest8th: 0xE4E6, rest16th: 0xE4E7,
-    flag8thUp: 0xE240, flag8thDown: 0xE241, flag16thUp: 0xE242, flag16thDown: 0xE243,
-    accidentalSharp: 0xE262, accidentalFlat: 0xE260, accidentalNatural: 0xE261,
-    augmentationDot: 0xE1E7,
-  };
-  function scoreGlyph(name) { return String.fromCodePoint(SCORE_GLYPH_CODE[name]); }
-  const SCORE_FONT_PX = SCORE_LINE_SPACING * 4; // SMuFLフォントは4スペース=1emで設計されている
-  function scoreSetFont(ctx, scale) { ctx.font = Math.round(SCORE_FONT_PX * (scale || 1)) + 'px "Bravura Text", serif'; }
-  // Canvasの textBaseline='middle' はSMuFLグリフの見た目の重心を正確には中央に
-  // 揃えてくれない(フォント全体のascent/descentベースの中央であって、個々の
-  // グリフの実際のインクの中心ではないため)。実際にCanvasへ描画してピクセル
-  // スキャンで測定したところ、符頭(noteheadBlack)は約7.5px(フォントサイズ72pxの
-  // 時)上にずれることが分かったため、その分だけYを補正する。フォントサイズに
-  // 比例してスケールする(2026-08-15、レジャー線と符頭がズレる不具合の実測修正)。
-  const SCORE_GLYPH_Y_FIX_RATIO = 7.5 / SCORE_FONT_PX;
-  function scoreGlyphYFix(scale) { return SCORE_FONT_PX * (scale || 1) * SCORE_GLYPH_Y_FIX_RATIO; }
-  // 符頭の描画原点・符幹の接続位置は、Bravuraの公式メタデータ(redist/Bravura.json の
-  // glyphsWithAnchors)にある実際のアンカー座標(スタッフスペース単位)から算出した値。
-  // noteheadBlack/Half: cutOutNW=[0.208,0.3]/[0.204,0.296]・cutOutSE=[0.94,-0.296]/[0.98,-0.3]
-  // (見た目の重心 ≒ 中間値)。
-  // 目分量の値(旧SCORE_NOTEHEAD_HALF_WIDTH=0.52固定)だと符幹と符頭の間に隙間ができて
-  // いたため、実データに基づくオフセットに修正した(2026-08-15)。
-  const SCORE_NOTEHEAD_CENTER = SCORE_LINE_SPACING * 0.58; // 4分・2分符頭の描画原点からの重心オフセット
-  const SCORE_NOTEHEAD_WHOLE_CENTER = SCORE_LINE_SPACING * 0.85; // 全音符符頭は横に広く重心も右寄り
-  // 符幹の接続点は、当初stemUpSE/stemDownNW(SMuFL上の公式アンカー)をそのまま
-  // 使っていたが、これは複数符頭が重なるクラスタ配置向けの余白込みの座標で、
-  // 単独の符頭に対しては見た目のインク端(cutOutNW/SE)より外側に位置し、
-  // 符幹と符頭の間に実測4px程度の隙間ができるバグがあった(上向き符幹側で発覚。
-  // pxスキャンで確認・2026-08-15)。cutOut座標(≒中心から約6.5px)を基準に、
-  // わずかに内側へ重ねてアンチエイリアスでも確実に接続するよう調整した値。
-  const SCORE_STEM_ATTACH_UP = SCORE_LINE_SPACING * 0.30; // 符頭の重心から符幹接続点まで(上向き=右)
-  const SCORE_STEM_ATTACH_DOWN = SCORE_LINE_SPACING * 0.30; // 同(下向き=左。符号は呼び出し側で反転)
-  // 符頭グリフはわずかに傾いており、アンカー(stemUpSE=[1.18,0.168]/
-  // stemDownNW=[0.0,-0.168])のY成分が示すとおり、符幹の接続点は符頭の
-  // 縦方向の重心そのものではなくわずかにズレている(上向き=右端はやや上、
-  // 下向き=左端はやや下)。SMuFL座標は上方向が正・Canvasは下方向が正なので
-  // 符号を反転して使う。横方向のオフセット(SCORE_STEM_ATTACH_UP/DOWN)と違い
-  // これは符頭の絶対描画位置(scoreGlyphYFixで補正済み)からの相対量なので、
-  // フォントの内部原点ズレの影響を受けずそのままスタッフスペース比で使える。
-  const SCORE_STEM_ATTACH_Y_OFFSET = SCORE_LINE_SPACING * 0.168;
-  // 標準的な記譜法の寸法比率(SMuFL engravingDefaults・一般的な慣習)。スタッフ
-  // スペース(SCORE_LINE_SPACING)を基準単位にしている。
-  const SCORE_STEM_LEN = SCORE_LINE_SPACING * 3.5; // 符幹の長さ(標準比率)
-  const SCORE_BEAM_THICKNESS = SCORE_LINE_SPACING * 0.5;
-  const SCORE_BEAM_LEVEL_GAP = SCORE_LINE_SPACING * 0.75; // 主連桁と副連桁の中心間隔
-  const SCORE_MAX_BEAM_SLANT = SCORE_LINE_SPACING * 1.1; // 連桁の傾きの上限(誇張しすぎない)
-  const SCORE_LEDGER_HALF_WIDTH = SCORE_LINE_SPACING * 0.72;
-  // 実際の楽譜は音価に比例して横幅が変わる(全音符は8分音符よりずっと幅を取る)。
-  // 4分音符=1単位を基準に、他の音価を相対的な単位で表した簡易版(等比ではなく
-  // 見やすさ優先で少し詰め気味の値にしている)。
-  const SCORE_DURATION_WIDTH_UNITS = { whole: 4, half: 2.2, quarter: 1.3, eighth: 0.85, sixteenth: 0.6 };
-  const SCORE_BASE_NOTE_WIDTH = 36; // 4分音符(1単位)あたりの基本幅(px)
-  const SCORE_MIN_NOTE_WIDTH = 30; // 詰まりすぎて符頭や臨時記号が重ならないようにする下限
+  const SCORE_LEFT_MARGIN = 10; // 段の左端(ト音記号の前の余白)
+  const SCORE_RIGHT_MARGIN = 20;
+  const SCORE_STAVE_LINE_SPACING = 12; // VexFlowの標準10pxよりやや広め(タップ精度のため)
+  const SCORE_TOP_MARGIN = 20;
+  const SCORE_SYSTEM_GAP = 40; // 段と段の間隔(音符が飛び出す余白込み)
+  const SCORE_BOTTOM_MARGIN = 20;
   // 拍子ごとの音価計算(全音符=1単位)。1小節の容量は beats/unit。
   const SCORE_DURATION_UNITS = { whole: 1, half: 0.5, quarter: 0.25, eighth: 0.125, sixteenth: 0.0625 };
+  // scoreElements/queueの'duration'文字列 → VexFlowの音価コード。
+  const SCORE_DURATION_TO_VEX = { whole: 'w', half: 'h', quarter: 'q', eighth: '8', sixteenth: '16' };
   // 小節線をまたぐ時のタイ分割で使う、記譜可能な音価の一覧(大きい順)。
   const SCORE_NOTATABLE = [
     { duration: 'whole', units: 1 }, { duration: 'half', units: 0.5 },
@@ -2006,36 +1948,31 @@
     { beats: 12, unit: 8, label: '12/8' },
   ];
   // 調号: 五度圏(fifths)。#系はF,C,G,D,A,E,Bの順に増える/♭系はB,E,A,D,G,C,Fの順に増える。
-  // 各文字にどの段位置(治音記号を描く場所)を割り当てるかは実際の記譜法の慣習で固定なので
-  // 計算式ではなくそのまま配列で持つ(F#5,C#5,G#5,D#5,A#4,E#5,B#4 / Bb4,Eb5,Ab4,Db5,Gb4,Cb5,Fb4)。
   const SCORE_SHARP_ORDER_LETTERS = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
   const SCORE_FLAT_ORDER_LETTERS = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
-  const SCORE_SHARP_STEPS = [8, 5, 9, 6, 3, 7, 4];
-  const SCORE_FLAT_STEPS = [4, 7, 3, 6, 2, 5, 1];
   const SCORE_KEY_OPTIONS = [
-    { fifths: 0, label: 'ハ長調(C) ♯♭なし' },
-    { fifths: 1, label: 'ト長調(G) ♯1' },
-    { fifths: 2, label: 'ニ長調(D) ♯2' },
-    { fifths: 3, label: 'イ長調(A) ♯3' },
-    { fifths: 4, label: 'ホ長調(E) ♯4' },
-    { fifths: 5, label: 'ロ長調(B) ♯5' },
-    { fifths: -1, label: 'ヘ長調(F) ♭1' },
-    { fifths: -2, label: '変ロ長調(B♭) ♭2' },
-    { fifths: -3, label: '変ホ長調(E♭) ♭3' },
-    { fifths: -4, label: '変イ長調(A♭) ♭4' },
-    { fifths: -5, label: '変ニ長調(D♭) ♭5' },
+    { fifths: 0, label: 'ハ長調(C) ♯♭なし', vexName: 'C' },
+    { fifths: 1, label: 'ト長調(G) ♯1', vexName: 'G' },
+    { fifths: 2, label: 'ニ長調(D) ♯2', vexName: 'D' },
+    { fifths: 3, label: 'イ長調(A) ♯3', vexName: 'A' },
+    { fifths: 4, label: 'ホ長調(E) ♯4', vexName: 'E' },
+    { fifths: 5, label: 'ロ長調(B) ♯5', vexName: 'B' },
+    { fifths: -1, label: 'ヘ長調(F) ♭1', vexName: 'F' },
+    { fifths: -2, label: '変ロ長調(B♭) ♭2', vexName: 'Bb' },
+    { fifths: -3, label: '変ホ長調(E♭) ♭3', vexName: 'Eb' },
+    { fifths: -4, label: '変イ長調(A♭) ♭4', vexName: 'Ab' },
+    { fifths: -5, label: '変ニ長調(D♭) ♭5', vexName: 'Db' },
   ];
-  // 段(五線1行)のレイアウト定数。段が複数になっても同じ高さで積み重ねる。
-  const SCORE_STAFF_LINES_SPAN = SCORE_LINE_SPACING * 4; // 五線(4間隔)の高さ
-  // 符幹の長さが標準比率(3.5スペース=63px)になった分、低い音の上向き符幹・
-  // 高い音の下向き符幹・連桁・3連符ブラケット・コード名が収まる余白を広めに取る。
-  const SCORE_SYSTEM_TOP_PAD = SCORE_STEM_LEN + 34; // 段の上側
-  const SCORE_SYSTEM_BOTTOM_PAD = SCORE_STEM_LEN + 26; // 段の下側
-  const SCORE_SYSTEM_GAP = 26; // 段と段の間隔
-  const SCORE_SYSTEM_HEIGHT = SCORE_SYSTEM_TOP_PAD + SCORE_STAFF_LINES_SPAN + SCORE_SYSTEM_BOTTOM_PAD;
-  const SCORE_TOP_MARGIN = 10;
-  const SCORE_BOTTOM_MARGIN = 10;
-  const SCORE_BARLINE_GAP = 18; // 小節線の前後を含めた小節間の余白
+  function scoreKeyOption() { return SCORE_KEY_OPTIONS.find((k) => k.fifths === scoreKeyFifths); }
+  // 調号(fifths)から「どの文字に♯/♭が付くか」のマップを作る(C→null=無変化)。
+  function scoreKeySigAlterationMap(fifths) {
+    const map = {};
+    SCORE_LETTER_ORDER.forEach((l) => { map[l] = null; });
+    const n = Math.abs(fifths);
+    const order = fifths > 0 ? SCORE_SHARP_ORDER_LETTERS : SCORE_FLAT_ORDER_LETTERS;
+    for (let i = 0; i < n; i++) map[order[i]] = fifths > 0 ? 'sharp' : 'flat';
+    return map;
+  }
 
   function scoreStaffStepToLetterOctave(step) {
     const E4_ABS = 7 * 4 + SCORE_LETTER_ORDER.indexOf('E');
@@ -2044,22 +1981,12 @@
     const letterIdx = ((absIndex % 7) + 7) % 7;
     return { letter: SCORE_LETTER_ORDER[letterIdx], octave };
   }
-  // 段(システム)ごとにY原点(baseY = E4のY座標)が異なる。baseYは呼び出し側が
-  // scoreSystemBaseY(段番号) で求めて渡す。
-  function scoreStepToY(step, baseY) { return baseY - step * SCORE_STEP_HEIGHT; }
-  function scoreYToStep(y, baseY) { return Math.round((baseY - y) / SCORE_STEP_HEIGHT); }
-  function scoreSystemBaseY(sysIdx) {
-    return SCORE_TOP_MARGIN + SCORE_SYSTEM_TOP_PAD + SCORE_STAFF_LINES_SPAN
-      + sysIdx * (SCORE_SYSTEM_HEIGHT + SCORE_SYSTEM_GAP);
-  }
-  function scoreCanvasHeightFor(systemCount) {
-    const n = Math.max(1, systemCount);
-    return SCORE_TOP_MARGIN + n * SCORE_SYSTEM_HEIGHT + (n - 1) * SCORE_SYSTEM_GAP + SCORE_BOTTOM_MARGIN;
-  }
-  function scoreElementWidth(el) {
-    let w = SCORE_BASE_NOTE_WIDTH * SCORE_DURATION_WIDTH_UNITS[el.duration];
-    if (el.dotted) w *= 1.3; // 付点は音価が1.5倍延びる分、見た目のスペースも広げる
-    return Math.max(SCORE_MIN_NOTE_WIDTH, w);
+  // 臨時記号'sharp'|'flat'|'natural'|null → VexFlowのkey文字列に使う接尾辞。
+  const SCORE_ACCIDENTAL_TO_VEX_SUFFIX = { sharp: '#', flat: 'b', natural: '', null: '' };
+  // step(+実効臨時記号)からVexFlowのkey文字列("f#/4"等、小文字)を作る。
+  function scoreStepToVexKey(step, effectiveAccidental) {
+    const { letter, octave } = scoreStaffStepToLetterOctave(step);
+    return letter.toLowerCase() + (SCORE_ACCIDENTAL_TO_VEX_SUFFIX[effectiveAccidental] || '') + '/' + octave;
   }
   function scoreElementDurationUnits(el) {
     let u = SCORE_DURATION_UNITS[el.duration];
@@ -2129,12 +2056,15 @@
     boundaries.push(capacity);
     return boundaries;
   }
-  function scoreKeySigWidth() {
-    const n = Math.abs(scoreKeyFifths);
-    return n === 0 ? 0 : 14 + n * 11;
-  }
-  function scoreSystemContentWidth() {
-    return Math.max(80, scoreSystemWidth - SCORE_LEFT_MARGIN - 20 - scoreKeySigWidth() - SCORE_RIGHT_MARGIN);
+  // 連桁のグループ化に使う「拍のまとまり」をVexFlowのFraction配列として返す
+  // (単純拍子は1拍ごと、複合拍子は付点4分ごと。上のscoreBeatBoundariesと同じ規則)。
+  function scoreVexBeamGroups(VF) {
+    const ts = scoreCurrentTimeSig();
+    const isCompound = ts.unit === 8 && ts.beats % 3 === 0;
+    if (isCompound) {
+      return Array(ts.beats / 3).fill(null).map(() => new VF.Fraction(3, 8));
+    }
+    return Array(ts.beats).fill(null).map(() => new VF.Fraction(1, ts.unit));
   }
 
   let scoreElements = []; // { type:'note', step, accidental, duration, dotted, triplet, tripletGroup, chord } | { type:'rest', ... }
@@ -2276,7 +2206,7 @@
       if (!confirm('音符が1つもありません。空のまま挿入しますか？')) return;
     }
     const { x, y } = scorePlacementXY;
-    renderScoreCanvas();
+    await renderScoreCanvas();
     const blob = await scoreCanvasToBlob();
     closeScoreEditor();
     const file = new File([blob], 'score.png', { type: 'image/png' });
@@ -2288,17 +2218,60 @@
   // (どの段をタップしても常に「今の段」の相対位置として解釈していたv1は、
   // スクロールで複数の段が画面に見えている時に別の段を誤タップしても普通に
   // 音符が追加されてしまい、意図しない音高の音符が紛れ込むバグになっていた)。
+  // 最後に描画した各段(システム)のVexFlow Staveオブジェクト。タップ入力の
+  // Y座標→音高変換や「今タップが効く段」の判定に使う。
+  let scoreLastStaves = [];
+
+  // VexFlow本体+自前ホスティングのフォント(Bravura/Academico、SIL OFL、
+  // vendor/vexflow/)を遅延読み込みする。CDNからのloadFonts()ではなく、
+  // @font-face+setFonts()で完全オフライン対応にしている。一度読み込めば
+  // 以降はキャッシュ済みPromiseを返すだけ。
+  let scoreVexFlowPromise = null;
+  function loadVexFlow() {
+    if (scoreVexFlowPromise) return scoreVexFlowPromise;
+    scoreVexFlowPromise = (async () => {
+      if (!document.getElementById('vexflowFontFaceStyle')) {
+        const style = document.createElement('style');
+        style.id = 'vexflowFontFaceStyle';
+        style.textContent = `
+          @font-face { font-family: "Bravura"; src: url(./vendor/vexflow/fonts/bravura.woff2) format("woff2"); font-display: block; }
+          @font-face { font-family: "Academico"; src: url(./vendor/vexflow/fonts/academico.woff2) format("woff2"); font-display: swap; }
+          @font-face { font-family: "Academico"; font-weight: bold; src: url(./vendor/vexflow/fonts/academico-bold.woff2) format("woff2"); font-display: swap; }
+        `;
+        document.head.appendChild(style);
+      }
+      if (!window.VexFlow) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = './vendor/vexflow/vexflow.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('VexFlowの読み込みに失敗しました'));
+          document.head.appendChild(s);
+        });
+      }
+      await document.fonts.ready;
+      window.VexFlow.setFonts('Bravura', 'Academico');
+      return window.VexFlow;
+    })();
+    return scoreVexFlowPromise;
+  }
+
   function currentSystemTapBand() {
-    const layout = computeScoreLayout();
-    const baseY = scoreSystemBaseY(layout.systems.length - 1);
-    return { baseY, top: baseY - SCORE_SYSTEM_TOP_PAD - SCORE_STAFF_LINES_SPAN, bottom: baseY + SCORE_SYSTEM_BOTTOM_PAD };
+    const stave = scoreLastStaves[scoreLastStaves.length - 1];
+    if (!stave) return { top: -1, bottom: -1, stave: null };
+    const spacing = stave.getSpacingBetweenLines();
+    // レジャー線・符幹・コード名がはみ出す余白を見込んで、五線本体より上下に広めに取る。
+    const pad = spacing * 7;
+    return { top: stave.getYForLine(0) - pad, bottom: stave.getYForLine(4) + pad, stave };
   }
   scoreEditorCanvas.addEventListener('pointerdown', (e) => {
+    const band = currentSystemTapBand();
+    if (!band.stave) return;
     const rect = scoreEditorCanvas.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    const band = currentSystemTapBand();
     if (y < band.top || y > band.bottom) return; // 今編集中の段の外(前の段や段間の余白)は無視
-    const step = scoreYToStep(y, band.baseY);
+    const spacing = band.stave.getSpacingBetweenLines();
+    const step = Math.round((band.stave.getYForLine(4) - y) / (spacing / 2));
     const mods = consumeScoreModifiers();
     scoreElements.push({
       type: 'note', step, accidental: mods.accidental, duration: scoreSelectedDuration,
@@ -2308,23 +2281,11 @@
     renderScoreCanvas();
   });
 
-  // 楽譜全体のレイアウトを一括計算する。以降の全ステップは scoreElements ではなく
-  // buildScoreRenderQueue() が返す「タイ分割済みの描画用の列(queue)」に対して行う。
-  // ①拍子から1小節の容量(全音符=1単位)を求め、queueの要素を貪欲に小節へ振り分ける
-  //   (タイ分割は既にqueue生成時に小節境界ぴったりで行われているので、ここでの
-  //   区切りは基本的にその境界と一致する)。
-  // ②小節ごとに、調号+その小節内で直前に出た臨時記号から、各音符に実際に描画
-  //   すべき臨時記号(不要ならnull)を決める(タイの続きは常に非表示。臨時記号は
-  //   小節線を越えて持ち越さない)。
-  // ③拍のまとまり(単純拍子は1拍ごと、複合拍子である6/8等は付点4分ごと)を
-  //   跨がない連桁グループを決める。音価が混ざっていても(8分+16分等)まとめて
-  //   1つのグループにし、実際の描画時に主連桁+副連桁(必要ならフック)に分ける。
-  // ④3連符のうち、全メンバーが1つの連桁グループに収まらなかったもの(4分音符が
-  //   混ざる等)は、連桁の代わりに角カッコ(ブラケット)で束ねる対象としてマークする。
-  // ⑤1小節がまるごと1つの休符だけで埋まっている場合、実際に選ばれた音価に関わらず
-  //   全休符の記号で描く対象としてマークする(実際の記譜法の慣習どおり)。
-  // ⑥各小節の必要幅を音価比例幅の合計から求め、段の内容幅に収まるだけ貪欲に
-  //   小節を段(システム)へ詰めていく(段が変わるたびト音記号・調号を描き直す)。
+  // scoreElementsから、タイ分割された描画用の列(queue)・小節分割・各音符の
+  // 実効臨時記号(調号+その小節内の直前の臨時記号を考慮した実際の音)・
+  // 1小節まるごと休みの特例を求める。連桁・臨時記号の表示要否・符幹の向きと長さ・
+  // レジャー線・小節線・3連符ブラケットはVexFlowが自動で正しく処理するので、
+  // ここでは「VexFlowに渡すデータの組み立て」だけを行う。
   function computeScoreLayout() {
     const capacity = scoreMeasureCapacity();
     const EPS = 1e-6;
@@ -2340,78 +2301,33 @@
       if (cur.length) measures.push(cur);
     }
 
-    // 調号自体(五線冒頭の♯♭)は drawKeySignature 側で描く。ここでの判定は
-    // 「音符ごとに臨時記号を描き直す必要があるか」だけ: 明示指定は必ず表示して以降
-    // この小節内で有効にする。タイの続き(tiedFromPrev)は常に非表示(同じ音が
-    // 伸びているだけなので臨時記号を描き直す必要がない)。無指定なら(調号どおり
-    // であれ、既にこの小節で臨時記号が出た段位置であれ)何も描かない。
-    const displayAccidental = new Array(queue.length).fill(null);
+    // 実効臨時記号: 明示指定はその小節内でその段位置(letter+octave)に効き続ける。
+    // 無指定なら、既にこの小節で出た臨時記号があればそれを継承し、無ければ調号どおり。
+    // タイの続き(tiedFromPrev)は直前の断片と同じ音が伸びているだけなので同じ値を継承する。
+    // 表示するかどうか(調号どおり・既出なら省略)はVexFlowのAccidental.applyAccidentals
+    // が自動判定するので、ここでは「実際に鳴っている音」を正しく渡すことだけ考える。
+    const keySigMap = scoreKeySigAlterationMap(scoreKeyFifths);
+    const effectiveAccidental = new Array(queue.length).fill(null);
     for (const measure of measures) {
-      const seenSteps = new Set();
+      const explicitState = new Map(); // "letter+octave" -> 直前に効いている臨時記号
       for (const i of measure) {
         const el = queue[i];
         if (el.type !== 'note') continue;
-        if (el.tiedFromPrev) { seenSteps.add(el.step); continue; }
+        const { letter, octave } = scoreStaffStepToLetterOctave(el.step);
+        const key = letter + octave;
+        if (el.tiedFromPrev) {
+          effectiveAccidental[i] = explicitState.has(key) ? explicitState.get(key) : keySigMap[letter];
+          continue;
+        }
         if (el.accidental) {
-          displayAccidental[i] = el.accidental;
-          seenSteps.add(el.step);
-        } else if (!seenSteps.has(el.step)) {
-          seenSteps.add(el.step);
-        }
-      }
-    }
-
-    const boundaries = scoreBeatBoundaries();
-    const beatBucketAt = (t) => {
-      for (let k = 0; k < boundaries.length - 1; k++) {
-        if (t < boundaries[k + 1] - EPS) return k;
-      }
-      return boundaries.length - 2;
-    };
-    // 連桁: 拍のまとまりを跨がない・8分/16分どうしが連続する区間をグループ化する
-    // (音価が混ざっていてもOK。休符が挟まると分断する)。
-    const beamGroupOf = new Array(queue.length).fill(null);
-    let beamSeq = 0;
-    for (const measure of measures) {
-      let elapsed = 0, i = 0;
-      while (i < measure.length) {
-        const idx = measure[i];
-        const el = queue[idx];
-        const dur = scoreElementDurationUnits(el);
-        if (el.type === 'note' && (el.duration === 'eighth' || el.duration === 'sixteenth')) {
-          const bucket = beatBucketAt(elapsed);
-          let j = i + 1, t = elapsed + dur;
-          while (j < measure.length) {
-            const nel = queue[measure[j]];
-            if (nel.type !== 'note' || (nel.duration !== 'eighth' && nel.duration !== 'sixteenth') || beatBucketAt(t) !== bucket) break;
-            t += scoreElementDurationUnits(nel);
-            j++;
-          }
-          if (j - i >= 2) { for (let k = i; k < j; k++) beamGroupOf[measure[k]] = beamSeq; beamSeq++; }
-          for (let k = i; k < j; k++) elapsed += scoreElementDurationUnits(queue[measure[k]]);
-          i = j;
+          explicitState.set(key, el.accidental);
+          effectiveAccidental[i] = el.accidental;
+        } else if (explicitState.has(key)) {
+          effectiveAccidental[i] = explicitState.get(key);
         } else {
-          elapsed += dur;
-          i++;
+          effectiveAccidental[i] = keySigMap[letter];
         }
       }
-    }
-
-    // 3連符ブラケット: tripletGroupの全メンバーが同じ連桁グループに収まっていない
-    // (4分音符が混ざる、休符で分断された等)場合は、連桁の代わりに角カッコで束ねる。
-    const tripletBracketGroups = new Map(); // tripletGroup値 -> queueインデックスの配列
-    queue.forEach((el, i) => {
-      if (el.triplet && el.tripletGroup !== null) {
-        if (!tripletBracketGroups.has(el.tripletGroup)) tripletBracketGroups.set(el.tripletGroup, []);
-        tripletBracketGroups.get(el.tripletGroup).push(i);
-      }
-    });
-    const needsTripletBracket = new Set();
-    for (const [, idxs] of tripletBracketGroups) {
-      if (idxs.length < 2) continue;
-      const groups = idxs.map((i) => beamGroupOf[i]);
-      const allSame = groups.every((g) => g !== null && g === groups[0]);
-      if (!allSame) idxs.forEach((i) => needsTripletBracket.add(i));
     }
 
     // 1小節まるごと1つの休符で埋まっている場合、選ばれた音価に関わらず全休符の
@@ -2424,119 +2340,150 @@
       }
     });
 
-    const measureWidths = measures.map((m) => m.reduce((w, i) => w + scoreElementWidth(queue[i]), 0));
-    const contentWidth = scoreSystemContentWidth();
+    return { queue, measures, effectiveAccidental, fullMeasureRest };
+  }
+
+  // 1小節ぶんのVexFlow音符配列(StaveNote)・付点・3連符括弧を組み立てる
+  // (連桁はVoice単位でまとめて生成するのでここでは作らない)。
+  function scoreBuildMeasureNotes(VF, queue, measureIdxs, effectiveAccidental, fullMeasureRest) {
+    const notes = [];
+    const tripletIdxs = new Map(); // tripletGroup値 -> このnotes配列内のインデックス一覧
+    measureIdxs.forEach((idx) => {
+      const el = queue[idx];
+      let note;
+      if (el.type === 'rest') {
+        const durCode = fullMeasureRest.has(idx) ? 'w' : SCORE_DURATION_TO_VEX[el.duration];
+        note = new VF.StaveNote({ keys: ['b/4'], duration: durCode + 'r' });
+      } else {
+        const key = scoreStepToVexKey(el.step, effectiveAccidental[idx]);
+        note = new VF.StaveNote({ keys: [key], duration: SCORE_DURATION_TO_VEX[el.duration] });
+        if (el.chord) {
+          note.addModifier(new VF.Annotation(el.chord).setVerticalJustification(VF.AnnotationVerticalJustify.TOP));
+        }
+      }
+      if (el.dotted) VF.Dot.buildAndAttach([note], { all: true });
+      if (el.triplet && el.tripletGroup !== null) {
+        if (!tripletIdxs.has(el.tripletGroup)) tripletIdxs.set(el.tripletGroup, []);
+        tripletIdxs.get(el.tripletGroup).push(notes.length);
+      }
+      note.__scoreQueueIndex = idx; // タイ作成時に元のqueueインデックスへ逆引きするため
+      notes.push(note);
+    });
+    const tuplets = [];
+    for (const idxs of tripletIdxs.values()) {
+      if (idxs.length < 2) continue;
+      tuplets.push(new VF.Tuplet(idxs.map((i) => notes[i])));
+    }
+    return { notes, tuplets };
+  }
+
+  // queue/measuresからVexFlowの音符・連桁・小節ごとの必要幅を組み立て、段(システム)
+  // への折り返しを決める。実際のcanvas描画より前に段数を確定させる必要があるが、
+  // VexFlowの幅計算(Formatter.preCalculateMinTotalWidth・Stave.getNoteStartX)は
+  // 実際のcanvasコンテキスト無しでも動くので、ここでは描画は一切行わない。
+  function scoreComputeSystems(VF) {
+    const { queue, measures, effectiveAccidental, fullMeasureRest } = computeScoreLayout();
+    const keyName = scoreKeyOption().vexName;
+    const ts = scoreCurrentTimeSig();
+
+    const measureData = measures.map((measureIdxs) => {
+      const { notes, tuplets } = scoreBuildMeasureNotes(VF, queue, measureIdxs, effectiveAccidental, fullMeasureRest);
+      const voice = new VF.Voice({ num_beats: ts.beats, beat_value: ts.unit }).setStrict(false);
+      voice.addTickables(notes);
+      const beams = VF.Beam.generateBeams(notes, { groups: scoreVexBeamGroups(VF) });
+      // 幅の見積もりだけに使う専用のFormatterで測る(実際の描画用format()と同じ
+      // インスタンスを使い回すと、ノート・修飾記号の内部状態が二重に組まれて
+      // 描画が崩れる不具合があったため、完全に分離した)。
+      const width = new VF.Formatter().joinVoices([voice]).preCalculateMinTotalWidth([voice]) + 26;
+      return { notes, tuplets, voice, beams, width };
+    });
+
+    // ヘッダ(ト音記号+調号+拍子記号)の幅。拍子記号は最初の段だけに表示する
+    // (実際の記譜法どおり)。Staveはcanvasに描かなくても幅を計算できる。
+    function headerWidth(withTimeSig) {
+      const probe = new VF.Stave(0, 0, 400);
+      probe.addClef('treble');
+      if (keyName !== 'C') probe.addKeySignature(keyName);
+      if (withTimeSig) probe.addTimeSignature(`${ts.beats}/${ts.unit}`);
+      return probe.getNoteStartX() - probe.getX();
+    }
+    const headerFirst = headerWidth(true);
+    const headerRest = headerWidth(false);
+
+    // 段への折り返し: 各段の内容幅に収まるだけ貪欲に小節を詰める。
+    const contentWidth = Math.max(150, scoreSystemWidth - SCORE_LEFT_MARGIN - SCORE_RIGHT_MARGIN);
     const systems = [];
     { let cur = [], curW = 0;
-      for (let m = 0; m < measures.length; m++) {
-        const w = measureWidths[m] + SCORE_BARLINE_GAP;
-        if (cur.length > 0 && curW + w > contentWidth) { systems.push(cur); cur = []; curW = 0; }
+      for (let m = 0; m < measureData.length; m++) {
+        const header = cur.length === 0 ? (systems.length === 0 ? headerFirst : headerRest) : 0;
+        const w = measureData[m].width + header;
+        if (cur.length > 0 && curW + w > contentWidth) { systems.push(cur); cur = []; }
+        if (cur.length === 0) curW = 0;
         cur.push(m); curW += w;
       }
       if (cur.length) systems.push(cur);
       if (systems.length === 0) systems.push([]); // 音符が1つも無くても五線だけは表示する
     }
-
-    return { queue, measures, displayAccidental, beamGroupOf, needsTripletBracket, fullMeasureRest, systems };
+    return { queue, measureData, systems, keyName, ts, headerFirst, headerRest };
   }
 
-  // 五線・ト音記号・調号・小節線・音符・休符・臨時記号・付点・3連符括弧/連桁・
-  // コード名・タイを描画する。符頭・クレフ・休符・臨時記号・旗は本物の記譜フォント
-  // Bravura(SMuFL準拠)のグリフで描く。符幹・連桁・小節線・レジャー線・タイの
-  // 曲線は音価/音高で長さや形が変わるため引き続き自前で描く。
-  // 設計判断の詳細は SCORE_ENGRAVING_RULES.md / SCORE_NOTATION_NOTES.md 参照。
-  function drawScore(ctx, cssWidth, cssHeight, layout) {
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, cssWidth, cssHeight);
-    ctx.strokeStyle = '#111';
-    ctx.fillStyle = '#111';
-    ctx.lineWidth = 1.5;
-
-    const { queue, measures, displayAccidental, beamGroupOf, needsTripletBracket, fullMeasureRest, systems } = layout;
-
-    // 今タップすると音符が追加される段(常に最後の段)だけ薄く色を付け、
-    // ユーザーがどこをタップすればよいか一目で分かるようにする。
-    const activeSysIdx = systems.length - 1;
-    const activeBaseY = scoreSystemBaseY(activeSysIdx);
-    ctx.fillStyle = 'rgba(108, 204, 255, 0.12)';
-    ctx.fillRect(0, activeBaseY - SCORE_SYSTEM_TOP_PAD - SCORE_STAFF_LINES_SPAN, cssWidth, SCORE_SYSTEM_HEIGHT);
-    ctx.fillStyle = '#111';
-
-    // タイの弧は音符どうしを繋ぐため、先に全音符・休符のX/Y/段番号を確定させておく
-    // (システムをまたぐタイはv1では非対応。同じ段の中でだけ弧を描く)。
-    const positions = new Array(queue.length).fill(null);
-
+  // 実際のcanvasに描画する。五線・ト音記号・調号・拍子記号・小節線・音符・休符・
+  // 臨時記号・付点・3連符括弧・連桁・コード名・タイは全てVexFlow(vendor/vexflow/、
+  // MITライセンス)任せ。このアプリ側は音符データをVexFlowのオブジェクトに変換し、
+  // 段(システム)への折り返しを行うだけ。設計判断の詳細は
+  // SCORE_ENGRAVING_RULES.md / SCORE_NOTATION_NOTES.md 参照。
+  function drawScoreFromLayout(VF, ctx, layout) {
+    const { queue, measureData, systems, keyName, ts, headerFirst, headerRest } = layout;
+    scoreLastStaves = [];
+    const notesByQueueIndex = new Map();
+    let y = SCORE_TOP_MARGIN;
     systems.forEach((measureIdxs, sysIdx) => {
-      const baseY = scoreSystemBaseY(sysIdx);
-      // 五線(E4,G4,B4,D5,F5 = step 0,2,4,6,8)
-      ctx.lineWidth = SCORE_LINE_SPACING * 0.07;
-      for (let s = 0; s <= 8; s += 2) {
-        const y = scoreStepToY(s, baseY);
-        ctx.beginPath();
-        ctx.moveTo(SCORE_LEFT_MARGIN - 16, y);
-        ctx.lineTo(cssWidth - SCORE_RIGHT_MARGIN, y);
-        ctx.stroke();
+      const isFirstSystem = sysIdx === 0;
+      let x = SCORE_LEFT_MARGIN;
+      let staveOfSystem = null;
+      if (measureIdxs.length === 0) {
+        // 音符が1つも無い(入力前・全消去直後)場合でも、タップ入力先として
+        // 五線だけは表示する必要がある。
+        const header = isFirstSystem ? headerFirst : headerRest;
+        const blankStave = new VF.Stave(x, y, Math.max(150, scoreSystemWidth - SCORE_LEFT_MARGIN - SCORE_RIGHT_MARGIN), {
+          spacing_between_lines_px: SCORE_STAVE_LINE_SPACING,
+        });
+        blankStave.addClef('treble');
+        if (keyName !== 'C') blankStave.addKeySignature(keyName);
+        if (isFirstSystem) blankStave.addTimeSignature(`${ts.beats}/${ts.unit}`);
+        blankStave.setEndBarType(VF.Barline.type.SINGLE);
+        blankStave.setContext(ctx).draw();
+        staveOfSystem = blankStave;
       }
-      // ト音記号(渦の中心が第2線=G4を通るよう、五線の一番下の線を基準に描く)
-      scoreSetFont(ctx);
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(scoreGlyph('gClef'), SCORE_LEFT_MARGIN - 54, scoreStepToY(0, baseY));
-      // 調号(段の先頭、ト音記号の右)
-      drawKeySignature(ctx, baseY, SCORE_LEFT_MARGIN + 8);
-
-      let x = SCORE_LEFT_MARGIN + 20 + scoreKeySigWidth();
-      const isLastSystem = sysIdx === systems.length - 1;
-      measureIdxs.forEach((m) => {
-        const elIdxs = measures[m];
-        const xs = [];
-        let ex = x;
-        for (const idx of elIdxs) {
-          const w = scoreElementWidth(queue[idx]);
-          xs.push(ex + w / 2);
-          ex += w;
+      measureIdxs.forEach((m, mi) => {
+        const { notes, tuplets, voice, beams, width } = measureData[m];
+        const isFirstOfSystem = mi === 0;
+        const header = isFirstOfSystem ? (isFirstSystem ? headerFirst : headerRest) : 0;
+        const stave = new VF.Stave(x, y, width + header, { spacing_between_lines_px: SCORE_STAVE_LINE_SPACING });
+        if (isFirstOfSystem) {
+          stave.addClef('treble');
+          if (keyName !== 'C') stave.addKeySignature(keyName);
+          if (isFirstSystem) stave.addTimeSignature(`${ts.beats}/${ts.unit}`);
         }
-        elIdxs.forEach((idx, k) => { positions[idx] = { x: xs[k], sysIdx }; });
-
-        // 連桁グループを先に描き(旗は描かない)、続けて3連符ブラケット、
-        // 最後に全要素(音符・休符)を描く。
-        let gi = 0;
-        while (gi < elIdxs.length) {
-          const g = beamGroupOf[elIdxs[gi]];
-          if (g === null) { gi++; continue; }
-          let gj = gi + 1;
-          while (gj < elIdxs.length && beamGroupOf[elIdxs[gj]] === g) gj++;
-          drawBeamGroup(ctx, elIdxs.slice(gi, gj).map((i) => queue[i]), xs.slice(gi, gj), baseY);
-          gi = gj;
-        }
-        const beamedSet = new Set(elIdxs.filter((i) => beamGroupOf[i] !== null));
-
-        // 3連符ブラケット(連桁でまとまらなかった3連符のみ): tripletGroupごとに
-        // 最初〜最後のXをまとめて1本描く。
-        const bracketGroups = new Map();
-        elIdxs.forEach((idx, k) => {
-          if (!needsTripletBracket.has(idx)) return;
-          const g = queue[idx].tripletGroup;
-          if (!bracketGroups.has(g)) bracketGroups.set(g, []);
-          bracketGroups.get(g).push({ idx, x: xs[k] });
-        });
-        for (const members of bracketGroups.values()) {
-          if (members.length < 2) continue;
-          drawTripletBracket(ctx, members.map((mm) => queue[mm.idx]), members.map((mm) => mm.x), baseY);
-        }
-
-        elIdxs.forEach((idx, k) => {
-          drawScoreElement(ctx, queue[idx], xs[k], beamedSet.has(idx), baseY, displayAccidental[idx],
-            needsTripletBracket.has(idx), fullMeasureRest.has(idx));
-        });
-        x = ex;
-        const barX = x + SCORE_BARLINE_GAP / 2;
         // 終止線(二重線)は描かない。このアプリのスコアはコード譜の特定箇所に
         // 貼り付ける「メロディーの断片」であり、独立した「完結した1曲」ではない
         // ため、曲の終わりを示す記号を末尾に出すのは意味が合わない
         // (ユーザー指摘で撤回、2026-08-15)。常に普通の小節線のみ。
-        drawBarline(ctx, barX, baseY, false);
-        x = ex + SCORE_BARLINE_GAP;
+        stave.setEndBarType(VF.Barline.type.SINGLE);
+        stave.setContext(ctx).draw();
+        if (!staveOfSystem) staveOfSystem = stave;
+
+        VF.Accidental.applyAccidentals([voice], keyName);
+        new VF.Formatter().joinVoices([voice]).format([voice], width - 10);
+        voice.draw(ctx, stave);
+        beams.forEach((b) => b.setContext(ctx).draw());
+        tuplets.forEach((t) => t.setContext(ctx).draw());
+        notes.forEach((note) => { notesByQueueIndex.set(note.__scoreQueueIndex, { note, sysIdx }); });
+
+        x += stave.getWidth();
       });
+      scoreLastStaves.push(staveOfSystem);
+      y += SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP;
     });
 
     // タイ: 小節線をまたいで自動分割された音符どうしを曲線で結ぶ。同じ段の中の
@@ -2544,263 +2491,37 @@
     // いるので、見た目の弧が出ないだけで音楽的な正しさは保たれる)。
     queue.forEach((el, i) => {
       if (!el.tieToNext) return;
-      const p1 = positions[i], p2 = positions[i + 1];
+      const p1 = notesByQueueIndex.get(i), p2 = notesByQueueIndex.get(i + 1);
       if (!p1 || !p2 || p1.sysIdx !== p2.sysIdx) return;
-      const baseY = scoreSystemBaseY(p1.sysIdx);
-      const y = scoreStepToY(el.step, baseY);
-      const stemUp = el.step < 4;
-      drawTie(ctx, p1.x, p2.x, y, stemUp);
+      const tie = new VF.StaveTie({ firstNote: p1.note, lastNote: p2.note, firstIndices: [0], lastIndices: [0] });
+      tie.setContext(ctx).draw();
     });
+
+    return y - SCORE_SYSTEM_GAP + SCORE_BOTTOM_MARGIN; // 実際に使った高さ
   }
 
-  function drawTie(ctx, x1, x2, y, stemUp) {
-    const offset = (stemUp ? 1 : -1) * SCORE_LINE_SPACING * 0.55;
-    const y0 = y + offset;
-    const bulge = offset * 1.6;
-    ctx.lineWidth = SCORE_LINE_SPACING * 0.1;
-    ctx.beginPath();
-    ctx.moveTo(x1 + SCORE_NOTEHEAD_CENTER * 0.6, y0);
-    ctx.quadraticCurveTo((x1 + x2) / 2, y0 + bulge, x2 - SCORE_NOTEHEAD_CENTER * 0.6, y0);
-    ctx.stroke();
-  }
-
-  function drawKeySignature(ctx, baseY, startX) {
-    const n = Math.abs(scoreKeyFifths);
-    if (n === 0) return;
-    const steps = scoreKeyFifths > 0 ? SCORE_SHARP_STEPS : SCORE_FLAT_STEPS;
-    const glyph = scoreGlyph(scoreKeyFifths > 0 ? 'accidentalSharp' : 'accidentalFlat');
-    scoreSetFont(ctx, 0.85);
-    ctx.textBaseline = 'middle';
-    const yFix = scoreGlyphYFix(0.85);
-    for (let i = 0; i < n; i++) {
-      ctx.fillText(glyph, startX + i * SCORE_LINE_SPACING * 0.95, scoreStepToY(steps[i], baseY) + yFix);
-    }
-  }
-
-  function drawBarline(ctx, x, baseY, final) {
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(x, scoreStepToY(8, baseY));
-    ctx.lineTo(x, scoreStepToY(0, baseY));
-    ctx.stroke();
-    if (final) {
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(x + 5, scoreStepToY(8, baseY));
-      ctx.lineTo(x + 5, scoreStepToY(0, baseY));
-      ctx.stroke();
-      ctx.lineWidth = 1.5;
-    }
-  }
-
-  function drawBeamSegment(ctx, x1, y1, x2, y2) {
-    ctx.lineWidth = SCORE_BEAM_THICKNESS;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  }
-
-  // 連桁でまとめる音符群の符幹+連桁本体をまとめて描画する。音価が混ざっていても
-  // よい(8分+16分等): 主連桁は常にグループ全体を1本で繋ぎ、16分どうしが隣接する
-  // 区間だけ副連桁をもう1本つなげ、隣に16分が無い孤立した16分は内向きの短い
-  // フックにする。連桁の傾きは最初と最後の音符の高さの差から決める(音高が
-  // 同じなら水平、極端な音高差でも傾きすぎないよう上限を設ける)。
-  function drawBeamGroup(ctx, group, xs, baseY) {
-    const ys = group.map((e) => scoreStepToY(e.step, baseY));
-    const upCount = group.filter((e) => e.step < 4).length;
-    const stemUp = upCount >= group.length / 2;
-    const headOffset = stemUp ? SCORE_STEM_ATTACH_UP : -SCORE_STEM_ATTACH_DOWN;
-    const stemXs = xs.map((x) => x + headOffset);
-    // 符幹の接続点は符頭の重心そのものよりわずかに縦にズレている(cutoutNW/SE参照。
-    // drawScoreElementの符幹と同じ理由)。連桁の傾き自体は符頭の実際の高さ(ys)から
-    // 計算し、符幹の描画開始点だけこの補正を適用する。
-    const stemStartYs = ys.map((y) => stemUp ? y - SCORE_STEM_ATTACH_Y_OFFSET : y + SCORE_STEM_ATTACH_Y_OFFSET);
-
-    const flatY = stemUp ? Math.min(...ys) - SCORE_STEM_LEN : Math.max(...ys) + SCORE_STEM_LEN;
-    const rawSlant = ys[ys.length - 1] - ys[0];
-    const slant = Math.max(-SCORE_MAX_BEAM_SLANT, Math.min(SCORE_MAX_BEAM_SLANT, rawSlant));
-    const span = (xs[xs.length - 1] - xs[0]) || 1;
-    const beamYAt = (x) => flatY + ((x - xs[0]) / span - 0.5) * slant;
-
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = SCORE_LINE_SPACING * 0.1;
-    for (let i = 0; i < group.length; i++) {
-      ctx.beginPath();
-      ctx.moveTo(stemXs[i], stemStartYs[i]);
-      ctx.lineTo(stemXs[i], beamYAt(xs[i]));
-      ctx.stroke();
-    }
-    // 主連桁(グループ全体)
-    drawBeamSegment(ctx, stemXs[0], beamYAt(xs[0]), stemXs[stemXs.length - 1], beamYAt(xs[xs.length - 1]));
-    // 副連桁(16分どうし)+フック
-    const yOff = (stemUp ? 1 : -1) * SCORE_BEAM_LEVEL_GAP;
-    for (let i = 0; i < group.length; i++) {
-      if (group[i].duration !== 'sixteenth') continue;
-      const leftIsSix = i > 0 && group[i - 1].duration === 'sixteenth';
-      const rightIsSix = i < group.length - 1 && group[i + 1].duration === 'sixteenth';
-      if (leftIsSix) {
-        drawBeamSegment(ctx, stemXs[i - 1], beamYAt(xs[i - 1]) + yOff, stemXs[i], beamYAt(xs[i]) + yOff);
-      } else if (rightIsSix) {
-        drawBeamSegment(ctx, stemXs[i], beamYAt(xs[i]) + yOff, stemXs[i + 1], beamYAt(xs[i + 1]) + yOff);
-      } else {
-        const dir = i === 0 ? 1 : -1; // 内向き(グループの中心方向)に短いフックを出す
-        const hookX = stemXs[i] + dir * SCORE_LINE_SPACING * 0.9;
-        drawBeamSegment(ctx, stemXs[i], beamYAt(xs[i]) + yOff, hookX, beamYAt(xs[i]) + yOff);
-      }
-    }
-    ctx.lineWidth = 1.5;
-  }
-
-  // 連桁でまとまらなかった3連符(4分音符が混ざる等)を角カッコ(ブラケット)+「3」で束ねる。
-  function drawTripletBracket(ctx, group, xs, baseY) {
-    const ys = group.map((e) => scoreStepToY(e.step, baseY));
-    const stemUp = group.filter((e) => e.step < 4).length >= group.length / 2;
-    const extremeY = stemUp
-      ? Math.min(...ys) - SCORE_STEM_LEN - SCORE_LINE_SPACING * 0.7
-      : Math.max(...ys) + SCORE_STEM_LEN + SCORE_LINE_SPACING * 0.7;
-    const tick = (stemUp ? -1 : 1) * SCORE_LINE_SPACING * 0.35;
-    const x1 = xs[0], x2 = xs[xs.length - 1];
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 1.3;
-    ctx.beginPath();
-    ctx.moveTo(x1, extremeY + tick); ctx.lineTo(x1, extremeY);
-    ctx.lineTo(x2, extremeY); ctx.lineTo(x2, extremeY + tick);
-    ctx.stroke();
-    ctx.font = 'italic ' + Math.round(SCORE_LINE_SPACING * 0.85) + 'px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('3', (x1 + x2) / 2, extremeY - (stemUp ? 3 : -12));
-    ctx.textAlign = 'left';
-  }
-
-  function drawLedgerLines(ctx, step, x, baseY) {
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = SCORE_LINE_SPACING * 0.09;
-    const HALF_LEDGER = SCORE_LEDGER_HALF_WIDTH;
-    if (step > 8) {
-      for (let s = 10; s <= step; s += 2) {
-        const y = scoreStepToY(s, baseY);
-        ctx.beginPath(); ctx.moveTo(x - HALF_LEDGER, y); ctx.lineTo(x + HALF_LEDGER, y); ctx.stroke();
-      }
-    } else if (step < 0) {
-      for (let s = -2; s >= step; s -= 2) {
-        const y = scoreStepToY(s, baseY);
-        ctx.beginPath(); ctx.moveTo(x - HALF_LEDGER, y); ctx.lineTo(x + HALF_LEDGER, y); ctx.stroke();
-      }
-    }
-  }
-
-  function drawScoreElement(ctx, el, x, beamed, baseY, dispAcc, bracketed, isFullMeasureRest) {
-    if (el.triplet && el.tripletFirst && !bracketed) {
-      // 連桁でまとまった3連符は、グループの1個目だけ「3」を表示する
-      ctx.font = 'italic ' + Math.round(SCORE_LINE_SPACING * 0.7) + 'px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText('3', x + SCORE_LINE_SPACING * 0.7, scoreStepToY(9, baseY) - 4);
-      ctx.textAlign = 'left';
-    }
-    if (el.type === 'rest') {
-      drawScoreRest(ctx, el, x, baseY, isFullMeasureRest);
-      return;
-    }
-    const y = scoreStepToY(el.step, baseY);
-    drawLedgerLines(ctx, el.step, x, baseY);
-
-    // 臨時記号(調号どおりの音・タイの続き・同じ小節内で既出の音は省略する。
-    // 判定はcomputeScoreLayout側)
-    if (dispAcc) {
-      scoreSetFont(ctx, 0.8);
-      ctx.textBaseline = 'middle';
-      const glyphName = dispAcc === 'sharp' ? 'accidentalSharp' : dispAcc === 'flat' ? 'accidentalFlat' : 'accidentalNatural';
-      ctx.fillText(scoreGlyph(glyphName), x - SCORE_LINE_SPACING * 1.3, y + scoreGlyphYFix(0.8));
-    }
-
-    // コード名(符頭の上、五線の外側に表示)
-    if (el.chord) {
-      ctx.font = 'bold ' + Math.round(SCORE_LINE_SPACING * 0.75) + 'px -apple-system,sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(el.chord, x, scoreStepToY(10, baseY) - 4);
-      ctx.textAlign = 'left';
-    }
-
-    // 符頭(全音符・2分音符は白抜き、4分音符以下は塗りつぶし。本物の記譜フォントで描画)
-    scoreSetFont(ctx);
-    ctx.textBaseline = 'middle';
-    const headGlyph = el.duration === 'whole' ? 'noteheadWhole' : el.duration === 'half' ? 'noteheadHalf' : 'noteheadBlack';
-    const headCenter = el.duration === 'whole' ? SCORE_NOTEHEAD_WHOLE_CENTER : SCORE_NOTEHEAD_CENTER;
-    ctx.fillText(scoreGlyph(headGlyph), x - headCenter, y + scoreGlyphYFix());
-    ctx.textBaseline = 'alphabetic';
-
-    // 付点(タイで繋がれた音符には付けない方が自然な場合もあるが、入力どおりに表示する)
-    if (el.dotted) {
-      ctx.beginPath();
-      ctx.arc(x + SCORE_LINE_SPACING * 0.75, y - (Math.round(y) % (SCORE_STEP_HEIGHT * 2) === 0 ? SCORE_STEP_HEIGHT * 0.5 : 0), SCORE_LINE_SPACING * 0.11, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 符幹・旗(全音符以外、かつ連桁でまとめて描画済みの音符は個別には描かない)。
-    // 中央線(step4)より上の音は下向き、それ以外は上向き。
-    if (el.duration !== 'whole' && !beamed) {
-      const stemUp = el.step < 4;
-      const stemX = x + (stemUp ? SCORE_STEM_ATTACH_UP : -SCORE_STEM_ATTACH_DOWN);
-      const stemStartY = stemUp ? y - SCORE_STEM_ATTACH_Y_OFFSET : y + SCORE_STEM_ATTACH_Y_OFFSET;
-      const stemEndY = stemUp ? stemStartY - SCORE_STEM_LEN : stemStartY + SCORE_STEM_LEN;
-      ctx.lineWidth = SCORE_LINE_SPACING * 0.1;
-      ctx.beginPath();
-      ctx.moveTo(stemX, stemStartY);
-      ctx.lineTo(stemX, stemEndY);
-      ctx.stroke();
-
-      if (el.duration === 'eighth' || el.duration === 'sixteenth') {
-        scoreSetFont(ctx);
-        ctx.textBaseline = stemUp ? 'alphabetic' : 'top';
-        const flagGlyph = el.duration === 'eighth'
-          ? (stemUp ? 'flag8thUp' : 'flag8thDown')
-          : (stemUp ? 'flag16thUp' : 'flag16thDown');
-        ctx.fillText(scoreGlyph(flagGlyph), stemX, stemEndY);
-        ctx.textBaseline = 'alphabetic';
-      }
-    }
-  }
-
-  // 休符(本物の記譜フォントのグリフで描画)。1小節がまるごとこの休符だけで
-  // 埋まっている場合は、選ばれた音価に関わらず全休符の記号で描く
-  // (拍子に関わらず「1小節丸ごと休み」は全休符記号を使うのが実際の記譜法の慣習)。
-  function drawScoreRest(ctx, el, x, baseY, isFullMeasureRest) {
-    scoreSetFont(ctx);
-    ctx.textBaseline = 'middle';
-    const duration = isFullMeasureRest ? 'whole' : el.duration;
-    const glyphName = { whole: 'restWhole', half: 'restHalf', quarter: 'restQuarter', eighth: 'rest8th', sixteenth: 'rest16th' }[duration];
-    const glyphY = { whole: 6, half: 5, quarter: 4, eighth: 4, sixteenth: 4 }[duration];
-    ctx.fillText(scoreGlyph(glyphName), x - SCORE_LINE_SPACING * 0.4, scoreStepToY(glyphY, baseY) + scoreGlyphYFix());
-    ctx.textBaseline = 'alphabetic';
-    if (el.dotted && !isFullMeasureRest) {
-      ctx.beginPath();
-      ctx.arc(x + SCORE_LINE_SPACING * 0.75, scoreStepToY(4, baseY), SCORE_LINE_SPACING * 0.11, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  function scoreSetupCanvas() {
+  async function renderScoreCanvas() {
+    const VF = await loadVexFlow();
+    const layout = scoreComputeSystems(VF);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const layout = computeScoreLayout();
-    const cssWidth = scoreSystemWidth;
-    const cssHeight = scoreCanvasHeightFor(layout.systems.length);
-    scoreEditorCanvas.width = Math.round(cssWidth * dpr);
+    const systemCount = layout.systems.length;
+    const cssHeight = SCORE_TOP_MARGIN + systemCount * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP) + SCORE_BOTTOM_MARGIN;
+    scoreEditorCanvas.width = Math.round(scoreSystemWidth * dpr);
     scoreEditorCanvas.height = Math.round(cssHeight * dpr);
-    scoreEditorCanvas.style.width = cssWidth + 'px';
+    scoreEditorCanvas.style.width = scoreSystemWidth + 'px';
     scoreEditorCanvas.style.height = cssHeight + 'px';
     const ctx = scoreEditorCanvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { ctx, cssWidth, cssHeight, layout };
-  }
-
-  function renderScoreCanvas() {
-    const { ctx, cssWidth, cssHeight, layout } = scoreSetupCanvas();
-    drawScore(ctx, cssWidth, cssHeight, layout);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, scoreSystemWidth, cssHeight);
+    // 今タップすると音符が追加される段(常に最後の段)だけ薄く色を付け、
+    // ユーザーがどこをタップすればよいか一目で分かるようにする。
+    const activeSysY = SCORE_TOP_MARGIN + (systemCount - 1) * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP);
+    ctx.fillStyle = 'rgba(108, 204, 255, 0.12)';
+    ctx.fillRect(0, activeSysY - SCORE_STAVE_LINE_SPACING * 5, scoreSystemWidth, SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP + SCORE_STAVE_LINE_SPACING * 5);
+    ctx.fillStyle = '#000'; // ハイライトの薄い塗り色がVexFlowの符頭・文字描画に引き継がれないようリセット
+    const vfCtx = new VF.CanvasContext(ctx);
+    drawScoreFromLayout(VF, vfCtx, layout);
     // 入力した音符の位置(段が増えていく方向)まで追従スクロールする
     scoreEditorCanvas.parentElement.scrollTop = scoreEditorCanvas.parentElement.scrollHeight;
   }
@@ -4224,11 +3945,12 @@
   // ---- オフラインキャッシュ更新 ----
   // Service Workerのキャッシュ(cwlv-shell-v1)を、ボタン操作で明示的に最新化する。
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
-  const OFFLINE_CACHE_NAME = 'cwlv-shell-v2'; // v2: Bravuraフォント追加(sw.jsのCACHE_NAMEと同じ値を保つ)
+  const OFFLINE_CACHE_NAME = 'cwlv-shell-v3'; // v3: 楽譜エディタをVexFlowに移行、Bravuraフォント単体は廃止(sw.jsのCACHE_NAMEと同じ値を保つ)
   const OFFLINE_ASSET_LIST = [
     './', './index.html', './manual.html', './manifest.json',
     './vendor/pdfjs/pdf.min.js', './vendor/pdfjs/pdf.worker.min.js',
-    './vendor/bravura/BravuraText.woff2',
+    './vendor/vexflow/vexflow.js',
+    './vendor/vexflow/fonts/bravura.woff2', './vendor/vexflow/fonts/academico.woff2', './vendor/vexflow/fonts/academico-bold.woff2',
     './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
   ];
 
