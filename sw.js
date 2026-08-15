@@ -5,13 +5,14 @@
 // オンライン時は常にネットワークを優先し(タイムアウト付き)、取得できたら
 // キャッシュも更新する。オフライン時やネットワークが遅い時だけキャッシュに
 // フォールバックすることで、機内モードでの起動性は維持する。
-const CACHE_NAME = 'cwlv-shell-v3'; // v3: 楽譜エディタをVexFlow(vendor/vexflow/)に移行、Bravura単体は廃止
+const CACHE_NAME = 'cwlv-shell-v4'; // v4: 招待された友達向けのstart.htmlを追加
 const NETWORK_TIMEOUT_MS = 3000;
 
 const ASSET_LIST = [
   './',
   './index.html',
   './manual.html',
+  './start.html',
   './manifest.json',
   './vendor/pdfjs/pdf.min.js',
   './vendor/pdfjs/pdf.worker.min.js',

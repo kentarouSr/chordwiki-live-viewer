@@ -527,6 +527,7 @@
     <button id="btnToggleSettings" aria-expanded="false">&#9881; 設定・バックアップ &#9662;</button>
     <div id="backupBar" class="collapsed">
       <a id="btnManual" href="./manual.html">&#128214; 使い方</a>
+      <a id="btnStartGuide" href="./start.html">&#128640; はじめに(招待された方へ)</a>
       <div class="backupGroup">
         <span class="backupGroupLabel">&#9729; クラウド同期</span>
         <button id="btnSync">今すぐ同期</button>
@@ -4817,10 +4818,12 @@
       if (res.status === 401) throw new Error('同期キーが正しくありません(再度お試しください)');
       if (!res.ok) throw new Error(`サーバーエラー (${res.status})`);
       const { key: newKey } = await res.json();
-      const url = `${location.origin}${location.pathname}?key=${encodeURIComponent(newKey)}`;
+      // アプリ本体(index.html)ではなく、招待された人向けのクイックスタート案内
+      // (start.html)に着地させる。キーの保存ロジックはstart.html側にも同じものがある。
+      const url = `${new URL('start.html', location.href).href}?key=${encodeURIComponent(newKey)}`;
       try {
         await navigator.clipboard.writeText(url);
-        alert('招待リンクをコピーしました。友達に送ってください。開くとその友達専用の本棚がセットアップされます。');
+        alert('招待リンクをコピーしました。友達に送ってください。開くとその友達専用の本棚がセットアップされ、使い方の案内ページが表示されます。');
       } catch (err) {
         prompt('コピーしてください:', url);
       }

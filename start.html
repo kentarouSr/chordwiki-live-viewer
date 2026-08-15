@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>はじめに - ChordWiki Live Viewer</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#1b1f2a">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #111; color: #eee;
+    font-family: system-ui, sans-serif; line-height: 1.7;
+    padding: 24px; padding-bottom: 60px;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  a { color: #6cf; }
+  #backLink {
+    display: inline-block; margin-bottom: 20px; font-size: 14px;
+    color: #ccc; text-decoration: none; padding: 8px 14px;
+    background: #1c1c1c; border-radius: 8px;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .subtitle { color: #999; font-size: 14px; margin-bottom: 24px; }
+  h2 {
+    font-size: 17px; margin-top: 36px; padding-top: 12px;
+    border-top: 1px solid #2a2a2a; color: #6cf;
+  }
+  ol.steps { padding-left: 22px; }
+  ol.steps li { margin-bottom: 18px; }
+  ol.steps b { display: block; font-size: 16px; margin-bottom: 4px; }
+  code {
+    background: #1c1c1c; padding: 1px 6px; border-radius: 4px;
+    font-size: 0.9em;
+  }
+  .note {
+    background: #1c1c1c; border-left: 3px solid #6cf; border-radius: 0 8px 8px 0;
+    padding: 10px 14px; margin: 12px 0; font-size: 14px; color: #ccc;
+  }
+  .cta {
+    display: inline-block; margin-top: 8px; padding: 12px 20px;
+    background: #6cf; color: #111; font-weight: bold; text-decoration: none;
+    border-radius: 10px; font-size: 16px;
+  }
+  footer { margin-top: 48px; font-size: 12px; color: #666; }
+</style>
+<script>
+  // 招待リンク(?key=...)で開かれた場合、同期キーを保存する。
+  // index.html側と同じキー・同じロジック(あえてURLからは消さない。詳細はindex.html参照)。
+  (() => {
+    const key = new URLSearchParams(location.search).get('key');
+    if (key) localStorage.setItem('cwlv_sync_key', key);
+  })();
+</script>
+</head>
+<body>
+<div class="wrap">
+  <a id="backLink" href="./index.html">&larr; アプリを開く</a>
+  <h1>はじめに</h1>
+  <p class="subtitle">招待リンクからこのアプリを開いた方向けの、最短ルートの案内です。</p>
+
+  <div class="note">
+    招待リンク(<code>?key=...</code>付きのURL)を一度でも開いていれば、<strong>同期の設定は既に完了しています</strong>。あなた専用の本棚が用意されているので、下の手順どおりに曲を登録していくだけで使えます。
+  </div>
+
+  <h2>まずはこれだけ</h2>
+  <ol class="steps">
+    <li>
+      <b>① 曲を登録する</b>
+      ChordWikiでコード譜を<strong>移調済みの状態</strong>にしてから、フルページのスクリーンショット(画像)またはPDFとして保存する。曲一覧画面の「＋ 曲を追加」からその画像/PDFを選ぶと登録される。
+      <div class="note">本番中に途中でキーを変えることはできないアプリなので、キーは登録前に確定させておくこと。</div>
+    </li>
+    <li>
+      <b>② 曲を開いて自動スクロールを試す</b>
+      曲をタップすると演奏モードで開く。下の再生ボタンで自動スクロールが始まる。速度は「速度」の＋/－で自分のテンポに合わせて調整する。
+    </li>
+    <li>
+      <b>③ (お好みで)メモを付ける</b>
+      「✎ 編集モード」→曲を開いて「📝 メモ」を押すと、譜面の上に付箋のようにメモや画像を配置できる。
+    </li>
+    <li>
+      <b>④ (お好みで)セットリストを作る</b>
+      本番の曲順どおりに並べておくと、本番中に次の曲へすぐ切り替えられる。
+    </li>
+  </ol>
+
+  <a class="cta" href="./index.html">アプリを開く &rarr;</a>
+
+  <h2>他の端末でも使いたい場合</h2>
+  <p>この招待リンクは<strong>あなた専用の本棚</strong>です。自分の別の端末(iPadとiPhone両方など)でも同じ本棚を使いたい時は、まずどちらか片方でこのリンクを開いてセットアップし、アプリ内の「他の端末用リンクをコピー」ボタンでできたリンクをもう片方の端末で開けばよい(同じ招待リンクをもう一度使い回してもよい)。</p>
+  <p><strong>あなたの本棚は、招待してくれた人の本棚とは別物</strong>なので、あなたが曲を追加・削除しても相手には影響しない(逆も同様)。</p>
+
+  <h2>もっと詳しく知りたい時</h2>
+  <p>メモの種類・BPM・YouTube参考動画・練習ToDo・ZIPバックアップなど、全部の機能は<a href="./manual.html">詳しい使い方マニュアル</a>にまとまっている。</p>
+
+  <footer>ChordWiki Live Viewer — <a href="./index.html">アプリを開く</a> / <a href="./manual.html">詳しいマニュアル</a></footer>
+</div>
+</body>
+</html>
