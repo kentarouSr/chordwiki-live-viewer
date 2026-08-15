@@ -224,7 +224,7 @@
     pointer-events: auto; cursor: grab; outline: 2px dashed #6cf; outline-offset: 2px;
   }
   .memo-text {
-    max-width: 600px; padding: 6px 9px; border-radius: 6px; font-size: 13px;
+    max-width: 600px; padding: 0.46em 0.69em; border-radius: 6px; font-size: 13px;
     line-height: 1.4; white-space: pre-wrap; background: rgba(255, 224, 130, 0.85);
     color: #111; box-shadow: 0 2px 6px rgba(0,0,0,0.35);
   }
@@ -234,7 +234,7 @@
   /* テキストメモの直接入力欄。ネイティブprompt()の代わりに譜面上にその場で出す。
      tap outside(blur)で確定するので、いちいちOKを押す手間が要らない。 */
   .memo-text-editor {
-    max-width: 600px; min-width: 120px; padding: 6px 9px; border-radius: 6px; font-size: 13px;
+    max-width: 600px; min-width: 120px; padding: 0.46em 0.69em; border-radius: 6px; font-size: 13px;
     line-height: 1.4; background: #fff9dd; color: #111; box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     border: 2px solid #6cf; font-family: inherit; resize: none; overflow: hidden;
     cursor: text; outline: none !important;
@@ -689,6 +689,12 @@
   const MEMO_TEXT_DEFAULT_FONT_SIZE = 13;
   const MEMO_TEXT_MIN_FONT_SIZE = 10;
   const MEMO_TEXT_MAX_FONT_SIZE = 48;
+  // メモのwidth/fontSizeはこのコンテンツ幅(iPad想定)を基準に保存する。
+  // 実際の描画時はcontentWidthCss()との比率でスケールするので、画面の狭いスマホで
+  // 開いてもメモがコンテンツに対して同じ相対サイズに見える(位置は既にx/yを
+  // コンテンツ幅の割合で持っているのでスケール問題がなかったが、サイズは
+  // pxの生値のままだったため、狭い画面ほどメモが相対的に巨大化して重なっていた)。
+  const MEMO_REFERENCE_CONTENT_WIDTH = 800;
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
@@ -1436,6 +1442,7 @@
     memoLayerEl.style.height = contentHeight + 'px';
     strokeLayerEl.style.height = contentHeight + 'px';
     const cssWidth = contentWidthCss();
+    const memoScale = cssWidth / MEMO_REFERENCE_CONTENT_WIDTH;
     let needsRepair = false;
     for (const memo of currentMemos) {
       if (memo.type === 'stroke') {
@@ -1461,19 +1468,28 @@
 
       if (memo.type === 'text') {
         el.textContent = memo.text;
+        // fontSizeは常にscale込みで明示指定する(CSS既定の13px固定に頼ると、
+        // 画面が狭い端末ほどコンテンツに対して相対的に巨大な文字になってしまう)。
+        // MIN/MAX_FONT_SIZEでクランプし、狭い端末で読めない小ささになるのを防ぐ。
+        el.style.fontSize = Math.round(clamp(
+          (memo.fontSize || MEMO_TEXT_DEFAULT_FONT_SIZE) * memoScale,
+          MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE
+        )) + 'px';
         if (memo.width) {
-          el.style.width = memo.width + 'px'; // 未設定なら内容に応じた自動幅のまま
-          el.style.fontSize = (memo.fontSize || MEMO_TEXT_DEFAULT_FONT_SIZE) + 'px';
+          // 未設定なら内容に応じた自動幅のまま。120/600はリサイズハンドルの可動域と揃えてある。
+          el.style.width = Math.round(clamp(memo.width * memoScale, 120, 600)) + 'px';
+        } else {
+          el.style.maxWidth = Math.round(clamp(600 * memoScale, 120, 600)) + 'px';
         }
-        el.appendChild(makeResizeHandle(memo, el, 120, 600, MEMO_TEXT_DEFAULT_FONT_SIZE));
+        el.appendChild(makeResizeHandle(memo, el, 120, 600, MEMO_TEXT_DEFAULT_FONT_SIZE, memoScale));
       } else {
         const img = document.createElement('img');
         const url = URL.createObjectURL(new Blob([memo.data], { type: memo.mimeType }));
         memoObjectUrls.push(url);
         img.src = url;
-        img.style.width = (memo.width || 160) + 'px';
+        img.style.width = Math.round(clamp((memo.width || 160) * memoScale, 40, 600)) + 'px';
         el.appendChild(img);
-        el.appendChild(makeResizeHandle(memo, img, 40, 600));
+        el.appendChild(makeResizeHandle(memo, img, 40, 600, null, memoScale));
       }
 
       const delBtn = document.createElement('button');
@@ -1603,7 +1619,10 @@
 
   // baseFontSizeを渡した場合(テキストメモ)は、幅の変化に比例して文字サイズも
   // 一緒に拡大/縮小する(画像メモの場合は渡さないので対象外)。
-  function makeResizeHandle(memo, targetEl, minWidth, maxWidth, baseFontSize) {
+  // scaleは現在の端末での表示スケール(contentWidthCss()/MEMO_REFERENCE_CONTENT_WIDTH)。
+  // memo.width/fontSizeは端末非依存の基準サイズで保存するので、ドラッグ中の見た目(画面px)と
+  // 保存値の間でscale分の変換をここで行う。
+  function makeResizeHandle(memo, targetEl, minWidth, maxWidth, baseFontSize, scale) {
     const handle = document.createElement('div');
     handle.className = 'memo-resize-handle';
     handle.addEventListener('pointerdown', (e) => {
@@ -1612,7 +1631,8 @@
       e.preventDefault();
       handle.setPointerCapture(e.pointerId);
       const startClientX = e.clientX;
-      const startWidth = memo.width || targetEl.getBoundingClientRect().width || minWidth;
+      const startWidth = (memo.width != null ? memo.width * scale : null)
+        || targetEl.getBoundingClientRect().width || minWidth;
 
       const onMove = (ev) => {
         const dx = ev.clientX - startClientX;
@@ -1630,8 +1650,8 @@
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onUp);
         handle.removeEventListener('pointercancel', onUp);
-        memo.width = parseFloat(targetEl.style.width);
-        if (baseFontSize) memo.fontSize = parseFloat(targetEl.style.fontSize);
+        memo.width = parseFloat(targetEl.style.width) / scale;
+        if (baseFontSize) memo.fontSize = parseFloat(targetEl.style.fontSize) / scale;
         memo.updatedAt = Date.now();
         await saveCurrentMemos();
       };
@@ -1756,14 +1776,18 @@
   function openTextMemoEditor(memo, x, y, hideEl) {
     if (hideEl) hideEl.style.visibility = 'hidden';
     const cssWidth = contentWidthCss();
+    const memoScale = cssWidth / MEMO_REFERENCE_CONTENT_WIDTH;
     const ta = document.createElement('textarea');
     ta.className = 'memo memo-text-editor';
     ta.rows = 1;
     ta.value = memo ? memo.text : '';
     ta.style.left = Math.round(x * cssWidth) + 'px';
     ta.style.top = Math.round(y * contentHeight) + 'px';
-    ta.style.width = ((memo && memo.width) || MEMO_TEXT_DEFAULT_WIDTH) + 'px';
-    if (memo && memo.fontSize) ta.style.fontSize = memo.fontSize + 'px';
+    ta.style.width = Math.round(clamp(((memo && memo.width) || MEMO_TEXT_DEFAULT_WIDTH) * memoScale, 120, 600)) + 'px';
+    ta.style.fontSize = Math.round(clamp(
+      ((memo && memo.fontSize) || MEMO_TEXT_DEFAULT_FONT_SIZE) * memoScale,
+      MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE
+    )) + 'px';
     memoLayerEl.appendChild(ta);
 
     const autoGrow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
