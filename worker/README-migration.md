@@ -84,16 +84,38 @@ curl -s -o /dev/null -w "%{http_code}\n" -H "X-Sync-Key: dummy" https://<worker>
 
 最後にアプリ側でも「今すぐ同期」を押して、曲が消えていないことを確認する。
 
-## 友達を増やす時
+## 友達を増やす時(2026-08-16以降: アプリの「👥 友達を招待」ボタンで完結)
 
-キーを生成して渡し、`SYNC_KEYS` に足して登録し直すだけ(コード変更・再デプロイ不要)。
+上記の移行後は、許可リストがWorkerのシークレット(`SYNC_KEYS`)からD1の
+`allowed_keys` テーブルに移っている。**CLIを使わなくても、アプリの「☁ クラウド同期」
+グループにある「👥 友達を招待」ボタンを押すだけで完結する**:
+
+1. 今すでに有効なキーを持っている人(=今アプリを使えている人なら誰でも)が
+   「👥 友達を招待」を押す
+2. `POST /api/invite` がサーバー側で新しいランダムキーを発行し、`allowed_keys` に登録
+3. キー入りのセットアップURLが自動でクリップボードにコピーされる
+4. そのURLを友達に送る。友達が開くと、その人専用の空の本棚が使える
+
+**新しく発行したキーで招待された人も、さらに別の人を招待できる**(信頼の連鎖)。
+小規模な友達内利用を前提にした設計で、招待の可否に上限や承認フローは無い。
+
+CLIから直接キーを足したい場合(招待ボタンを使わない場合)は、
+`allowed_keys` テーブルに直接INSERTすればよい:
 
 ```sh
-npx wrangler secret put SYNC_KEYS   # 既存の一覧に新しいキーを足して貼り直す
+npx wrangler d1 execute chordwiki-live-viewer --remote --command \
+  "INSERT INTO allowed_keys (key, label, created_at) VALUES ('<新しいキー>', '手動登録', $(date +%s000))"
 ```
 
-友達側は、アプリを開いて「同期キーを設定」に渡されたキーを入れるか、
-「他の端末用リンクをコピー」で作ったキー入りURLを開くだけ。
+キーを無効化(締め出し)たい場合も同様にDELETEするだけ:
+
+```sh
+npx wrangler d1 execute chordwiki-live-viewer --remote --command \
+  "DELETE FROM allowed_keys WHERE key = '<無効化したいキー>'"
+```
+
+(旧方式の `SYNC_KEYS` シークレットは後方互換のフォールバックとして残っているが、
+実行時に書き換えられないため、通常の運用ではD1側だけを使えばよい。)
 
 ## 注意点
 

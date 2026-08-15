@@ -29,20 +29,33 @@ export default {
     // お互いの曲・セットリストは見えない。
     //
     // 誰でも好きなキーで使えるようにすると、URLさえ分かれば第三者にストレージを
-    // 使われてしまう(無料枠を食い潰される)ため、環境変数の許可リストに載っている
-    // キーだけを受け付ける。友達を増やす時は SYNC_KEYS にキーを足して
-    //   wrangler secret put SYNC_KEYS
-    // で更新する(カンマ区切り)。SYNC_KEY は移行前からの単一キー用の後方互換。
-    const allowedKeys = () =>
+    // 使われてしまう(無料枠を食い潰される)ため、許可リストに載っているキーだけを
+    // 受け付ける。許可リストはD1の allowed_keys テーブルで持つ(Workerのシークレット
+    // だと実行時に書き換えられず、アプリからの「招待」ボタンで新しいキーを発行
+    // できないため)。/api/invite で「今すでに有効なキーを持っている人なら誰でも、
+    // 新しいキーをその場で発行できる」仕組みにしている。
+    // env.SYNC_KEYS / env.SYNC_KEY はD1移行前からの後方互換のフォールバック。
+    const envAllowedKeys = () =>
       String(env.SYNC_KEYS || env.SYNC_KEY || '')
         .split(',')
         .map((k) => k.trim())
         .filter(Boolean);
 
-    const requireKey = () => {
+    const requireKey = async () => {
       const key = getKey();
       if (!key) return null;
-      return allowedKeys().includes(key) ? key : null;
+      if (envAllowedKeys().includes(key)) return key;
+      const row = await env.DB.prepare('SELECT 1 FROM allowed_keys WHERE key = ?').bind(key).first();
+      return row ? key : null;
+    };
+
+    // base64url、24バイト(=32文字)のランダムキーを生成する。招待で発行する
+    // キーも、最初の1本(ユーザー自身が決めたもの)と同程度の強度にするため。
+    const generateInviteKey = () => {
+      const bytes = crypto.getRandomValues(new Uint8Array(24));
+      let bin = '';
+      for (const b of bytes) bin += String.fromCharCode(b);
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     };
 
     const rowToSong = (row) => ({
@@ -74,7 +87,7 @@ export default {
     try {
       // 曲一覧(メタデータのみ)
       if (path === '/api/songs' && request.method === 'GET') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const { results } = await env.DB
           .prepare('SELECT * FROM songs WHERE sync_key = ? ORDER BY updated_at DESC')
@@ -84,7 +97,7 @@ export default {
 
       // 曲の削除tombstone一覧(他端末が削除を検知して復活アップロードしないため)
       if (path === '/api/songs/tombstones' && request.method === 'GET') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const { results } = await env.DB
           .prepare('SELECT uuid, deleted_at FROM deleted_songs WHERE sync_key = ?')
@@ -96,7 +109,7 @@ export default {
 
       // 曲を追加/更新(メタデータ+ファイル本体をmultipart/form-dataで一度に送る)
       if (songIdMatch && request.method === 'PUT') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const uuid = songIdMatch[1];
         const form = await request.formData();
@@ -144,7 +157,7 @@ export default {
       // 曲のファイル本体取得
       const fileMatch = path.match(/^\/api\/songs\/([0-9a-f-]{36})\/file$/);
       if (fileMatch && request.method === 'GET') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const uuid = fileMatch[1];
         const row = await env.DB
@@ -160,7 +173,7 @@ export default {
 
       // 曲の削除
       if (songIdMatch && request.method === 'DELETE') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const uuid = songIdMatch[1];
         const row = await env.DB
@@ -177,7 +190,7 @@ export default {
 
       // セットリスト一覧
       if (path === '/api/setlists' && request.method === 'GET') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const { results } = await env.DB
           .prepare('SELECT * FROM setlists WHERE sync_key = ? ORDER BY updated_at DESC')
@@ -187,7 +200,7 @@ export default {
 
       // セットリストの削除tombstone一覧
       if (path === '/api/setlists/tombstones' && request.method === 'GET') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const { results } = await env.DB
           .prepare('SELECT uuid, deleted_at FROM deleted_setlists WHERE sync_key = ?')
@@ -199,7 +212,7 @@ export default {
 
       // セットリストの追加/更新(バイナリを含まないのでJSONで送る)
       if (setlistIdMatch && request.method === 'PUT') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const uuid = setlistIdMatch[1];
         const body = await request.json();
@@ -224,7 +237,7 @@ export default {
 
       // セットリストの削除
       if (setlistIdMatch && request.method === 'DELETE') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const uuid = setlistIdMatch[1];
         await env.DB.prepare('DELETE FROM setlists WHERE uuid = ? AND sync_key = ?').bind(uuid, key).run();
@@ -237,7 +250,7 @@ export default {
 
       // 練習ToDo(本棚ごとに1つ、sync_keyを主キーにした1行にまるごとJSONを保存)
       if (path === '/api/todos' && request.method === 'GET') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const row = await env.DB
           .prepare('SELECT items_json, updated_at FROM practice_todos WHERE sync_key = ?')
@@ -246,7 +259,7 @@ export default {
         return json({ items: JSON.parse(row.items_json), updatedAt: row.updated_at });
       }
       if (path === '/api/todos' && request.method === 'PUT') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const body = await request.json();
         const { items, updatedAt } = body;
@@ -260,7 +273,7 @@ export default {
 
       // メモのスタンプ(本棚ごとに1つ、練習ToDoと同じ持ち方)
       if (path === '/api/stamps' && request.method === 'GET') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const row = await env.DB
           .prepare('SELECT items_json, updated_at FROM memo_stamps WHERE sync_key = ?')
@@ -269,7 +282,7 @@ export default {
         return json({ items: JSON.parse(row.items_json), updatedAt: row.updated_at });
       }
       if (path === '/api/stamps' && request.method === 'PUT') {
-        const key = requireKey();
+        const key = await requireKey();
         if (!key) return err('invalid key', 401);
         const body = await request.json();
         const { items, updatedAt } = body;
@@ -279,6 +292,19 @@ export default {
            ON CONFLICT(sync_key) DO UPDATE SET items_json = excluded.items_json, updated_at = excluded.updated_at`
         ).bind(key, JSON.stringify(items), updatedAt).run();
         return json({ ok: true });
+      }
+
+      // 招待: 今すでに有効なキーを持っている人なら誰でも、新しい(別の本棚の)キーを
+      // その場で発行できる。発行されたキーはこのリクエストのキーとは完全に独立した
+      // 新しい本棚になる(データを共有しない、一からの空の本棚)。
+      if (path === '/api/invite' && request.method === 'POST') {
+        const key = await requireKey();
+        if (!key) return err('invalid key', 401);
+        const newKey = generateInviteKey();
+        await env.DB.prepare(
+          'INSERT INTO allowed_keys (key, label, created_at) VALUES (?, ?, ?)'
+        ).bind(newKey, `invited (via key ...${key.slice(-4)})`, Date.now()).run();
+        return json({ key: newKey });
       }
 
       return err('not found', 404);

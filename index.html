@@ -532,6 +532,7 @@
         <button id="btnSync">今すぐ同期</button>
         <button id="btnSetSyncKey">同期キーを設定</button>
         <button id="btnCopySetupLink">他の端末用リンクをコピー</button>
+        <button id="btnInviteFriend">&#128101; 友達を招待</button>
       </div>
       <div class="backupGroup">
         <span class="backupGroupLabel">&#128190; バックアップ</span>
@@ -809,6 +810,7 @@
   const btnSync = document.getElementById('btnSync');
   const btnSetSyncKey = document.getElementById('btnSetSyncKey');
   const btnCopySetupLink = document.getElementById('btnCopySetupLink');
+  const btnInviteFriend = document.getElementById('btnInviteFriend');
   const btnGoSetlists = document.getElementById('btnGoSetlists');
   const btnAppMode = document.getElementById('btnAppMode');
   const offlineCacheInfo = document.getElementById('offlineCacheInfo');
@@ -4793,6 +4795,37 @@
       alert('セットアップ用リンクをコピーしました。LINEやメモなどに貼り付けて、他の端末で開いてください。');
     } catch (err) {
       prompt('コピーしてください:', url);
+    }
+  });
+
+  // 友達に「別の本棚」を渡すための招待リンクを作る。上の「他の端末用リンクを
+  // コピー」は今の自分のキー(=自分の本棚)をそのまま渡すので、渡した相手と
+  // 曲・セットリストを共有する形になる。それとは違い、こちらはサーバーに新しい
+  // キーをその場で発行してもらい、渡した相手だけの空の本棚を作る。
+  btnInviteFriend.addEventListener('click', async () => {
+    const key = localStorage.getItem(SYNC_KEY_STORAGE);
+    if (!key) {
+      alert('まだ同期キーが設定されていません。先に「クラウド同期」を1回実行してください。');
+      return;
+    }
+    if (!confirm('友達専用の新しい招待リンクを作ります。\nあなたの曲やメモは共有されず、招待された相手は空の本棚から始まります。\nよろしいですか?')) return;
+    try {
+      const res = await syncFetch(`${SYNC_API_URL}/api/invite`, {
+        method: 'POST',
+        headers: { 'X-Sync-Key': key },
+      });
+      if (res.status === 401) throw new Error('同期キーが正しくありません(再度お試しください)');
+      if (!res.ok) throw new Error(`サーバーエラー (${res.status})`);
+      const { key: newKey } = await res.json();
+      const url = `${location.origin}${location.pathname}?key=${encodeURIComponent(newKey)}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        alert('招待リンクをコピーしました。友達に送ってください。開くとその友達専用の本棚がセットアップされます。');
+      } catch (err) {
+        prompt('コピーしてください:', url);
+      }
+    } catch (err) {
+      alert(`招待リンクの作成に失敗しました: ${err.message}`);
     }
   });
 

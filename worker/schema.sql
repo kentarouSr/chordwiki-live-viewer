@@ -59,3 +59,11 @@ CREATE TABLE IF NOT EXISTS memo_stamps (
   items_json TEXT NOT NULL DEFAULT '[]',
   updated_at INTEGER NOT NULL DEFAULT 0
 );
+
+-- 使用を許可する同期キーの一覧。POST /api/invite で、既に有効なキーを
+-- 持っている人なら誰でも新しいキーをここに追加できる(2026-08-16)。
+CREATE TABLE IF NOT EXISTS allowed_keys (
+  key TEXT PRIMARY KEY,
+  label TEXT,
+  created_at INTEGER NOT NULL
+);
