@@ -698,7 +698,7 @@
           <button id="btnScoreClearAll">全消去</button>
         </div>
       </div>
-      <p id="scoreEditorHint">五線譜をタップして音の高さを入力してください。休符は「休符」ボタンで直接追加できます。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。</p>
+      <p id="scoreEditorHint">五線譜をタップして音の高さを入力してください。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。休符は「休符」ボタンで直接追加できます。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。</p>
     </div>
   </div>
 
@@ -2429,6 +2429,16 @@
     }
     return hitSrcIndex;
   }
+  // 音符を掴んで上下にドラッグすると、その場で音高を変えられる(ドラッグ中の状態)。
+  // 「タップで選択→別の場所をタップして音高指定」方式だけだと、2回目のタップが
+  // 隣の音符の判定圏内(hitRadius)に入ってしまい別の音符を選択してしまうため、
+  // 音符が詰まっている譜面ではまともに音高を直せなかった(スマホだと特に顕著)。
+  // 「長押しして上下で変えたい」という要望を受けて追加したが、待ち時間があると
+  // かえって使いにくいので、長押しを待たず動かした瞬間からドラッグ扱いにしている
+  // (指を動かさずに離せば今まで通りの「タップ=選択/選択解除」)。
+  let scorePitchDrag = null;
+  const SCORE_PITCH_DRAG_THRESHOLD = 4; // px。これ以下の動きはタップとみなす
+
   scoreEditorCanvas.addEventListener('pointerdown', (e) => {
     const rect = scoreEditorCanvas.getBoundingClientRect();
     const tapX = e.clientX - rect.left;
@@ -2436,9 +2446,19 @@
 
     const hitSrcIndex = scoreHitTestNote(tapX, tapY);
     if (hitSrcIndex !== null) {
-      scoreSelectedIndex = scoreSelectedIndex === hitSrcIndex ? null : hitSrcIndex;
-      updateScoreToolbarUI();
-      renderScoreCanvas();
+      // 五線の座標→音高の換算に使う値は、ドラッグ開始時点の数値を控えておく
+      // (再描画のたびにStaveオブジェクト自体は作り直されるため参照は持たない)。
+      const pos = scoreLastNotePositions.get(hitSrcIndex);
+      const stave = pos ? scoreLastStaves[pos.sysIdx] : null;
+      scorePitchDrag = {
+        srcIndex: hitSrcIndex,
+        pointerId: e.pointerId,
+        startY: tapY,
+        moved: false,
+        baseY: stave ? stave.getYForLine(4) : null,
+        spacing: stave ? stave.getSpacingBetweenLines() : null,
+      };
+      scoreEditorCanvas.setPointerCapture(e.pointerId);
       return;
     }
 
@@ -2471,6 +2491,42 @@
     });
     renderScoreCanvas();
   });
+
+  scoreEditorCanvas.addEventListener('pointermove', (e) => {
+    if (!scorePitchDrag || e.pointerId !== scorePitchDrag.pointerId) return;
+    const rect = scoreEditorCanvas.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    if (!scorePitchDrag.moved && Math.abs(y - scorePitchDrag.startY) < SCORE_PITCH_DRAG_THRESHOLD) return;
+    if (scorePitchDrag.baseY === null) return; // 五線の情報が取れなかった時は何もしない
+    scorePitchDrag.moved = true;
+
+    const el = scoreElements[scorePitchDrag.srcIndex];
+    if (!el) return;
+    const step = Math.round((scorePitchDrag.baseY - y) / (scorePitchDrag.spacing / 2));
+    if (step === el.step) return; // 半音〜1音ぶん動くまでは再描画しない(描画は重いため)
+    el.step = step;
+    // ドラッグ中の音符は選択状態にして青く見せる(今どれを動かしているか分かるように)
+    scoreSelectedIndex = scorePitchDrag.srcIndex;
+    renderScoreCanvas();
+  });
+
+  function endScorePitchDrag(e) {
+    if (!scorePitchDrag || e.pointerId !== scorePitchDrag.pointerId) return;
+    const drag = scorePitchDrag;
+    scorePitchDrag = null;
+    if (drag.moved) {
+      // ドラッグで音高を変えた後は、その音符を選択したまま残す
+      // (続けて音価や♯♭も直せるように)
+      scoreSelectedIndex = drag.srcIndex;
+    } else {
+      // 指を動かさずに離した=タップ。従来どおり選択/選択解除のトグル
+      scoreSelectedIndex = scoreSelectedIndex === drag.srcIndex ? null : drag.srcIndex;
+    }
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+  scoreEditorCanvas.addEventListener('pointerup', endScorePitchDrag);
+  scoreEditorCanvas.addEventListener('pointercancel', endScorePitchDrag);
 
   // scoreElementsから、タイ分割された描画用の列(queue)・小節分割・各音符の
   // 実効臨時記号(調号+その小節内の直前の臨時記号を考慮した実際の音)・
