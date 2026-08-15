@@ -61,6 +61,13 @@
     text-decoration: none; display: inline-block;
   }
   #backupBar button:disabled { opacity: 0.5; cursor: default; }
+  /* 同期・バックアップ・オフラインは普段さわらない設定なので、画面が狭い時だけ
+     この開閉ボタンの中に畳む(広い画面では常に開いた状態で、ボタン自体を出さない)。 */
+  #btnToggleSettings {
+    display: none; align-self: flex-start; margin-bottom: 10px;
+    font-size: 12px; padding: 6px 10px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
   #lastBackupInfo.warn { color: #f77; }
   /* クラウド同期・バックアップ・オフラインの3系統を見出し付きでグループ化し、
      何のためのボタンかが一目で分かるようにする。 */
@@ -493,6 +500,10 @@
     #backupBar button, #backupBar a { font-size: 11px; padding: 5px 8px; }
     .backupGroup { gap: 6px; }
     .backupGroupLabel { min-width: 0; }
+    /* 狭い画面でだけ、設定類を開閉ボタンの中に畳む。.collapsedクラス自体は
+       広い画面にも付いたままだが、この中でしか効かないので影響しない。 */
+    #btnToggleSettings { display: inline-block; }
+    #backupBar.collapsed { display: none; }
     #songSearchRow { margin-bottom: 8px; }
     #songSearchInput, #songSortSelect { font-size: 13px; padding: 8px 10px; }
     #songList { gap: 7px; }
@@ -513,7 +524,8 @@
       <button id="btnGoTodos">&#9989; 練習ToDo</button>
       <button id="btnAddSong">＋ 曲を追加</button>
     </div>
-    <div id="backupBar">
+    <button id="btnToggleSettings" aria-expanded="false">&#9881; 設定・バックアップ &#9662;</button>
+    <div id="backupBar" class="collapsed">
       <a id="btnManual" href="./manual.html">&#128214; 使い方</a>
       <div class="backupGroup">
         <span class="backupGroupLabel">&#9729; クラウド同期</span>
@@ -801,6 +813,8 @@
   const btnAppMode = document.getElementById('btnAppMode');
   const offlineCacheInfo = document.getElementById('offlineCacheInfo');
   const btnUpdateOfflineCache = document.getElementById('btnUpdateOfflineCache');
+  const btnToggleSettings = document.getElementById('btnToggleSettings');
+  const backupBar = document.getElementById('backupBar');
 
   const todoListScreen = document.getElementById('todoListScreen');
   const todoListEl = document.getElementById('todoList');
@@ -3729,6 +3743,16 @@
       setTimeout(() => el.classList.remove('memo-highlight'), 2800);
     }
   }
+
+  // 設定(同期・バックアップ・オフライン)の開閉。畳んだ状態はCSSの
+  // メディアクエリ内でしか効かないので、広い画面ではこのボタン自体が出ず常に開いている。
+  btnToggleSettings.addEventListener('click', () => {
+    const collapsed = backupBar.classList.toggle('collapsed');
+    btnToggleSettings.setAttribute('aria-expanded', String(!collapsed));
+    btnToggleSettings.innerHTML = collapsed
+      ? '&#9881; 設定・バックアップ &#9662;'
+      : '&#9881; 設定・バックアップ &#9652;';
+  });
 
   // ==================================================
   // セットリスト
