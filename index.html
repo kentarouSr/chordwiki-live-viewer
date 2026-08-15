@@ -1938,13 +1938,19 @@
   // 符頭の描画原点・符幹の接続位置は、Bravuraの公式メタデータ(redist/Bravura.json の
   // glyphsWithAnchors)にある実際のアンカー座標(スタッフスペース単位)から算出した値。
   // noteheadBlack/Half: cutOutNW=[0.208,0.3]/[0.204,0.296]・cutOutSE=[0.94,-0.296]/[0.98,-0.3]
-  // (見た目の重心 ≒ 中間値) / stemUpSE=[1.18,0.168]・stemDownNW=[0.0,-0.168](符幹接続点)。
+  // (見た目の重心 ≒ 中間値)。
   // 目分量の値(旧SCORE_NOTEHEAD_HALF_WIDTH=0.52固定)だと符幹と符頭の間に隙間ができて
-  // いたため、実データに基づく非対称なオフセットに修正した(2026-08-15)。
+  // いたため、実データに基づくオフセットに修正した(2026-08-15)。
   const SCORE_NOTEHEAD_CENTER = SCORE_LINE_SPACING * 0.58; // 4分・2分符頭の描画原点からの重心オフセット
   const SCORE_NOTEHEAD_WHOLE_CENTER = SCORE_LINE_SPACING * 0.85; // 全音符符頭は横に広く重心も右寄り
-  const SCORE_STEM_ATTACH_UP = SCORE_LINE_SPACING * 0.60; // 符頭の重心から符幹接続点まで(上向き=右)
-  const SCORE_STEM_ATTACH_DOWN = SCORE_LINE_SPACING * 0.58; // 同(下向き=左。符号は呼び出し側で反転)
+  // 符幹の接続点は、当初stemUpSE/stemDownNW(SMuFL上の公式アンカー)をそのまま
+  // 使っていたが、これは複数符頭が重なるクラスタ配置向けの余白込みの座標で、
+  // 単独の符頭に対しては見た目のインク端(cutOutNW/SE)より外側に位置し、
+  // 符幹と符頭の間に実測4px程度の隙間ができるバグがあった(上向き符幹側で発覚。
+  // pxスキャンで確認・2026-08-15)。cutOut座標(≒中心から約6.5px)を基準に、
+  // わずかに内側へ重ねてアンチエイリアスでも確実に接続するよう調整した値。
+  const SCORE_STEM_ATTACH_UP = SCORE_LINE_SPACING * 0.30; // 符頭の重心から符幹接続点まで(上向き=右)
+  const SCORE_STEM_ATTACH_DOWN = SCORE_LINE_SPACING * 0.30; // 同(下向き=左。符号は呼び出し側で反転)
   // 標準的な記譜法の寸法比率(SMuFL engravingDefaults・一般的な慣習)。スタッフ
   // スペース(SCORE_LINE_SPACING)を基準単位にしている。
   const SCORE_STEM_LEN = SCORE_LINE_SPACING * 3.5; // 符幹の長さ(標準比率)
@@ -2262,6 +2268,7 @@
       if (!confirm('音符が1つもありません。空のまま挿入しますか？')) return;
     }
     const { x, y } = scorePlacementXY;
+    renderScoreCanvas();
     const blob = await scoreCanvasToBlob();
     closeScoreEditor();
     const file = new File([blob], 'score.png', { type: 'image/png' });
@@ -2515,8 +2522,11 @@
         });
         x = ex;
         const barX = x + SCORE_BARLINE_GAP / 2;
-        const isVeryLastMeasure = isLastSystem && m === measures.length - 1;
-        drawBarline(ctx, barX, baseY, isVeryLastMeasure);
+        // 終止線(二重線)は描かない。このアプリのスコアはコード譜の特定箇所に
+        // 貼り付ける「メロディーの断片」であり、独立した「完結した1曲」ではない
+        // ため、曲の終わりを示す記号を末尾に出すのは意味が合わない
+        // (ユーザー指摘で撤回、2026-08-15)。常に普通の小節線のみ。
+        drawBarline(ctx, barX, baseY, false);
         x = ex + SCORE_BARLINE_GAP;
       });
     });
