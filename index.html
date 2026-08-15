@@ -460,6 +460,46 @@
   #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
   #setlistPositionLabel { font-size: 13px; color: #999; font-variant-numeric: tabular-nums; }
   #btnBack { margin-right: auto; font-size: 13px; opacity: 0.8; }
+
+  /* --- スマホ(狭い画面)向けレイアウト ---
+     全体の設計はiPad(横幅に余裕がある想定)に合わせてあり、そのままiPhoneで開くと
+     ボタンが何段にも折り返って、ビューアではツールバーが画面の半分以上を占め、
+     曲一覧では曲が出てくるまでに大量のスクロールが必要になってしまう。
+     機種(User-Agent)ではなく画面幅で判定しているので、iPadの分割表示や
+     ウィンドウを狭くしたPCブラウザでも同じように効く。
+     ここでは要素を消したり並びを変えたりはせず、余白と文字サイズを詰めるだけに
+     とどめている(操作方法が端末によって変わると混乱するため)。 */
+  @media (max-width: 500px) {
+    /* ビューアのツールバー: 譜面を隠す面積を減らすのが最優先 */
+    #toolbar { gap: 6px; padding: 6px 8px; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+    #toolbar button { font-size: 13px; padding: 7px 9px; border-radius: 6px; }
+    .toolbarGroup { gap: 6px; padding: 4px 6px; border-radius: 9px; }
+    #btnPlay { min-width: 62px; }
+    #speedLabel { min-width: 58px; }
+    #btnBack { font-size: 12px; }
+
+    /* 曲一覧・セットリスト等: 曲が出てくるまでのヘッダ部分を圧縮する */
+    #songListScreen, #setlistListScreen, #setlistEditScreen, #songPickerScreen, #todoListScreen {
+      padding: 12px; padding-top: max(12px, env(safe-area-inset-top));
+    }
+    /* タイトルを1行占有させ、ボタン群をその下にまとめて並べる(中途半端に
+       混ざるより、行が揃っていた方が押し間違いが減る)。space-betweenのままだと
+       折り返した行のボタンが左右に引き離されて隙間だらけになるので詰める。 */
+    #songListHeader { justify-content: flex-start; }
+    #songListHeader h1 { font-size: 16px; flex-basis: 100%; margin-right: 0; }
+    #btnGoSetlists, #btnAppMode, #btnGoTodos { font-size: 12px; padding: 7px 10px; }
+    #btnAddSong { font-size: 13px; padding: 8px 12px; }
+    #backupBar { gap: 6px; margin-bottom: 10px; }
+    #backupBar button, #backupBar a { font-size: 11px; padding: 5px 8px; }
+    .backupGroup { gap: 6px; }
+    .backupGroupLabel { min-width: 0; }
+    #songSearchRow { margin-bottom: 8px; }
+    #songSearchInput, #songSortSelect { font-size: 13px; padding: 8px 10px; }
+    #songList { gap: 7px; }
+    .songRow { padding: 9px 10px; gap: 6px; }
+    .songName { font-size: 14px; }
+    .songRow button { font-size: 12px; padding: 7px 9px; }
+  }
 </style>
 </head>
 <body>
