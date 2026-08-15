@@ -1951,6 +1951,14 @@
   // わずかに内側へ重ねてアンチエイリアスでも確実に接続するよう調整した値。
   const SCORE_STEM_ATTACH_UP = SCORE_LINE_SPACING * 0.30; // 符頭の重心から符幹接続点まで(上向き=右)
   const SCORE_STEM_ATTACH_DOWN = SCORE_LINE_SPACING * 0.30; // 同(下向き=左。符号は呼び出し側で反転)
+  // 符頭グリフはわずかに傾いており、アンカー(stemUpSE=[1.18,0.168]/
+  // stemDownNW=[0.0,-0.168])のY成分が示すとおり、符幹の接続点は符頭の
+  // 縦方向の重心そのものではなくわずかにズレている(上向き=右端はやや上、
+  // 下向き=左端はやや下)。SMuFL座標は上方向が正・Canvasは下方向が正なので
+  // 符号を反転して使う。横方向のオフセット(SCORE_STEM_ATTACH_UP/DOWN)と違い
+  // これは符頭の絶対描画位置(scoreGlyphYFixで補正済み)からの相対量なので、
+  // フォントの内部原点ズレの影響を受けずそのままスタッフスペース比で使える。
+  const SCORE_STEM_ATTACH_Y_OFFSET = SCORE_LINE_SPACING * 0.168;
   // 標準的な記譜法の寸法比率(SMuFL engravingDefaults・一般的な慣習)。スタッフ
   // スペース(SCORE_LINE_SPACING)を基準単位にしている。
   const SCORE_STEM_LEN = SCORE_LINE_SPACING * 3.5; // 符幹の長さ(標準比率)
@@ -2605,6 +2613,10 @@
     const stemUp = upCount >= group.length / 2;
     const headOffset = stemUp ? SCORE_STEM_ATTACH_UP : -SCORE_STEM_ATTACH_DOWN;
     const stemXs = xs.map((x) => x + headOffset);
+    // 符幹の接続点は符頭の重心そのものよりわずかに縦にズレている(cutoutNW/SE参照。
+    // drawScoreElementの符幹と同じ理由)。連桁の傾き自体は符頭の実際の高さ(ys)から
+    // 計算し、符幹の描画開始点だけこの補正を適用する。
+    const stemStartYs = ys.map((y) => stemUp ? y - SCORE_STEM_ATTACH_Y_OFFSET : y + SCORE_STEM_ATTACH_Y_OFFSET);
 
     const flatY = stemUp ? Math.min(...ys) - SCORE_STEM_LEN : Math.max(...ys) + SCORE_STEM_LEN;
     const rawSlant = ys[ys.length - 1] - ys[0];
@@ -2616,7 +2628,7 @@
     ctx.lineWidth = SCORE_LINE_SPACING * 0.1;
     for (let i = 0; i < group.length; i++) {
       ctx.beginPath();
-      ctx.moveTo(stemXs[i], ys[i]);
+      ctx.moveTo(stemXs[i], stemStartYs[i]);
       ctx.lineTo(stemXs[i], beamYAt(xs[i]));
       ctx.stroke();
     }
@@ -2734,10 +2746,11 @@
     if (el.duration !== 'whole' && !beamed) {
       const stemUp = el.step < 4;
       const stemX = x + (stemUp ? SCORE_STEM_ATTACH_UP : -SCORE_STEM_ATTACH_DOWN);
-      const stemEndY = stemUp ? y - SCORE_STEM_LEN : y + SCORE_STEM_LEN;
+      const stemStartY = stemUp ? y - SCORE_STEM_ATTACH_Y_OFFSET : y + SCORE_STEM_ATTACH_Y_OFFSET;
+      const stemEndY = stemUp ? stemStartY - SCORE_STEM_LEN : stemStartY + SCORE_STEM_LEN;
       ctx.lineWidth = SCORE_LINE_SPACING * 0.1;
       ctx.beginPath();
-      ctx.moveTo(stemX, y);
+      ctx.moveTo(stemX, stemStartY);
       ctx.lineTo(stemX, stemEndY);
       ctx.stroke();
 
