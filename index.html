@@ -1950,18 +1950,20 @@
   // 調号: 五度圏(fifths)。#系はF,C,G,D,A,E,Bの順に増える/♭系はB,E,A,D,G,C,Fの順に増える。
   const SCORE_SHARP_ORDER_LETTERS = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
   const SCORE_FLAT_ORDER_LETTERS = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+  // 表示名はキー文字だけ(シャープ/フラットの数までは書かない。#/♭の本数は
+  // 五線に描かれる調号を見れば分かるため、との指摘で簡略化・2026-08-15)。
   const SCORE_KEY_OPTIONS = [
-    { fifths: 0, label: 'ハ長調(C) ♯♭なし', vexName: 'C' },
-    { fifths: 1, label: 'ト長調(G) ♯1', vexName: 'G' },
-    { fifths: 2, label: 'ニ長調(D) ♯2', vexName: 'D' },
-    { fifths: 3, label: 'イ長調(A) ♯3', vexName: 'A' },
-    { fifths: 4, label: 'ホ長調(E) ♯4', vexName: 'E' },
-    { fifths: 5, label: 'ロ長調(B) ♯5', vexName: 'B' },
-    { fifths: -1, label: 'ヘ長調(F) ♭1', vexName: 'F' },
-    { fifths: -2, label: '変ロ長調(B♭) ♭2', vexName: 'Bb' },
-    { fifths: -3, label: '変ホ長調(E♭) ♭3', vexName: 'Eb' },
-    { fifths: -4, label: '変イ長調(A♭) ♭4', vexName: 'Ab' },
-    { fifths: -5, label: '変ニ長調(D♭) ♭5', vexName: 'Db' },
+    { fifths: 0, label: 'C', vexName: 'C' },
+    { fifths: 1, label: 'G', vexName: 'G' },
+    { fifths: 2, label: 'D', vexName: 'D' },
+    { fifths: 3, label: 'A', vexName: 'A' },
+    { fifths: 4, label: 'E', vexName: 'E' },
+    { fifths: 5, label: 'B', vexName: 'B' },
+    { fifths: -1, label: 'F', vexName: 'F' },
+    { fifths: -2, label: 'Bb', vexName: 'Bb' },
+    { fifths: -3, label: 'Eb', vexName: 'Eb' },
+    { fifths: -4, label: 'Ab', vexName: 'Ab' },
+    { fifths: -5, label: 'Db', vexName: 'Db' },
   ];
   function scoreKeyOption() { return SCORE_KEY_OPTIONS.find((k) => k.fifths === scoreKeyFifths); }
   // 調号(fifths)から「どの文字に♯/♭が付くか」のマップを作る(C→null=無変化)。
@@ -1987,6 +1989,20 @@
   function scoreStepToVexKey(step, effectiveAccidental) {
     const { letter, octave } = scoreStaffStepToLetterOctave(step);
     return letter.toLowerCase() + (SCORE_ACCIDENTAL_TO_VEX_SUFFIX[effectiveAccidental] || '') + '/' + octave;
+  }
+  // コード名(ユーザーが自由入力した文字列、例: "Cm7"「E♭△9」)をVexFlowの
+  // ChordSymbolに変換する。ルート音(A〜G+任意で#/♭)は通常サイズ、それ以外
+  // (コードの種類・テンション)は上付き文字にする(実際のコード譜表記の慣習)。
+  // 記号ごとに専用グリフへ厳密変換する複雑なパーサーは組まず、上付きテキストとして
+  // そのまま描画する(ChordSymbolはaddTextSuperscriptに△や♭等のUnicode文字を渡しても
+  // そのまま綺麗に描画できることをヘッドレスブラウザで確認済み)。
+  function scoreBuildChordSymbol(VF, text) {
+    const cs = new VF.ChordSymbol().setVertical(VF.ChordSymbolVerticalJustify.TOP);
+    const m = String(text).match(/^([A-Ga-g])([#♯b♭]?)(.*)$/);
+    if (!m) { cs.addText(String(text)); return cs; }
+    cs.addText(m[1].toUpperCase() + m[2]);
+    if (m[3]) cs.addTextSuperscript(m[3]);
+    return cs;
   }
   function scoreElementDurationUnits(el) {
     let u = SCORE_DURATION_UNITS[el.duration];
@@ -2077,6 +2093,7 @@
   let scoreTimeSigIdx = 0;
   let scoreKeyFifths = 0;
   let scoreSystemWidth = 640; // 段の幅(openScoreEditorでコンテナ幅に合わせて決め直す)
+  let scoreSelectedIndex = null; // 編集用に選択中の音符・休符(scoreElementsのインデックス)。nullなら非選択
 
   SCORE_TIME_SIGS.forEach((ts, i) => {
     const opt = document.createElement('option');
@@ -2106,6 +2123,7 @@
     scorePendingDot = false;
     scorePendingTripletCount = 0;
     scorePendingAccidental = null;
+    scoreSelectedIndex = null;
     scoreChordInput.value = '';
     scoreTimeSigIdx = 0;
     scoreKeyFifths = 0;
@@ -2123,40 +2141,72 @@
     scorePlacementXY = null;
   }
 
+  // scoreSelectedIndexが選択されている間は、ツールバーの各ボタンは「次に置く
+  // 音符の設定」ではなく「選択中の音符をその場で直す」操作になる(タップした音符を
+  // 選び直して修正できる機能、2026-08-15)。
   function updateScoreToolbarUI() {
+    const sel = scoreSelectedIndex !== null ? scoreElements[scoreSelectedIndex] : null;
     document.querySelectorAll('.scoreDurationBtn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.duration === scoreSelectedDuration);
+      btn.classList.toggle('active', btn.dataset.duration === (sel ? sel.duration : scoreSelectedDuration));
     });
-    btnScoreDot.classList.toggle('active', scorePendingDot);
+    btnScoreDot.classList.toggle('active', sel ? !!sel.dotted : scorePendingDot);
     btnScoreTriplet.classList.toggle('active', scorePendingTripletCount > 0);
-    btnScoreSharp.classList.toggle('active', scorePendingAccidental === 'sharp');
-    btnScoreFlat.classList.toggle('active', scorePendingAccidental === 'flat');
-    btnScoreNatural.classList.toggle('active', scorePendingAccidental === 'natural');
+    const acc = sel ? sel.accidental : scorePendingAccidental;
+    btnScoreSharp.classList.toggle('active', acc === 'sharp');
+    btnScoreFlat.classList.toggle('active', acc === 'flat');
+    btnScoreNatural.classList.toggle('active', acc === 'natural');
+    btnScoreUndo.innerHTML = sel ? '&#10006; 選択中の音符を削除' : '&#8617; 直前を削除';
+    scoreChordInput.placeholder = sel ? 'コード名(選択中の音符に付く)' : 'コード名(次の音符に付く)';
+    if (sel) scoreChordInput.value = sel.chord || '';
   }
 
   document.querySelectorAll('.scoreDurationBtn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      scoreSelectedDuration = btn.dataset.duration;
+      if (scoreSelectedIndex !== null) {
+        scoreElements[scoreSelectedIndex].duration = btn.dataset.duration;
+        renderScoreCanvas();
+      } else {
+        scoreSelectedDuration = btn.dataset.duration;
+      }
       updateScoreToolbarUI();
     });
   });
-  btnScoreDot.addEventListener('click', () => { scorePendingDot = !scorePendingDot; updateScoreToolbarUI(); });
+  btnScoreDot.addEventListener('click', () => {
+    if (scoreSelectedIndex !== null) {
+      const el = scoreElements[scoreSelectedIndex];
+      el.dotted = !el.dotted;
+      renderScoreCanvas();
+    } else {
+      scorePendingDot = !scorePendingDot;
+    }
+    updateScoreToolbarUI();
+  });
   btnScoreTriplet.addEventListener('click', () => {
+    // 選択中の音符の3連符所属を後から編集するのは複数音符にまたがるグルーピングの
+    // 組み替えが必要で複雑になるため非対応(これまでどおり次に置く音符にのみ効く)。
     scorePendingTripletCount = scorePendingTripletCount > 0 ? 0 : 3;
     updateScoreToolbarUI();
   });
-  btnScoreSharp.addEventListener('click', () => {
-    scorePendingAccidental = scorePendingAccidental === 'sharp' ? null : 'sharp';
+  function scoreToggleAccidental(kind) {
+    if (scoreSelectedIndex !== null) {
+      const el = scoreElements[scoreSelectedIndex];
+      el.accidental = el.accidental === kind ? null : kind;
+      renderScoreCanvas();
+    } else {
+      scorePendingAccidental = scorePendingAccidental === kind ? null : kind;
+    }
     updateScoreToolbarUI();
-  });
-  btnScoreFlat.addEventListener('click', () => {
-    scorePendingAccidental = scorePendingAccidental === 'flat' ? null : 'flat';
-    updateScoreToolbarUI();
-  });
+  }
+  btnScoreSharp.addEventListener('click', () => scoreToggleAccidental('sharp'));
+  btnScoreFlat.addEventListener('click', () => scoreToggleAccidental('flat'));
   btnScoreNatural.addEventListener('click', () => {
     // 調号で♯/♭が付く音を、この音だけ本位(ナチュラル)に戻したい時に使う
-    scorePendingAccidental = scorePendingAccidental === 'natural' ? null : 'natural';
-    updateScoreToolbarUI();
+    scoreToggleAccidental('natural');
+  });
+  scoreChordInput.addEventListener('input', () => {
+    if (scoreSelectedIndex === null) return; // 非選択時は完了(音符確定)時にconsumeScoreModifiersでまとめて読む
+    scoreElements[scoreSelectedIndex].chord = scoreChordInput.value.trim() || null;
+    renderScoreCanvas();
   });
 
   // 音符/休符を1つ確定させる時に呼ぶ。付点・臨時記号・コード名は単発、3連符は
@@ -2189,12 +2239,20 @@
     renderScoreCanvas();
   });
   btnScoreUndo.addEventListener('click', () => {
-    scoreElements.pop();
+    if (scoreSelectedIndex !== null) {
+      scoreElements.splice(scoreSelectedIndex, 1);
+      scoreSelectedIndex = null;
+    } else {
+      scoreElements.pop();
+    }
+    updateScoreToolbarUI();
     renderScoreCanvas();
   });
   btnScoreClearAll.addEventListener('click', () => {
     if (scoreElements.length > 0 && !confirm('全ての音符・休符を削除しますか？')) return;
     scoreElements = [];
+    scoreSelectedIndex = null;
+    updateScoreToolbarUI();
     renderScoreCanvas();
   });
   btnScoreCancel.addEventListener('click', () => {
@@ -2221,6 +2279,9 @@
   // 最後に描画した各段(システム)のVexFlow Staveオブジェクト。タップ入力の
   // Y座標→音高変換や「今タップが効く段」の判定に使う。
   let scoreLastStaves = [];
+  // 最後に描画した各音符(scoreElementsのインデックス基準)の画面X座標+所属する段。
+  // タップして既存の音符を選択・編集する機能の当たり判定に使う。
+  let scoreLastNotePositions = new Map();
 
   // VexFlow本体+自前ホスティングのフォント(Bravura/Academico、SIL OFL、
   // vendor/vexflow/)を遅延読み込みする。CDNからのloadFonts()ではなく、
@@ -2264,14 +2325,59 @@
     const pad = spacing * 7;
     return { top: stave.getYForLine(0) - pad, bottom: stave.getYForLine(4) + pad, stave };
   }
+  // タップした場所の意味は3通り: ①既に置いた音符の近くなら、その音符を選択/選択解除
+  // する(選択中はツールバーの各ボタンがその音符をその場で直す操作になる)。
+  // ②既に音符を選択中なら、今回のタップ位置をその音符の新しい音高として反映する。
+  // ③どちらでもなければ、これまでどおり「今の段」の末尾に新しい音符を追加する。
+  // (「直前の音しか編集できないのが不便、タップした音を直せるようにしたい」という
+  // 指摘を受けて追加、2026-08-15)
+  function scoreHitTestNote(tapX, tapY) {
+    const hitRadius = SCORE_STAVE_LINE_SPACING * 1.6;
+    let hitSrcIndex = null, hitDist = Infinity;
+    for (const [srcIndex, pos] of scoreLastNotePositions) {
+      const stave = scoreLastStaves[pos.sysIdx];
+      if (!stave) continue;
+      const spacing = stave.getSpacingBetweenLines();
+      const noteY = stave.getYForLine(4) - pos.step * (spacing / 2);
+      const dist = Math.hypot(tapX - pos.x, tapY - noteY);
+      if (dist <= hitRadius && dist < hitDist) { hitDist = dist; hitSrcIndex = srcIndex; }
+    }
+    return hitSrcIndex;
+  }
   scoreEditorCanvas.addEventListener('pointerdown', (e) => {
+    const rect = scoreEditorCanvas.getBoundingClientRect();
+    const tapX = e.clientX - rect.left;
+    const tapY = e.clientY - rect.top;
+
+    const hitSrcIndex = scoreHitTestNote(tapX, tapY);
+    if (hitSrcIndex !== null) {
+      scoreSelectedIndex = scoreSelectedIndex === hitSrcIndex ? null : hitSrcIndex;
+      updateScoreToolbarUI();
+      renderScoreCanvas();
+      return;
+    }
+
+    if (scoreSelectedIndex !== null) {
+      const pos = scoreLastNotePositions.get(scoreSelectedIndex);
+      const stave = pos ? scoreLastStaves[pos.sysIdx] : null;
+      if (stave) {
+        const spacing = stave.getSpacingBetweenLines();
+        const pad = spacing * 7;
+        if (tapY >= stave.getYForLine(0) - pad && tapY <= stave.getYForLine(4) + pad) {
+          scoreElements[scoreSelectedIndex].step = Math.round((stave.getYForLine(4) - tapY) / (spacing / 2));
+        }
+      }
+      scoreSelectedIndex = null;
+      updateScoreToolbarUI();
+      renderScoreCanvas();
+      return;
+    }
+
     const band = currentSystemTapBand();
     if (!band.stave) return;
-    const rect = scoreEditorCanvas.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    if (y < band.top || y > band.bottom) return; // 今編集中の段の外(前の段や段間の余白)は無視
+    if (tapY < band.top || tapY > band.bottom) return; // 今編集中の段の外(前の段や段間の余白)は無視
     const spacing = band.stave.getSpacingBetweenLines();
-    const step = Math.round((band.stave.getYForLine(4) - y) / (spacing / 2));
+    const step = Math.round((band.stave.getYForLine(4) - tapY) / (spacing / 2));
     const mods = consumeScoreModifiers();
     scoreElements.push({
       type: 'note', step, accidental: mods.accidental, duration: scoreSelectedDuration,
@@ -2358,13 +2464,18 @@
         const key = scoreStepToVexKey(el.step, effectiveAccidental[idx]);
         note = new VF.StaveNote({ keys: [key], duration: SCORE_DURATION_TO_VEX[el.duration] });
         if (el.chord) {
-          note.addModifier(new VF.Annotation(el.chord).setVerticalJustification(VF.AnnotationVerticalJustify.TOP));
+          note.addModifier(scoreBuildChordSymbol(VF, el.chord));
         }
       }
       if (el.dotted) VF.Dot.buildAndAttach([note], { all: true });
       if (el.triplet && el.tripletGroup !== null) {
         if (!tripletIdxs.has(el.tripletGroup)) tripletIdxs.set(el.tripletGroup, []);
         tripletIdxs.get(el.tripletGroup).push(notes.length);
+      }
+      // 編集用に選択中の音符は色を変えて分かるようにする(タップした音符を
+      // 選び直して音高等を修正できる機能、2026-08-15)。
+      if (el.srcIndex === scoreSelectedIndex) {
+        note.setStyle({ fillStyle: '#2b6cb0', strokeStyle: '#2b6cb0' });
       }
       note.__scoreQueueIndex = idx; // タイ作成時に元のqueueインデックスへ逆引きするため
       notes.push(note);
@@ -2435,6 +2546,7 @@
   function drawScoreFromLayout(VF, ctx, layout) {
     const { queue, measureData, systems, keyName, ts, headerFirst, headerRest } = layout;
     scoreLastStaves = [];
+    scoreLastNotePositions = new Map();
     const notesByQueueIndex = new Map();
     let y = SCORE_TOP_MARGIN;
     systems.forEach((measureIdxs, sysIdx) => {
@@ -2478,7 +2590,15 @@
         voice.draw(ctx, stave);
         beams.forEach((b) => b.setContext(ctx).draw());
         tuplets.forEach((t) => t.setContext(ctx).draw());
-        notes.forEach((note) => { notesByQueueIndex.set(note.__scoreQueueIndex, { note, sysIdx }); });
+        notes.forEach((note) => {
+          notesByQueueIndex.set(note.__scoreQueueIndex, { note, sysIdx });
+          const el = queue[note.__scoreQueueIndex];
+          // タップ編集用の当たり判定は、タイで分割された断片のうち最初の1つ
+          // (元の音符の見た目上の開始位置)だけを覚えておけばよい。
+          if (el.type === 'note' && el.srcIndex !== null && !scoreLastNotePositions.has(el.srcIndex)) {
+            scoreLastNotePositions.set(el.srcIndex, { x: note.getAbsoluteX(), sysIdx, step: el.step });
+          }
+        });
 
         x += stave.getWidth();
       });
