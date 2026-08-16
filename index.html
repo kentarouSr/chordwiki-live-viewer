@@ -177,6 +177,19 @@
     background: #6cf !important; color: #111 !important; font-weight: bold;
     max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /* 優先度・コストのチップ。タップで 未設定→低(軽)→中→高(重)→未設定 と循環する。
+     未設定時は控えめな枠線だけの見た目にして、既に設定済みの項目だけ目立たせる。 */
+  .todoPriorityChip, .todoCostChip { font-weight: bold; }
+  .todoPriorityChip.unset, .todoCostChip.unset {
+    background: transparent !important; color: #777 !important; border: 1px dashed #444 !important;
+  }
+  .todoPriorityChip[data-level="1"] { background: #1f3a24 !important; color: #7ee08a !important; }
+  .todoPriorityChip[data-level="2"] { background: #3a3420 !important; color: #f0d070 !important; }
+  .todoPriorityChip[data-level="3"] { background: #3a2020 !important; color: #f08080 !important; }
+  /* コストは「重いほど濃い青」で、数値を読まなくても一目で分かるようにする */
+  .todoCostChip[data-level="1"] { background: #1c2e3a !important; color: #8fd0f0 !important; }
+  .todoCostChip[data-level="2"] { background: #1c4a66 !important; color: #a8def0 !important; }
+  .todoCostChip[data-level="3"] { background: #1c6690 !important; color: #d0ecfa !important; }
   .todoSubtasks { margin: 8px 0 0 30px; display: flex; flex-direction: column; gap: 8px; }
   .todoEditInput {
     flex: 1; min-width: 0; font-size: 15px; padding: 4px 6px; border-radius: 4px;
@@ -3568,6 +3581,35 @@
     });
   }
 
+  // 優先度・コストは 0(未設定)/1/2/3 の整数で持つ(サーバー側はitems_jsonに
+  // まるごと保存するだけなので、フィールドを増やすのにスキーマ変更は不要)。
+  // タップするたびに 未設定→1→2→3→未設定 と循環させる、ボタン1つだけの
+  // シンプルな操作にした(セレクトボックスより指での操作がしやすいため)。
+  const TODO_PRIORITY_LABELS = { 1: '低', 2: '中', 3: '高' };
+  const TODO_COST_LABELS = { 1: '軽', 2: '中', 3: '重' };
+  function buildTodoCycleChip(item, field, labels, prefix, className, onSaved) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = className;
+    const level = item[field] || 0;
+    if (level) {
+      btn.textContent = `${prefix}:${labels[level]}`;
+      btn.dataset.level = String(level);
+    } else {
+      btn.textContent = `+${prefix}`;
+      btn.classList.add('unset');
+    }
+    btn.title = `タップで${prefix}を切り替え(未設定→${labels[1]}→${labels[2]}→${labels[3]}→未設定)`;
+    btn.addEventListener('click', async () => {
+      const cur = item[field] || 0;
+      item[field] = cur >= 3 ? 0 : cur + 1;
+      item.updatedAt = Date.now();
+      await saveTodos();
+      onSaved();
+    });
+    return btn;
+  }
+
   function buildTodoItemEl(item, songsByUuid) {
     const wrap = document.createElement('div');
     wrap.className = 'todoItem';
@@ -3606,6 +3648,8 @@
 
     row.appendChild(checkbox);
     row.appendChild(text);
+    row.appendChild(buildTodoCycleChip(item, 'priority', TODO_PRIORITY_LABELS, '優先度', 'todoPriorityChip', renderTodoList));
+    row.appendChild(buildTodoCycleChip(item, 'cost', TODO_COST_LABELS, 'コスト', 'todoCostChip', renderTodoList));
     if (item.link && item.link.songUuid) {
       const song = songsByUuid && songsByUuid.get(item.link.songUuid);
       const btnJump = document.createElement('button');
