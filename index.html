@@ -331,6 +331,26 @@
     flex-shrink: 0; width: 120px; font-size: 13px; padding: 6px 10px; border-radius: 14px;
     border: 1px solid #6cf; background: #fff; color: #111;
   }
+  /* 画像メモの配置待ち中に出すヒントバー。以前はalert()を出してすぐ
+     <input type=file>を開いていたが、そのネイティブのファイル選択ダイアログが
+     フォーカスを奪うため、代替手段のはずのCtrl+V貼り付けがダイアログを
+     閉じるまで効かないという分かりにくい状態になっていた。alert()を挟まず、
+     ファイル選択は明示的なボタン操作の時だけ開くようにして、貼り付けは
+     いつでも受け付けられるようにした。 */
+  #imagePickerHint {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top));
+    background: rgba(17,17,17,0.95); backdrop-filter: blur(4px);
+    font-size: 13px; color: #ccc;
+  }
+  #imagePickerHint.hidden { display: none; }
+  #imagePickerHint button {
+    flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 14px;
+    border: none; cursor: pointer;
+  }
+  #btnImagePickerChoose { background: #6cf; color: #111; font-weight: bold; }
+  #btnImagePickerCancel { background: #333; color: #eee; }
 
   #memoImageInput { display: none; }
   .memoEditOnly { display: none; }
@@ -634,6 +654,11 @@
 
   <div id="viewer" class="hidden">
     <div id="memoStampBar" class="hidden"></div>
+    <div id="imagePickerHint" class="hidden">
+      <span>画像を選択するか、この画面に貼り付け(Ctrl+V)</span>
+      <button id="btnImagePickerChoose" type="button">📷 ファイルを選ぶ</button>
+      <button id="btnImagePickerCancel" type="button">✕</button>
+    </div>
     <div id="scrollWrap">
       <div id="tileContainer"></div>
       <svg id="strokeLayer"></svg>
@@ -917,6 +942,9 @@
   const drawWidthLabel = document.getElementById('drawWidthLabel');
   const btnUndoStroke = document.getElementById('btnUndoStroke');
   const memoImageInput = document.getElementById('memoImageInput');
+  const imagePickerHintEl = document.getElementById('imagePickerHint');
+  const btnImagePickerChoose = document.getElementById('btnImagePickerChoose');
+  const btnImagePickerCancel = document.getElementById('btnImagePickerCancel');
   const btnEditBpm = document.getElementById('btnEditBpm');
   const btnMetronome = document.getElementById('btnMetronome');
   const btnSpeedUp = document.getElementById('btnSpeedUp');
@@ -1965,10 +1993,21 @@
       memoImageInput.dataset.pendingX = String(x);
       memoImageInput.dataset.pendingY = String(y);
       pendingMemoPlacement = { x, y };
-      alert('画像を選択するか、この画面に貼り付け(Ctrl+V)してください');
-      memoImageInput.click();
+      // 以前はここでalert()を出してすぐ<input type=file>を開いていたが、
+      // ネイティブのファイル選択ダイアログがOSのフォーカスを持っていってしまうため、
+      // 案内していたはずのCtrl+V貼り付けがダイアログを閉じるまで効かなかった
+      // (「Ctrl+Vがうまくいかない」という報告で発覚)。ファイル選択はこのヒント
+      // バーの「ファイルを選ぶ」ボタンを押した時だけ明示的に開くようにし、
+      // 貼り付けはダイアログを開かずいつでも受け付けられるようにした。
+      imagePickerHintEl.classList.remove('hidden');
     }
   }
+
+  btnImagePickerChoose.addEventListener('click', () => memoImageInput.click());
+  btnImagePickerCancel.addEventListener('click', () => {
+    pendingMemoPlacement = null;
+    imagePickerHintEl.classList.add('hidden');
+  });
 
   async function addImageMemoFromFile(file, x, y) {
     const data = await file.arrayBuffer();
@@ -1991,6 +2030,7 @@
         if (!file) continue;
         const { x, y } = pendingMemoPlacement;
         pendingMemoPlacement = null;
+        imagePickerHintEl.classList.add('hidden');
         addImageMemoFromFile(file, x, y);
         break;
       }
@@ -2018,6 +2058,7 @@
     const y = parseFloat(memoImageInput.dataset.pendingY);
     memoImageInput.value = '';
     pendingMemoPlacement = null;
+    imagePickerHintEl.classList.add('hidden');
     if (!file) return;
     await addImageMemoFromFile(file, x, y);
   });
@@ -2849,6 +2890,7 @@
     memoEditMode = on;
     setPendingMemoType(null);
     pendingMemoPlacement = null;
+    imagePickerHintEl.classList.add('hidden');
     setDrawMode(false);
     viewer.classList.toggle('memo-edit-mode', memoEditMode);
     if (memoEditMode) stopPlayback();
@@ -5097,6 +5139,7 @@
     memoEditMode = false;
     setPendingMemoType(null);
     pendingMemoPlacement = null;
+    imagePickerHintEl.classList.add('hidden');
     drawMode = false;
     activeSetlist = null;
     activeSetlistIndex = -1;
