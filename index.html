@@ -205,12 +205,15 @@
   .todoCostChip[data-level="1"] { background: #1c2e3a !important; color: #8fd0f0 !important; }
   .todoCostChip[data-level="2"] { background: #1c4a66 !important; color: #a8def0 !important; }
   .todoCostChip[data-level="3"] { background: #1c6690 !important; color: #d0ecfa !important; }
-  .todoSubtasks { margin: 8px 0 0 30px; display: flex; flex-direction: column; gap: 8px; }
+  /* 38px = ドラッグハンドルの幅(28px)+行のgap(10px)。親行はハンドル分だけ
+     チェックボックスが右にずれているので、サブタスクのインデントもそれに
+     合わせないとチェックボックスの縦位置が親とズレて見える。 */
+  .todoSubtasks { margin: 8px 0 0 38px; display: flex; flex-direction: column; gap: 8px; }
   .todoEditInput {
     flex: 1; min-width: 0; font-size: 15px; padding: 4px 6px; border-radius: 4px;
     border: 1px solid #6cf; background: #fff; color: #111;
   }
-  .todoAddSubtaskRow { margin: 8px 0 0 30px; display: flex; gap: 8px; }
+  .todoAddSubtaskRow { margin: 8px 0 0 38px; display: flex; gap: 8px; }
   .todoAddSubtaskRow input {
     flex: 1; min-width: 0; font-size: 14px; padding: 6px 8px; border-radius: 6px;
     border: 1px solid #333; background: #1c1c1c; color: #eee;
