@@ -3393,7 +3393,11 @@
   }
   function sortSongs(songs, mode) {
     switch (mode) {
-      case 'nameAsc': return songs.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+      // numeric:trueで「M2」が「M11」より前に来るようにする(曲名の先頭に
+      // 「M1_」「M2_」...のような通し番号を振って管理しているケースが多いため、
+      // 文字列としての比較だとM1, M11, M12...M19, M2, M21...という
+      // 直感に反する順序になってしまう)。
+      case 'nameAsc': return songs.sort((a, b) => a.name.localeCompare(b.name, 'ja', { numeric: true }));
       case 'createdDesc': return songs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       case 'createdAsc': return songs.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       case 'updatedDesc':
@@ -3990,7 +3994,9 @@
     const existing = new Set((sl ? sl.items || [] : []).filter((i) => i.type === 'song').map((i) => i.uuid));
     const allSongs = await dbGetAll();
     await Promise.all(allSongs.map(ensureSongUuid));
-    allSongs.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    // numeric:trueで「M2」が「M11」より前に来るようにする(曲名一覧のnameAsc
+    // ソートと同じ理由)。
+    allSongs.sort((a, b) => a.name.localeCompare(b.name, 'ja', { numeric: true }));
 
     songPickerListEl.innerHTML = '';
     const available = allSongs.filter((s) => !existing.has(s.uuid));
