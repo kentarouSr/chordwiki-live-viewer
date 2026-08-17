@@ -506,7 +506,12 @@
   .scorePianoBlackKey.disabled { opacity: 0.3; pointer-events: none; }
   .scorePianoWhiteKey.selected { background: #cfe8fb; border-color: #2b6cb0; }
   .scorePianoBlackKey.selected { background: #2b6cb0; }
+  /* MIDIキーボードで今物理的に押されている鍵(「選択中」の青とは意味が違うので
+     別の色にする。選択中と同時に光ることもあるためリング状の重ね掛けにしている) */
+  .scorePianoWhiteKey.pressed, .scorePianoBlackKey.pressed { box-shadow: inset 0 0 0 3px #2ecc71; }
   #btnScoreEnharmonic.mode-sharp, #btnScoreEnharmonic.mode-flat { background: #6cf; color: #111; font-weight: bold; }
+  #btnScoreMidi.hidden { display: none; }
+  #btnScoreMidi.on { background: #2ecc71; color: #111; font-weight: bold; }
 
   #toolbar {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
@@ -806,11 +811,12 @@
         </div>
         <div class="scoreEditorGroup">
           <input id="scoreChordInput" type="text" placeholder="コード名(次の音符に付く)">
-          <button id="btnScoreUndo">&#8617; 直前を削除</button>
+          <button id="btnScoreUndo">&#10006; 直前を削除</button>
           <button id="btnScoreClearAll">全消去</button>
+          <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
         </div>
       </div>
-      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。</p>
+      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。PCでは<strong>キーボード入力</strong>(A〜G:音符 / 1〜7:音価 / -,=,0:♭♯♮ / ←→:音符移動 / Delete:削除 / Ctrl+Z:取り消し)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。</p>
       <div id="scorePianoKeyboard"></div>
     </div>
   </div>
@@ -983,6 +989,7 @@
   const scoreKeySelect = document.getElementById('scoreKeySelect');
   const btnScoreUndo = document.getElementById('btnScoreUndo');
   const btnScoreClearAll = document.getElementById('btnScoreClearAll');
+  const btnScoreMidi = document.getElementById('btnScoreMidi');
   const btnDrawPen = document.getElementById('btnDrawPen');
   const btnDrawHighlighter = document.getElementById('btnDrawHighlighter');
   const drawColorInput = document.getElementById('drawColorInput');
@@ -2345,6 +2352,42 @@
   let scoreSystemWidth = 640; // 段の幅(openScoreEditorでコンテナ幅に合わせて決め直す)
   let scoreSelectedIndex = null; // 編集用に選択中の音符・休符(scoreElementsのインデックス)。nullなら非選択
 
+  // Ctrl+Z/Ctrl+Y用の本物のundo/redo履歴(2026-08-17〜)。btnScoreUndoは元々
+  // 「直前/選択中を削除」する単発の操作であり本物のundo履歴ではない(名前が
+  // 紛らわしいが挙動は変えていない、下のボタンラベル修正のコメントも参照)。
+  // scoreElementsをディープクローンしたスナップショットを積むだけの単純な方式
+  // (このエディタは1曲ぶんの譜面が対象で要素数は少ないため、差分管理は不要)。
+  // 調号・拍子の変更はundo対象に含めない(既存のbtnScoreUndoも元々そこには
+  // 触れていないため、スコープを揃えている)。
+  let scoreUndoStack = [];
+  let scoreRedoStack = [];
+  const SCORE_UNDO_LIMIT = 100;
+  function cloneScoreElements(arr) { return JSON.parse(JSON.stringify(arr)); }
+  // 実際に変更が起きる直前にだけ呼ぶこと。変更が起きない分岐(範囲外タップ等)で
+  // 無条件に呼ぶと、undoしても見た目が変わらない「ゴミ」スナップショットが
+  // 積まれてしまう。
+  function pushScoreUndoSnapshot() {
+    scoreUndoStack.push(cloneScoreElements(scoreElements));
+    if (scoreUndoStack.length > SCORE_UNDO_LIMIT) scoreUndoStack.shift();
+    scoreRedoStack = []; // 新しい操作をしたら、それより後のredoは無効になる
+  }
+  function scoreUndo() {
+    if (scoreUndoStack.length === 0) return;
+    scoreRedoStack.push(cloneScoreElements(scoreElements));
+    scoreElements = scoreUndoStack.pop();
+    scoreSelectedIndex = null; // 選択していた要素が履歴を跨いで同一とは限らないため単純化
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+  function scoreRedo() {
+    if (scoreRedoStack.length === 0) return;
+    scoreUndoStack.push(cloneScoreElements(scoreElements));
+    scoreElements = scoreRedoStack.pop();
+    scoreSelectedIndex = null;
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+
   SCORE_TIME_SIGS.forEach((ts, i) => {
     const opt = document.createElement('option');
     opt.value = String(i);
@@ -2370,6 +2413,8 @@
   function openScoreEditor(x, y) {
     scorePlacementXY = { x, y };
     scoreElements = [];
+    scoreUndoStack = [];
+    scoreRedoStack = [];
     scoreSelectedDuration = 'quarter';
     scorePendingDot = false;
     scorePendingTripletCount = 0;
@@ -2389,10 +2434,20 @@
     scoreSystemWidth = Math.max(360, Math.min(900, scoreEditorCanvasWrap.clientWidth - 8));
     scoreScrollPianoKeyboardToDefault();
     renderScoreCanvas();
+    // 前回MIDIをオンにしていた場合、静かに再接続を試みる(既に許可済みなら
+    // ブラウザの許可ダイアログは再表示されない。button自体がAPI非対応環境では
+    // 'hidden'のままなので、対応ブラウザでのみ実行される)。
+    if (localStorage.getItem(SCORE_MIDI_ENABLED_KEY) === '1' && typeof navigator.requestMIDIAccess === 'function') {
+      scoreEnableMidi();
+    }
   }
   function closeScoreEditor() {
     scoreEditorOverlay.classList.add('hidden');
     scorePlacementXY = null;
+    // 閉じた後に届いたMIDIノートオンが、既に捨てられるはずの古いscoreElementsを
+    // 静かに書き換えてしまう実害があるため、閉じる時は必ずデタッチする
+    // (localStorageのオン記録自体は消さないので次回開いた時は自動で再接続する)。
+    scoreDisableMidi();
   }
 
   // scoreSelectedIndexが選択されている間は、ツールバーの各ボタンは「次に置く
@@ -2409,7 +2464,7 @@
     btnScoreSharp.classList.toggle('active', acc === 'sharp');
     btnScoreFlat.classList.toggle('active', acc === 'flat');
     btnScoreNatural.classList.toggle('active', acc === 'natural');
-    btnScoreUndo.innerHTML = sel ? '&#10006; 選択中の音符を削除' : '&#8617; 直前を削除';
+    btnScoreUndo.innerHTML = sel ? '&#10006; 選択中の音符を削除' : '&#10006; 直前を削除';
     scoreChordInput.placeholder = sel ? 'コード名(選択中の音符に付く)' : 'コード名(次の音符に付く)';
     if (sel) scoreChordInput.value = sel.chord || '';
     renderScorePianoKeyboard();
@@ -2418,6 +2473,7 @@
   document.querySelectorAll('.scoreDurationBtn').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (scoreSelectedIndex !== null) {
+        pushScoreUndoSnapshot();
         scoreElements[scoreSelectedIndex].duration = btn.dataset.duration;
         renderScoreCanvas();
       } else {
@@ -2428,6 +2484,7 @@
   });
   btnScoreDot.addEventListener('click', () => {
     if (scoreSelectedIndex !== null) {
+      pushScoreUndoSnapshot();
       const el = scoreElements[scoreSelectedIndex];
       el.dotted = !el.dotted;
       renderScoreCanvas();
@@ -2444,6 +2501,7 @@
   });
   function scoreToggleAccidental(kind) {
     if (scoreSelectedIndex !== null) {
+      pushScoreUndoSnapshot();
       const el = scoreElements[scoreSelectedIndex];
       el.pitches[0].accidental = elFirstAccidental(el) === kind ? null : kind;
       renderScoreCanvas();
@@ -2458,8 +2516,22 @@
     // 調号で♯/♭が付く音を、この音だけ本位(ナチュラル)に戻したい時に使う
     scoreToggleAccidental('natural');
   });
+  // コード名はキー入力のたびに変わるため、キー1打ごとにundoスナップショットを
+  // 積むと無駄が多い。フォーカスした瞬間(=編集開始時点)に1回だけ積み、そのまま
+  // 打ち続けている間は積み直さない(1回の編集セッション=undo1手にまとめる)。
+  let scoreChordSnapshotTaken = false;
+  scoreChordInput.addEventListener('focus', () => {
+    scoreChordSnapshotTaken = false;
+  });
+  scoreChordInput.addEventListener('blur', () => {
+    scoreChordSnapshotTaken = false;
+  });
   scoreChordInput.addEventListener('input', () => {
     if (scoreSelectedIndex === null) return; // 非選択時は完了(音符確定)時にconsumeScoreModifiersでまとめて読む
+    if (!scoreChordSnapshotTaken) {
+      pushScoreUndoSnapshot();
+      scoreChordSnapshotTaken = true;
+    }
     scoreElements[scoreSelectedIndex].chord = scoreChordInput.value.trim() || null;
     renderScoreCanvas();
   });
@@ -2486,6 +2558,7 @@
   }
 
   btnScoreRest.addEventListener('click', () => {
+    pushScoreUndoSnapshot();
     const mods = consumeScoreModifiers();
     scoreElements.push({
       type: 'rest', duration: scoreSelectedDuration, dotted: mods.dotted,
@@ -2494,6 +2567,8 @@
     renderScoreCanvas();
   });
   btnScoreUndo.addEventListener('click', () => {
+    if (scoreElements.length === 0) return; // 何も無ければゴミスナップショットを積まない
+    pushScoreUndoSnapshot();
     if (scoreSelectedIndex !== null) {
       scoreElements.splice(scoreSelectedIndex, 1);
       scoreSelectedIndex = null;
@@ -2504,7 +2579,9 @@
     renderScoreCanvas();
   });
   btnScoreClearAll.addEventListener('click', () => {
-    if (scoreElements.length > 0 && !confirm('全ての音符・休符を削除しますか？')) return;
+    if (scoreElements.length === 0) return;
+    if (!confirm('全ての音符・休符を削除しますか？')) return;
+    pushScoreUndoSnapshot();
     scoreElements = [];
     scoreSelectedIndex = null;
     updateScoreToolbarUI();
@@ -2631,6 +2708,7 @@
         const spacing = stave.getSpacingBetweenLines();
         const pad = spacing * 7;
         if (tapY >= stave.getYForLine(0) - pad && tapY <= stave.getYForLine(4) + pad) {
+          pushScoreUndoSnapshot();
           scoreElements[scoreSelectedIndex].pitches[0].step = Math.round((stave.getYForLine(4) - tapY) / (spacing / 2));
         }
       }
@@ -2654,6 +2732,12 @@
     if (!el) return;
     const step = Math.round((scorePitchDrag.baseY - y) / (scorePitchDrag.spacing / 2));
     if (step === elFirstStep(el)) return; // 半音〜1音ぶん動くまでは再描画しない(描画は重いため)
+    if (!scorePitchDrag.snapshotted) {
+      // このドラッグジェスチャーで初めて実際にstepが変わる瞬間だけ、ドラッグ開始前の
+      // 状態を1回だけ記録する(動かした後の毎フレームでpushすると無駄が多いため)
+      pushScoreUndoSnapshot();
+      scorePitchDrag.snapshotted = true;
+    }
     el.pitches[0].step = step;
     // ドラッグ中の音符は選択状態にして青く見せる(今どれを動かしているか分かるように)
     scoreSelectedIndex = scorePitchDrag.srcIndex;
@@ -2733,6 +2817,17 @@
     else if (accidental === 'flat') semitone -= 1;
     return semitone;
   }
+  // scoreAbsoluteSemitoneの逆方向: 絶対半音→{step,accidental}。MIDI入力用
+  // (物理鍵盤なのでオクターブ範囲は制限しない、詳細はscoreHandleMidiMessage参照)。
+  // SCORE_PIANO_OCTAVEの配列インデックスがそのままオクターブ内の半音位置(0〜11)に
+  // 対応していることを利用して白鍵/黒鍵の定義を引く。
+  function scoreResolveFromSemitone(absSemitone) {
+    const octave = Math.floor(absSemitone / 12);
+    const idx = ((absSemitone % 12) + 12) % 12;
+    const def = SCORE_PIANO_OCTAVE[idx];
+    if (def.white) return scoreResolveWhiteKey(def.white, octave);
+    return scoreResolveBlackKey({ lower: def.black[0], upper: def.black[1] }, octave);
+  }
 
   // ピアノ鍵盤のキーをタップした時に呼ぶ。何も選択していなければ末尾に新規追加
   // (今までの「五線譜タップで追加」と全く同じ結果を、入力元だけ鍵盤に変えたもの)。
@@ -2740,6 +2835,9 @@
   // 解除しない(ドラッグで音高を直す時と同じ挙動に揃えている。「既存音を直す」と
   // 「連続で新規入力する」は別の意図なので、選択の有無だけで素直に分岐させる)。
   function scoreApplyPitchFromKeyboard(step, accidental) {
+    // ピアノ鍵盤クリック・文字キー入力・MIDIノートオンは全てここを通る唯一の合流点
+    // なので、undoスナップショットもここ1箇所で積めば全経路をカバーできる。
+    pushScoreUndoSnapshot();
     if (scoreSelectedIndex !== null) {
       scoreElements[scoreSelectedIndex].pitches[0] = { step, accidental };
       updateScoreToolbarUI();
@@ -2754,6 +2852,119 @@
     });
     renderScoreCanvas();
   }
+
+  // ==================================================
+  // キーボードショートカット(PC向け、2026-08-17〜)
+  // ==================================================
+  // 文字キー(A〜G)で音符を入力する時に使う基準ピッチ。選択中の音符があればそれ、
+  // 無ければ最後に置いた音符、どちらも無ければC4(絶対半音48)を基準にする。
+  function scoreReferenceAbsSemitone() {
+    const sel = scoreSelectedIndex !== null ? scoreElements[scoreSelectedIndex] : null;
+    if (sel && sel.type === 'note') return scoreAbsoluteSemitone(elFirstStep(sel), elFirstAccidental(sel));
+    for (let i = scoreElements.length - 1; i >= 0; i--) {
+      const el = scoreElements[i];
+      if (el.type === 'note') return scoreAbsoluteSemitone(elFirstStep(el), elFirstAccidental(el));
+    }
+    return 4 * 12; // C4
+  }
+  // 押された文字について、基準ピッチに一番近いオクターブを選ぶ(五線譜アプリの
+  // 一般的な文字キー入力の挙動に合わせた「最も近い音」方式)。オンスクリーン鍵盤の
+  // 表示範囲(SCORE_PIANO_FROM_OCTAVE〜SCORE_PIANO_TO_OCTAVE)の外を選んでしまうと、
+  // 入力はできても対応する鍵盤キーが無く選択ハイライトが光らず分かりにくくなるため、
+  // 候補もその範囲だけに絞る。同距離の場合は探索順(低いオクターブ→高いオクターブ)
+  // により自動的に低い方が優先される。
+  function scoreNearestOctaveForLetter(letter, refSemitone) {
+    let best = SCORE_PIANO_FROM_OCTAVE, bestDist = Infinity;
+    for (let oct = SCORE_PIANO_FROM_OCTAVE; oct <= SCORE_PIANO_TO_OCTAVE; oct++) {
+      const semitone = oct * 12 + SCORE_PIANO_WHITE_SEMITONE[letter];
+      const dist = Math.abs(semitone - refSemitone);
+      if (dist < bestDist) { bestDist = dist; best = oct; }
+    }
+    return best;
+  }
+  function scoreEnterNoteFromLetter(letter) {
+    const ref = scoreReferenceAbsSemitone();
+    const octave = scoreNearestOctaveForLetter(letter, ref);
+    const pitch = scoreResolveWhiteKey(letter, octave);
+    scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental);
+  }
+
+  // 矢印キー/Home/Endでの選択移動。既存のタップ選択と同じく休符は対象外
+  // (休符はそもそもタップでも選べない=当たり判定を持たないため、キーボードでも
+  // 選べない状態のままスコープを揃えている)。
+  function scoreNoteIndices() {
+    const arr = [];
+    scoreElements.forEach((el, i) => { if (el.type === 'note') arr.push(i); });
+    return arr;
+  }
+  function scoreSelectRelative(delta) {
+    const idxs = scoreNoteIndices();
+    if (idxs.length === 0) return;
+    const curPos = scoreSelectedIndex === null ? -1 : idxs.indexOf(scoreSelectedIndex);
+    const nextPos = curPos === -1
+      ? (delta > 0 ? 0 : idxs.length - 1)
+      : Math.max(0, Math.min(idxs.length - 1, curPos + delta));
+    scoreSelectedIndex = idxs[nextPos];
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+  function scoreSelectEdge(first) {
+    const idxs = scoreNoteIndices();
+    if (idxs.length === 0) return;
+    scoreSelectedIndex = first ? idxs[0] : idxs[idxs.length - 1];
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (scoreEditorOverlay.classList.contains('hidden')) return;
+    const activeTag = document.activeElement && document.activeElement.tagName;
+    if (activeTag === 'INPUT' || activeTag === 'SELECT' || activeTag === 'TEXTAREA') {
+      // コード名入力欄・拍子/調号セレクトへの通常の入力を横取りしない。
+      // Escapeだけは「その場から抜ける」操作として例外的に効かせる。
+      if (e.key === 'Escape') document.activeElement.blur();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); scoreUndo(); return; }
+      if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); scoreRedo(); return; }
+      return; // 他のCtrl/Cmd併用キーはブラウザ標準の挙動に任せる
+    }
+    if (e.altKey) return;
+    const key = e.key;
+    if (/^[A-Ga-g]$/.test(key)) {
+      e.preventDefault();
+      scoreEnterNoteFromLetter(key.toUpperCase());
+      return;
+    }
+    if (/^[1-7]$/.test(key)) {
+      e.preventDefault();
+      const btns = document.querySelectorAll('.scoreDurationBtn');
+      const btn = btns[Number(key) - 1];
+      if (btn) btn.click();
+      return;
+    }
+    if (key === '-') { e.preventDefault(); btnScoreFlat.click(); return; }
+    if (key === '=') { e.preventDefault(); btnScoreSharp.click(); return; }
+    if (key === '0') { e.preventDefault(); btnScoreNatural.click(); return; }
+    if (key === 'ArrowLeft') { e.preventDefault(); scoreSelectRelative(-1); return; }
+    if (key === 'ArrowRight') { e.preventDefault(); scoreSelectRelative(1); return; }
+    if (key === 'Home') { e.preventDefault(); scoreSelectEdge(true); return; }
+    if (key === 'End') { e.preventDefault(); scoreSelectEdge(false); return; }
+    if (key === 'Delete' || key === 'Backspace') { e.preventDefault(); btnScoreUndo.click(); return; }
+    if (key === 'Escape') {
+      // 選択解除のみ行い、編集画面自体は閉じない(誤操作で作業中の譜面を
+      // 失わないようにするため。閉じる操作は明示的にキャンセル/完了ボタンで行う)。
+      if (scoreSelectedIndex !== null) {
+        e.preventDefault();
+        scoreSelectedIndex = null;
+        updateScoreToolbarUI();
+        renderScoreCanvas();
+      }
+      return;
+    }
+  });
 
   // 鍵盤DOMは一度だけ組み立てて使い回す(音名ラベル等の静的な部分は変わらないため)。
   // 選択中ハイライト・黒鍵の非活性状態など動的な部分だけrenderScorePianoKeyboard()で
@@ -2802,11 +3013,15 @@
     const sel = scoreSelectedIndex !== null ? scoreElements[scoreSelectedIndex] : null;
     const selSemitone = sel ? scoreAbsoluteSemitone(elFirstStep(sel), elFirstAccidental(sel)) : null;
     const disableBlack = scoreSelectedIndex === null && scorePendingAccidental === 'natural';
+    // MIDIで今物理的に押されている鍵(絶対半音の集合)。範囲外(3〜6オクターブの
+    // 表示範囲を超える音)は該当する鍵盤DOM自体が無いので自然に何も光らない。
+    const pressedSemitones = new Set(Array.from(scoreMidiHeldNotes, (n) => n - 12));
     let scrollTarget = null;
     scorePianoKeyboardEl.querySelectorAll('.scorePianoWhiteKey, .scorePianoBlackKey').forEach((el) => {
       const abs = Number(el.dataset.absSemitone);
       const isSelected = selSemitone !== null && abs === selSemitone;
       el.classList.toggle('selected', isSelected);
+      el.classList.toggle('pressed', pressedSemitones.has(abs));
       if (el.classList.contains('scorePianoBlackKey')) el.classList.toggle('disabled', disableBlack);
       if (isSelected) scrollTarget = el;
     });
@@ -2821,6 +3036,80 @@
     buildScorePianoKeyboard();
     const c4 = scorePianoKeyboardEl.querySelector('.scorePianoWhiteKey[data-abs-semitone="' + (4 * 12) + '"]');
     if (c4) c4.scrollIntoView({ inline: 'start', block: 'nearest' });
+  }
+
+  // ==================================================
+  // MIDI入力(Web MIDI API、対応ブラウザのみ。iOS/Safariには無いため、
+  // UA判定ではなくAPIの有無で自然にPC(主にChrome/Edge)向けの機能になる)
+  // ==================================================
+  const SCORE_MIDI_ENABLED_KEY = 'scoreMidiEnabled';
+  let scoreMidiAccess = null;
+  let scoreMidiInputs = []; // 現在onmidimessageを貼っているMIDIInputの一覧
+  let scoreMidiHeldNotes = new Set(); // 今物理的に押されているMIDIノート番号(鍵盤ハイライト用)
+
+  function scoreHandleMidiMessage(ev) {
+    const data = ev.data;
+    if (!data || data.length < 2) return;
+    const status = data[0] & 0xf0;
+    const note = data[1];
+    const velocity = data.length > 2 ? data[2] : 0;
+    if (status === 0x90 && velocity > 0) {
+      scoreMidiHeldNotes.add(note);
+      // MIDIノート番号→このアプリの絶対半音は-12(MIDI60=ミドルC=このアプリの
+      // C4=絶対半音48であることを確認済み)。物理鍵盤は実際にオンスクリーン鍵盤の
+      // 表示範囲(C3〜C6)の外も弾けるため、文字キー入力と違いオクターブを
+      // 制限しない(範囲外でも入力自体は正しく行われ、鍵盤ハイライトだけ付かない)。
+      const pitch = scoreResolveFromSemitone(note - 12);
+      scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental);
+      renderScorePianoKeyboard();
+    } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
+      scoreMidiHeldNotes.delete(note);
+      renderScorePianoKeyboard();
+    }
+  }
+  function scoreAttachMidiInputs(access) {
+    scoreMidiInputs.forEach((input) => { input.onmidimessage = null; });
+    scoreMidiInputs = Array.from(access.inputs.values());
+    scoreMidiInputs.forEach((input) => { input.onmidimessage = scoreHandleMidiMessage; });
+  }
+  function scoreUpdateMidiButtonLabel() {
+    const on = !!scoreMidiAccess;
+    btnScoreMidi.classList.toggle('on', on);
+    btnScoreMidi.textContent = on
+      ? `\u{1F3B9} MIDI入力: オン (${scoreMidiInputs.length}台)`
+      : '\u{1F3B9} MIDI入力: オフ';
+  }
+  function scoreDisableMidi() {
+    scoreMidiInputs.forEach((input) => { input.onmidimessage = null; });
+    scoreMidiInputs = [];
+    if (scoreMidiAccess) scoreMidiAccess.onstatechange = null;
+    scoreMidiAccess = null;
+    scoreMidiHeldNotes.clear();
+    scoreUpdateMidiButtonLabel();
+  }
+  async function scoreEnableMidi() {
+    try {
+      const access = await navigator.requestMIDIAccess();
+      scoreMidiAccess = access;
+      scoreAttachMidiInputs(access);
+      access.onstatechange = () => scoreAttachMidiInputs(access); // 抜き差しに追従
+      scoreUpdateMidiButtonLabel();
+      localStorage.setItem(SCORE_MIDI_ENABLED_KEY, '1');
+    } catch (err) {
+      alert('MIDIデバイスへのアクセスを許可できませんでした: ' + (err && err.message ? err.message : err));
+      localStorage.removeItem(SCORE_MIDI_ENABLED_KEY);
+    }
+  }
+  if (typeof navigator.requestMIDIAccess === 'function') {
+    btnScoreMidi.classList.remove('hidden');
+    btnScoreMidi.addEventListener('click', () => {
+      if (scoreMidiAccess) {
+        scoreDisableMidi();
+        localStorage.removeItem(SCORE_MIDI_ENABLED_KEY);
+      } else {
+        scoreEnableMidi();
+      }
+    });
   }
 
   // scoreElementsから、タイ分割された描画用の列(queue)・小節分割・各音符の
