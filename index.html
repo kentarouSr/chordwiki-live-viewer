@@ -4400,6 +4400,22 @@
     text.textContent = sub.text;
     makeTodoTextEditable(text, sub, renderTodoList);
 
+    row.appendChild(checkbox);
+    row.appendChild(text);
+
+    // メモから追加されたサブタスク(曲名の下に束ねる方式、2026-08-17〜)は元のメモの
+    // 場所へジャンプできる。親タスクの見出しが既に曲名なので、ここでは曲名を
+    // 繰り返さずアイコンだけにする(トップレベルの「🎵 曲名」ボタンとは表示を分ける)。
+    if (sub.link && sub.link.songUuid) {
+      const btnJump = document.createElement('button');
+      btnJump.type = 'button';
+      btnJump.className = 'todoJumpToSong';
+      btnJump.textContent = '🎵';
+      btnJump.title = 'この曲の該当箇所を開く';
+      btnJump.addEventListener('click', () => openSongAndJumpToMemo(sub.link.songUuid, sub.link.memoId));
+      row.appendChild(btnJump);
+    }
+
     const btnDel = document.createElement('button');
     btnDel.type = 'button';
     btnDel.textContent = '×';
@@ -4409,9 +4425,6 @@
       await saveTodos();
       renderTodoList();
     });
-
-    row.appendChild(checkbox);
-    row.appendChild(text);
     row.appendChild(btnDel);
     return row;
   }
@@ -4464,14 +4477,32 @@
 
   // 曲のテキストメモから直接ToDoを作る(練習中に気づいたことをその場で拾える)。
   // ToDo画面を開いていなくても動くよう、practiceTodos変数には依存せずDBを直接読み書きする。
+  // 1曲でいくつも練習項目が出てくるため、曲ごとにメインタスク(曲名)を1つだけ作り、
+  // 各メモはそのサブタスクとして追加していく(2026-08-17〜。以前は1メモ=1個の
+  // 独立したトップレベルタスクだったが、曲数が増えると一覧が細切れになり見通しが
+  // 悪かった)。グループ化用のメインタスクは`link.isSongGroup=true`で識別する
+  // (「曲名と同じ文言を手動で入力しただけのタスク」と取り違えないようにするため。
+  // テキスト一致で探すと、たまたま同名のタスクを誤って再利用してしまう恐れがある)。
   async function addTodoLinkedToMemo(memo) {
     if (!currentSongUuid) return;
+    const song = await findSongByUuid(currentSongUuid);
     const todos = await todoGet();
-    todos.items.push({
-      id: crypto.randomUUID(), text: memo.text, done: false, subtasks: [],
+    let groupItem = todos.items.find((it) => it.link && it.link.isSongGroup && it.link.songUuid === currentSongUuid);
+    if (!groupItem) {
+      groupItem = {
+        id: crypto.randomUUID(), text: song ? song.name : '(曲名不明)', done: false, subtasks: [],
+        link: { songUuid: currentSongUuid, isSongGroup: true },
+        updatedAt: Date.now(),
+      };
+      todos.items.push(groupItem);
+    }
+    if (!groupItem.subtasks) groupItem.subtasks = [];
+    groupItem.subtasks.push({
+      id: crypto.randomUUID(), text: memo.text, done: false,
       link: { songUuid: currentSongUuid, memoId: memo.id },
       updatedAt: Date.now(),
     });
+    groupItem.updatedAt = Date.now();
     todos.updatedAt = Date.now();
     await todoPut(todos);
   }
