@@ -2865,7 +2865,13 @@
   // 既存の音符を選択中ならそのピッチ(step+accidental)を丸ごと上書きし、選択は
   // 解除しない(ドラッグで音高を直す時と同じ挙動に揃えている。「既存音を直す」と
   // 「連続で新規入力する」は別の意図なので、選択の有無だけで素直に分岐させる)。
-  function scoreApplyPitchFromKeyboard(step, accidental) {
+  // optsの`selectAfterAdd`は文字キー入力(scoreEnterNoteFromLetter)専用のフラグ。
+  // ピアノ鍵盤タップ・MIDIノートオンは連続入力(タップ/演奏し続けるたびに次々と
+  // 新しい音符を追加したい)ので選択状態にはしない(従来どおり)。一方、文字キー入力は
+  // 「入力→↑↓で半音/オクターブ調整→別の文字キーで音名を直す→→キーで確定して次へ」
+  // という一連の編集フローを想定しているため、入力した直後の音符を選択状態にしておく
+  // 必要がある(2026-08-17〜)。
+  function scoreApplyPitchFromKeyboard(step, accidental, opts) {
     // ピアノ鍵盤クリック・文字キー入力・MIDIノートオンは全てここを通る唯一の合流点
     // なので、undoスナップショットもここ1箇所で積めば全経路をカバーできる。
     pushScoreUndoSnapshot();
@@ -2881,6 +2887,10 @@
       dotted: mods.dotted, triplet: mods.triplet, tripletGroup: mods.tripletGroup,
       tripletFirst: mods.tripletFirst, chord: mods.chord,
     });
+    if (opts && opts.selectAfterAdd) {
+      scoreSelectedIndex = scoreElements.length - 1;
+      updateScoreToolbarUI();
+    }
     renderScoreCanvas();
   }
 
@@ -2917,7 +2927,23 @@
     const ref = scoreReferenceAbsSemitone();
     const octave = scoreNearestOctaveForLetter(letter, ref);
     const pitch = scoreResolveWhiteKey(letter, octave);
-    scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental);
+    scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental, { selectAfterAdd: true });
+  }
+
+  // 選択中の音符を↑↓(Shiftでオクターブ)で半音/オクターブ単位で動かす
+  // (2026-08-17〜。「文字キーで入力→↑↓で微調整」という一連の流れのため、
+  // 選択中の音符が無い時は何もしない)。異名同音の解決はMIDI入力と同じ
+  // scoreResolveFromSemitoneに任せる(調号のfifths/異名同音トグルに従って
+  // 自然に♯系/♭系のどちらで表記するかが決まる)。
+  function scoreShiftSelectedPitch(semitoneDelta) {
+    if (scoreSelectedIndex === null) return;
+    const el = scoreElements[scoreSelectedIndex];
+    if (el.type !== 'note') return;
+    pushScoreUndoSnapshot();
+    const cur = scoreAbsoluteSemitone(elFirstStep(el), elFirstAccidental(el));
+    el.pitches[0] = scoreResolveFromSemitone(cur + semitoneDelta);
+    updateScoreToolbarUI();
+    renderScoreCanvas();
   }
 
   // 矢印キー/Home/Endでの選択移動。既存のタップ選択と同じく休符は対象外
@@ -2932,10 +2958,19 @@
     const idxs = scoreNoteIndices();
     if (idxs.length === 0) return;
     const curPos = scoreSelectedIndex === null ? -1 : idxs.indexOf(scoreSelectedIndex);
-    const nextPos = curPos === -1
-      ? (delta > 0 ? 0 : idxs.length - 1)
-      : Math.max(0, Math.min(idxs.length - 1, curPos + delta));
-    scoreSelectedIndex = idxs[nextPos];
+    if (curPos === -1) {
+      scoreSelectedIndex = idxs[delta > 0 ? 0 : idxs.length - 1];
+    } else {
+      const nextPos = curPos + delta;
+      // 端まで来たら選択解除する(「入力→→で確定して次の音を入力」という流れの
+      // ため、末尾の音符で→を押すと選択が外れ、次の文字キーが新規追加になる。
+      // 従来はここでクランプして同じ音符のまま留まっていた、2026-08-17変更)。
+      if (nextPos < 0 || nextPos >= idxs.length) {
+        scoreSelectedIndex = null;
+      } else {
+        scoreSelectedIndex = idxs[nextPos];
+      }
+    }
     updateScoreToolbarUI();
     renderScoreCanvas();
   }
@@ -2981,6 +3016,8 @@
     if (key === '0') { e.preventDefault(); btnScoreNatural.click(); return; }
     if (key === 'ArrowLeft') { e.preventDefault(); scoreSelectRelative(-1); return; }
     if (key === 'ArrowRight') { e.preventDefault(); scoreSelectRelative(1); return; }
+    if (key === 'ArrowUp') { e.preventDefault(); scoreShiftSelectedPitch(e.shiftKey ? 12 : 1); return; }
+    if (key === 'ArrowDown') { e.preventDefault(); scoreShiftSelectedPitch(e.shiftKey ? -12 : -1); return; }
     if (key === 'Home') { e.preventDefault(); scoreSelectEdge(true); return; }
     if (key === 'End') { e.preventDefault(); scoreSelectEdge(false); return; }
     if (key === 'Delete' || key === 'Backspace') { e.preventDefault(); btnScoreUndo.click(); return; }
