@@ -301,7 +301,7 @@
   /* テキストメモの直接入力欄。ネイティブprompt()の代わりに譜面上にその場で出す。
      tap outside(blur)で確定するので、いちいちOKを押す手間が要らない。 */
   .memo-text-editor {
-    max-width: 600px; min-width: 120px; padding: 0.46em 0.69em; border-radius: 6px; font-size: 13px;
+    max-width: 600px; min-width: 80px; padding: 0.46em 0.69em; border-radius: 6px; font-size: 13px;
     line-height: 1.4; background: #fff9dd; color: #111; box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     border: 2px solid #6cf; font-family: inherit; resize: none; overflow: hidden;
     cursor: text; outline: none !important;
@@ -887,6 +887,11 @@
   const MEMO_TEXT_DEFAULT_FONT_SIZE = 13;
   const MEMO_TEXT_MIN_FONT_SIZE = 10;
   const MEMO_TEXT_MAX_FONT_SIZE = 48;
+  // テキストメモの最小幅。これより狭いと「✅ ToDo追加」「✕ 削除」ボタン(左上/右上の
+  // 角にそれぞれ22px幅で絶対配置)が物理的に重なりタップし分けられなくなる境目が
+  // 24px付近のため、タッチ操作の余裕を見て80pxにしている(2026-08-17、要望を受けて
+  // 元は120pxだったのを引き下げた)。
+  const MEMO_TEXT_MIN_WIDTH = 80;
   // メモのwidth/fontSizeは「memo.baseWidthに保存されているcontentWidthCss()の値」を
   // 基準として保存し、実際の描画時は今のcontentWidthCss()との比率でスケールする
   // (位置x/yは元々コンテンツ幅の割合で持っていたのでスケール問題がなかったが、
@@ -1689,12 +1694,12 @@
           MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE
         )) + 'px';
         if (memo.width) {
-          // 未設定なら内容に応じた自動幅のまま。120/600はリサイズハンドルの可動域と揃えてある。
-          el.style.width = Math.round(clamp(memo.width * memoScale, 120, 600)) + 'px';
+          // 未設定なら内容に応じた自動幅のまま。MEMO_TEXT_MIN_WIDTH/600はリサイズハンドルの可動域と揃えてある。
+          el.style.width = Math.round(clamp(memo.width * memoScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
         } else {
-          el.style.maxWidth = Math.round(clamp(600 * memoScale, 120, 600)) + 'px';
+          el.style.maxWidth = Math.round(clamp(600 * memoScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
         }
-        el.appendChild(makeResizeHandle(memo, el, 120, 600, MEMO_TEXT_DEFAULT_FONT_SIZE, cssWidth));
+        el.appendChild(makeResizeHandle(memo, el, MEMO_TEXT_MIN_WIDTH, 600, MEMO_TEXT_DEFAULT_FONT_SIZE, cssWidth));
       } else {
         const img = document.createElement('img');
         const url = URL.createObjectURL(new Blob([memo.data], { type: memo.mimeType }));
@@ -2006,7 +2011,7 @@
     ta.value = memo ? memo.text : '';
     ta.style.left = Math.round(x * cssWidth) + 'px';
     ta.style.top = Math.round(y * contentHeight) + 'px';
-    ta.style.width = Math.round(clamp(((memo && memo.width) || MEMO_TEXT_DEFAULT_WIDTH) * memoScale, 120, 600)) + 'px';
+    ta.style.width = Math.round(clamp(((memo && memo.width) || MEMO_TEXT_DEFAULT_WIDTH) * memoScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
     ta.style.fontSize = Math.round(clamp(
       ((memo && memo.fontSize) || MEMO_TEXT_DEFAULT_FONT_SIZE) * memoScale,
       MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE
