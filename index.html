@@ -1848,10 +1848,17 @@
       const scale = memo.baseWidth ? cssWidth / memo.baseWidth : 1;
       const startWidth = (memo.width != null ? memo.width * scale : null)
         || targetEl.getBoundingClientRect().width || minWidth;
+      // 一度もリサイズされていない短いテキスト(例:「Db」)は内容に合わせて
+      // minWidthより狭く自動収縮していることがある。その状態でハンドルに触れた
+      // 瞬間にminWidthまで強制的に広げてしまうと、ドラッグしてもいないのに
+      // 突然幅が伸びて、しかもそこから先はminWidthより縮められなくなる
+      // (実際に報告されたバグ、2026-08-17)。開始時点の実際の幅がminWidthより
+      // 狭ければ、その幅自体を下限にすることでこのジャンプを防ぐ。
+      const effectiveMinWidth = Math.min(minWidth, startWidth);
 
       const onMove = (ev) => {
         const dx = ev.clientX - startClientX;
-        const newWidth = clamp(startWidth + dx, minWidth, maxWidth);
+        const newWidth = clamp(startWidth + dx, effectiveMinWidth, maxWidth);
         targetEl.style.width = newWidth + 'px';
         if (baseFontSize) {
           const fontSize = clamp(
