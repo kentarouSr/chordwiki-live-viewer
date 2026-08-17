@@ -456,7 +456,6 @@
   #scoreEditorCanvas { display: block; touch-action: none; }
   #scoreEditorToolbar {
     display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px;
-    padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
   .scoreEditorGroup {
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
@@ -478,6 +477,36 @@
     background: #1c1c1c; color: #eee; width: 160px;
   }
   #scoreEditorHint { margin: 0 16px 10px; font-size: 12px; color: #999; }
+
+  /* ピアノ鍵盤(2026-08-17〜。Flat風に、音符の新規入力はここから行う方式に刷新)。
+     白鍵は通常のflex行に並べ、黒鍵は左右にマイナスマージンを掛けて隣接する白鍵の
+     境界に重ねることで、絶対配置の座標計算をせずに正しい見た目の鍵盤を作れる。 */
+  #scorePianoKeyboard {
+    display: flex; align-items: flex-start; overflow-x: auto; overflow-y: hidden;
+    touch-action: pan-x; background: #0d0d0d; padding: 0 16px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
+  }
+  .scorePianoWhiteKey {
+    flex-shrink: 0; width: 42px; height: 118px; box-sizing: border-box;
+    background: #fdfdfd; border: 1px solid #999; border-top: none;
+    border-radius: 0 0 5px 5px; position: relative; z-index: 1;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 6px; font-size: 10px; color: #666; cursor: pointer;
+    user-select: none; -webkit-user-select: none;
+  }
+  .scorePianoWhiteKey:active { background: #e6f3fb; }
+  .scorePianoBlackKey {
+    flex-shrink: 0; width: 26px; height: 74px; box-sizing: border-box;
+    background: #181818; border: 1px solid #000; border-top: none;
+    border-radius: 0 0 4px 4px; margin-left: -13px; margin-right: -13px;
+    z-index: 2; position: relative; cursor: pointer;
+  }
+  .scorePianoBlackKey:active { background: #3a3a3a; }
+  .scorePianoBlackKey.disabled { opacity: 0.3; pointer-events: none; }
+  .scorePianoWhiteKey.selected { background: #cfe8fb; border-color: #2b6cb0; }
+  .scorePianoBlackKey.selected { background: #2b6cb0; }
+  #btnScoreEnharmonic.mode-sharp, #btnScoreEnharmonic.mode-flat { background: #6cf; color: #111; font-weight: bold; }
 
   #toolbar {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
@@ -561,6 +590,16 @@
     .songRow { padding: 9px 10px; gap: 6px; }
     .songName { font-size: 14px; }
     .songRow button { font-size: 12px; padding: 7px 9px; }
+
+    /* 楽譜エディタ: ピアノ鍵盤は全端末共通(横スクロールで対応)だが、狭い画面では
+       鍵盤・ツールバーの寸法を詰めて、五線譜の可視面積をできるだけ確保する。 */
+    #scoreEditorToolbar { gap: 6px; padding: 6px 10px; }
+    .scoreEditorGroup { gap: 5px; padding: 4px 7px; }
+    #scoreEditorToolbar button { font-size: 12px; padding: 7px 9px; }
+    #scoreChordInput { font-size: 12px; padding: 7px 8px; width: 120px; }
+    #scoreEditorHint { font-size: 11px; margin: 0 10px 8px; }
+    .scorePianoWhiteKey { width: 34px; height: 92px; font-size: 9px; padding-bottom: 4px; }
+    .scorePianoBlackKey { width: 21px; height: 58px; margin-left: -10.5px; margin-right: -10.5px; }
   }
 </style>
 </head>
@@ -753,6 +792,8 @@
           <button class="scoreDurationBtn active" data-duration="quarter">4分</button>
           <button class="scoreDurationBtn" data-duration="eighth">8分</button>
           <button class="scoreDurationBtn" data-duration="sixteenth">16分</button>
+          <button class="scoreDurationBtn" data-duration="thirtysecond">32分</button>
+          <button class="scoreDurationBtn" data-duration="sixtyfourth">64分</button>
         </div>
         <div class="scoreEditorGroup">
           <button id="btnScoreDot">付点</button>
@@ -760,6 +801,7 @@
           <button id="btnScoreSharp">&#9839;</button>
           <button id="btnScoreFlat">&#9837;</button>
           <button id="btnScoreNatural">&#9838;</button>
+          <button id="btnScoreEnharmonic">&#9837;&harr;&#9839; 異名同音</button>
           <button id="btnScoreRest">休符</button>
         </div>
         <div class="scoreEditorGroup">
@@ -768,7 +810,8 @@
           <button id="btnScoreClearAll">全消去</button>
         </div>
       </div>
-      <p id="scoreEditorHint">五線譜をタップして音の高さを入力してください。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。休符は「休符」ボタンで直接追加できます。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。</p>
+      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。</p>
+      <div id="scorePianoKeyboard"></div>
     </div>
   </div>
 
@@ -931,8 +974,10 @@
   const btnScoreSharp = document.getElementById('btnScoreSharp');
   const btnScoreFlat = document.getElementById('btnScoreFlat');
   const btnScoreNatural = document.getElementById('btnScoreNatural');
+  const btnScoreEnharmonic = document.getElementById('btnScoreEnharmonic');
   const btnScoreRest = document.getElementById('btnScoreRest');
   const scoreChordInput = document.getElementById('scoreChordInput');
+  const scorePianoKeyboardEl = document.getElementById('scorePianoKeyboard');
   const scoreEditorCanvasWrap = document.getElementById('scoreEditorCanvasWrap');
   const scoreTimeSigSelect = document.getElementById('scoreTimeSigSelect');
   const scoreKeySelect = document.getElementById('scoreKeySelect');
@@ -2087,14 +2132,21 @@
   const SCORE_SYSTEM_GAP = 40; // 段と段の間隔(音符が飛び出す余白込み)
   const SCORE_BOTTOM_MARGIN = 20;
   // 拍子ごとの音価計算(全音符=1単位)。1小節の容量は beats/unit。
-  const SCORE_DURATION_UNITS = { whole: 1, half: 0.5, quarter: 0.25, eighth: 0.125, sixteenth: 0.0625 };
+  const SCORE_DURATION_UNITS = {
+    whole: 1, half: 0.5, quarter: 0.25, eighth: 0.125, sixteenth: 0.0625,
+    thirtysecond: 0.03125, sixtyfourth: 0.015625,
+  };
   // scoreElements/queueの'duration'文字列 → VexFlowの音価コード。
-  const SCORE_DURATION_TO_VEX = { whole: 'w', half: 'h', quarter: 'q', eighth: '8', sixteenth: '16' };
+  const SCORE_DURATION_TO_VEX = {
+    whole: 'w', half: 'h', quarter: 'q', eighth: '8', sixteenth: '16',
+    thirtysecond: '32', sixtyfourth: '64',
+  };
   // 小節線をまたぐ時のタイ分割で使う、記譜可能な音価の一覧(大きい順)。
   const SCORE_NOTATABLE = [
     { duration: 'whole', units: 1 }, { duration: 'half', units: 0.5 },
     { duration: 'quarter', units: 0.25 }, { duration: 'eighth', units: 0.125 },
-    { duration: 'sixteenth', units: 0.0625 },
+    { duration: 'sixteenth', units: 0.0625 }, { duration: 'thirtysecond', units: 0.03125 },
+    { duration: 'sixtyfourth', units: 0.015625 },
   ];
   // 音価(全音符=1単位)を、記譜できる音価(付点つき1つ、または複数個のタイ)の列に分解する。
   // 小節容量ぴったりに収まらない半端な残り(例: 5/16)が出た時に使う。
@@ -2157,6 +2209,18 @@
     const letterIdx = ((absIndex % 7) + 7) % 7;
     return { letter: SCORE_LETTER_ORDER[letterIdx], octave };
   }
+  // scoreStaffStepToLetterOctaveの逆関数(文字+オクターブ→step)。
+  // ピアノ鍵盤のキー(文字+オクターブで決まる)をstepに変換するのに使う。
+  function scoreLetterOctaveToStep(letter, octave) {
+    const E4_ABS = 7 * 4 + SCORE_LETTER_ORDER.indexOf('E');
+    return octave * 7 + SCORE_LETTER_ORDER.indexOf(letter) - E4_ABS;
+  }
+  // note要素(scoreElements/queueどちらも)から代表となる1つ目のピッチを取り出す。
+  // 今は単音のみなので常にpitches[0]だが、和音対応時にここだけ直せば済むように
+  // 読み取り箇所は直接el.pitches[0]と書かず必ずこの2つの関数を経由する
+  // (2026-08-17、将来の和音対応に備えたデータモデル一般化の一環)。
+  function elFirstStep(el) { return el.pitches[0].step; }
+  function elFirstAccidental(el) { return el.pitches[0].accidental; }
   // 臨時記号'sharp'|'flat'|'natural'|null → VexFlowのkey文字列に使う接尾辞。
   const SCORE_ACCIDENTAL_TO_VEX_SUFFIX = { sharp: '#', flat: 'b', natural: '', null: '' };
   // step(+実効臨時記号)からVexFlowのkey文字列("f#/4"等、小文字)を作る。
@@ -2215,9 +2279,13 @@
       if (remaining <= EPS) remaining = capacity;
       frags.forEach((frag, fi) => {
         queue.push({
-          srcIndex, type: el.type, step: el.step,
+          srcIndex, type: el.type,
+          // pitchesはピッチごとに持ち回す(和音対応時に複数要素になる)。
+          // タイの続き(fi>0)は臨時記号を再表示しないため、そこだけピッチごとにnullにする。
+          pitches: el.type === 'note'
+            ? el.pitches.map((p) => ({ step: p.step, accidental: fi === 0 ? p.accidental : null }))
+            : null,
           duration: frag.duration, dotted: frag.dotted,
-          accidental: fi === 0 ? el.accidental : null,
           chord: fi === 0 ? el.chord : null,
           triplet: el.triplet, tripletGroup: el.tripletGroup,
           tripletFirst: fi === 0 ? el.tripletFirst : false,
@@ -2257,13 +2325,21 @@
     return Array(ts.beats).fill(null).map(() => new VF.Fraction(1, ts.unit));
   }
 
-  let scoreElements = []; // { type:'note', step, accidental, duration, dotted, triplet, tripletGroup, chord } | { type:'rest', ... }
+  // { type:'note', pitches:[{step,accidental}], duration, dotted, triplet, tripletGroup, chord } | { type:'rest', ... }
+  // pitchesは配列(2026-08-17〜。今は常に1要素=単音だが、将来の和音対応に備えて
+  // 複数ピッチを持てる形にしてある。読み取りはelFirstStep/elFirstAccidental経由で統一)。
+  let scoreElements = [];
   let scorePlacementXY = null; // 完了時に画像メモとして置く先の相対座標({x,y})
   let scoreSelectedDuration = 'quarter';
   let scorePendingDot = false;
   let scorePendingTripletCount = 0; // 3連符として残り何個入力すればグループが完成するか
   let scoreTripletGroupSeq = 0;
   let scorePendingAccidental = null; // 'sharp' | 'flat' | 'natural' | null
+  // ピアノ鍵盤の黒鍵をどちらの文字で表記するか。'auto'は調号から自動決定
+  // (fifths>0で♯系・fifths<0で♭系、fifths===0のハ長調は♯をデフォルトにする)。
+  // 単純なON/OFFではなく3値にしているのは、一度手動で♯/♭に切り替えた後も
+  // 「調号に自動追従する状態」へ明示的に戻せるようにするため。
+  let scoreEnharmonicMode = 'auto'; // 'auto' | 'sharp' | 'flat'
   let scoreTimeSigIdx = 0;
   let scoreKeyFifths = 0;
   let scoreSystemWidth = 640; // 段の幅(openScoreEditorでコンテナ幅に合わせて決め直す)
@@ -2288,6 +2364,7 @@
   scoreKeySelect.addEventListener('change', () => {
     scoreKeyFifths = Number(scoreKeySelect.value);
     renderScoreCanvas();
+    renderScorePianoKeyboard(); // auto時の黒鍵表記が調号に追従するため再描画
   });
 
   function openScoreEditor(x, y) {
@@ -2297,6 +2374,8 @@
     scorePendingDot = false;
     scorePendingTripletCount = 0;
     scorePendingAccidental = null;
+    scoreEnharmonicMode = 'auto';
+    btnScoreEnharmonic.classList.remove('mode-sharp', 'mode-flat');
     scoreSelectedIndex = null;
     scoreChordInput.value = '';
     scoreTimeSigIdx = 0;
@@ -2306,8 +2385,9 @@
     updateScoreToolbarUI();
     scoreEditorOverlay.classList.remove('hidden');
     // 幅はコンテナに合わせて決める(表示してからでないとclientWidthが0のため、
-    // hiddenクラスを外した直後に測る)。
+    // hiddenクラスを外した直後に測る)。鍵盤のスクロール位置も同じ理由でここで合わせる。
     scoreSystemWidth = Math.max(360, Math.min(900, scoreEditorCanvasWrap.clientWidth - 8));
+    scoreScrollPianoKeyboardToDefault();
     renderScoreCanvas();
   }
   function closeScoreEditor() {
@@ -2325,13 +2405,14 @@
     });
     btnScoreDot.classList.toggle('active', sel ? !!sel.dotted : scorePendingDot);
     btnScoreTriplet.classList.toggle('active', scorePendingTripletCount > 0);
-    const acc = sel ? sel.accidental : scorePendingAccidental;
+    const acc = sel ? elFirstAccidental(sel) : scorePendingAccidental;
     btnScoreSharp.classList.toggle('active', acc === 'sharp');
     btnScoreFlat.classList.toggle('active', acc === 'flat');
     btnScoreNatural.classList.toggle('active', acc === 'natural');
     btnScoreUndo.innerHTML = sel ? '&#10006; 選択中の音符を削除' : '&#8617; 直前を削除';
     scoreChordInput.placeholder = sel ? 'コード名(選択中の音符に付く)' : 'コード名(次の音符に付く)';
     if (sel) scoreChordInput.value = sel.chord || '';
+    renderScorePianoKeyboard();
   }
 
   document.querySelectorAll('.scoreDurationBtn').forEach((btn) => {
@@ -2364,7 +2445,7 @@
   function scoreToggleAccidental(kind) {
     if (scoreSelectedIndex !== null) {
       const el = scoreElements[scoreSelectedIndex];
-      el.accidental = el.accidental === kind ? null : kind;
+      el.pitches[0].accidental = elFirstAccidental(el) === kind ? null : kind;
       renderScoreCanvas();
     } else {
       scorePendingAccidental = scorePendingAccidental === kind ? null : kind;
@@ -2491,20 +2572,12 @@
     return scoreVexFlowPromise;
   }
 
-  function currentSystemTapBand() {
-    const stave = scoreLastStaves[scoreLastStaves.length - 1];
-    if (!stave) return { top: -1, bottom: -1, stave: null };
-    const spacing = stave.getSpacingBetweenLines();
-    // レジャー線・符幹・コード名がはみ出す余白を見込んで、五線本体より上下に広めに取る。
-    const pad = spacing * 7;
-    return { top: stave.getYForLine(0) - pad, bottom: stave.getYForLine(4) + pad, stave };
-  }
-  // タップした場所の意味は3通り: ①既に置いた音符の近くなら、その音符を選択/選択解除
+  // タップした場所の意味は2通り: ①既に置いた音符の近くなら、その音符を選択/選択解除
   // する(選択中はツールバーの各ボタンがその音符をその場で直す操作になる)。
   // ②既に音符を選択中なら、今回のタップ位置をその音符の新しい音高として反映する。
-  // ③どちらでもなければ、これまでどおり「今の段」の末尾に新しい音符を追加する。
   // (「直前の音しか編集できないのが不便、タップした音を直せるようにしたい」という
-  // 指摘を受けて追加、2026-08-15)
+  // 指摘を受けて追加、2026-08-15)。新規音符の追加は五線譜タップではなく
+  // ピアノ鍵盤タップで行う方式に変更した(2026-08-17、Flatを参考にした刷新)。
   function scoreHitTestNote(tapX, tapY) {
     const hitRadius = SCORE_STAVE_LINE_SPACING * 1.6;
     let hitSrcIndex = null, hitDist = Infinity;
@@ -2558,7 +2631,7 @@
         const spacing = stave.getSpacingBetweenLines();
         const pad = spacing * 7;
         if (tapY >= stave.getYForLine(0) - pad && tapY <= stave.getYForLine(4) + pad) {
-          scoreElements[scoreSelectedIndex].step = Math.round((stave.getYForLine(4) - tapY) / (spacing / 2));
+          scoreElements[scoreSelectedIndex].pitches[0].step = Math.round((stave.getYForLine(4) - tapY) / (spacing / 2));
         }
       }
       scoreSelectedIndex = null;
@@ -2566,19 +2639,7 @@
       renderScoreCanvas();
       return;
     }
-
-    const band = currentSystemTapBand();
-    if (!band.stave) return;
-    if (tapY < band.top || tapY > band.bottom) return; // 今編集中の段の外(前の段や段間の余白)は無視
-    const spacing = band.stave.getSpacingBetweenLines();
-    const step = Math.round((band.stave.getYForLine(4) - tapY) / (spacing / 2));
-    const mods = consumeScoreModifiers();
-    scoreElements.push({
-      type: 'note', step, accidental: mods.accidental, duration: scoreSelectedDuration,
-      dotted: mods.dotted, triplet: mods.triplet, tripletGroup: mods.tripletGroup,
-      tripletFirst: mods.tripletFirst, chord: mods.chord,
-    });
-    renderScoreCanvas();
+    // 空白タップは何もしない(新規音符の追加はピアノ鍵盤から行う、2026-08-17)
   });
 
   scoreEditorCanvas.addEventListener('pointermove', (e) => {
@@ -2592,8 +2653,8 @@
     const el = scoreElements[scorePitchDrag.srcIndex];
     if (!el) return;
     const step = Math.round((scorePitchDrag.baseY - y) / (scorePitchDrag.spacing / 2));
-    if (step === el.step) return; // 半音〜1音ぶん動くまでは再描画しない(描画は重いため)
-    el.step = step;
+    if (step === elFirstStep(el)) return; // 半音〜1音ぶん動くまでは再描画しない(描画は重いため)
+    el.pitches[0].step = step;
     // ドラッグ中の音符は選択状態にして青く見せる(今どれを動かしているか分かるように)
     scoreSelectedIndex = scorePitchDrag.srcIndex;
     renderScoreCanvas();
@@ -2616,6 +2677,151 @@
   }
   scoreEditorCanvas.addEventListener('pointerup', endScorePitchDrag);
   scoreEditorCanvas.addEventListener('pointercancel', endScorePitchDrag);
+
+  // ==================================================
+  // ピアノ鍵盤(音符の新規入力・選択中の音符の音高上書きに使う、2026-08-17)
+  // 「五線譜を直接タップして音を置く」方式から、実際の記譜ソフト(Flat等)に
+  // 倣ってピアノ鍵盤タップ方式に変更した。五線譜側の「既存音符をタップして選択」
+  // 「ドラッグで音高修正」はそのまま残っている(このセクションと独立)。
+  // ==================================================
+  // 1オクターブ内の12半音。白鍵はその文字そのもの、黒鍵は[下側の白鍵文字, 上側の
+  // 白鍵文字]の組で持つ(実際にどちらの文字+♯/♭で表記するかはタップ時に決める)。
+  const SCORE_PIANO_OCTAVE = [
+    { white: 'C' }, { black: ['C', 'D'] }, { white: 'D' }, { black: ['D', 'E'] },
+    { white: 'E' }, { white: 'F' }, { black: ['F', 'G'] }, { white: 'G' },
+    { black: ['G', 'A'] }, { white: 'A' }, { black: ['A', 'B'] }, { white: 'B' },
+  ];
+  const SCORE_PIANO_FROM_OCTAVE = 3;
+  const SCORE_PIANO_TO_OCTAVE = 6; // C3〜C6(このアプリはト音記号の単旋律のみのため4オクターブ弱で十分)
+
+  // 調号のfifthsから、黒鍵のデフォルト表記(♯系/♭系)を決める。
+  // fifths===0(ハ長調)は多くの記譜ソフトの慣習に合わせて♯をデフォルトにする。
+  function scoreEffectiveEnharmonic() {
+    if (scoreEnharmonicMode !== 'auto') return scoreEnharmonicMode;
+    return scoreKeyFifths < 0 ? 'flat' : 'sharp';
+  }
+  btnScoreEnharmonic.addEventListener('click', () => {
+    scoreEnharmonicMode = scoreEnharmonicMode === 'auto' ? 'sharp' : scoreEnharmonicMode === 'sharp' ? 'flat' : 'auto';
+    btnScoreEnharmonic.classList.remove('mode-sharp', 'mode-flat');
+    if (scoreEnharmonicMode !== 'auto') btnScoreEnharmonic.classList.add('mode-' + scoreEnharmonicMode);
+    renderScorePianoKeyboard();
+  });
+
+  // 白鍵タップ時の{step, accidental}。選択中の音符を上書きする時は保留中の♯♭♮を
+  // 使わない(「次に置く新規音符」用の状態であって、既存音符の編集には無関係なため)。
+  function scoreResolveWhiteKey(letter, octave) {
+    const usePending = scoreSelectedIndex === null;
+    return { step: scoreLetterOctaveToStep(letter, octave), accidental: usePending ? (scorePendingAccidental || null) : null };
+  }
+  // 黒鍵タップ時の{step, accidental}。方向は理論どおり固定: ♯なら下の文字を上げる、
+  // ♭なら上の文字を下げる(「近い方」のような曖昧な判定はしない)。
+  function scoreResolveBlackKey(blackDef, octave) {
+    const usePending = scoreSelectedIndex === null;
+    const pending = usePending ? scorePendingAccidental : null;
+    const mode = pending === 'sharp' ? 'sharp' : pending === 'flat' ? 'flat' : scoreEffectiveEnharmonic();
+    if (mode === 'sharp') return { step: scoreLetterOctaveToStep(blackDef.lower, octave), accidental: 'sharp' };
+    return { step: scoreLetterOctaveToStep(blackDef.upper, octave), accidental: 'flat' };
+  }
+  // 与えられたstep+accidentalの絶対半音位置(オクターブ*12+半音)。異名同音表記に
+  // よらず同じ物理鍵は同じ値になるので、鍵盤ハイライトの一致判定に使う
+  // (「C#4として持っているデータ」と「Db4として表示されている鍵」を正しく結び付ける)。
+  const SCORE_PIANO_WHITE_SEMITONE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  function scoreAbsoluteSemitone(step, accidental) {
+    const { letter, octave } = scoreStaffStepToLetterOctave(step);
+    let semitone = octave * 12 + SCORE_PIANO_WHITE_SEMITONE[letter];
+    if (accidental === 'sharp') semitone += 1;
+    else if (accidental === 'flat') semitone -= 1;
+    return semitone;
+  }
+
+  // ピアノ鍵盤のキーをタップした時に呼ぶ。何も選択していなければ末尾に新規追加
+  // (今までの「五線譜タップで追加」と全く同じ結果を、入力元だけ鍵盤に変えたもの)。
+  // 既存の音符を選択中ならそのピッチ(step+accidental)を丸ごと上書きし、選択は
+  // 解除しない(ドラッグで音高を直す時と同じ挙動に揃えている。「既存音を直す」と
+  // 「連続で新規入力する」は別の意図なので、選択の有無だけで素直に分岐させる)。
+  function scoreApplyPitchFromKeyboard(step, accidental) {
+    if (scoreSelectedIndex !== null) {
+      scoreElements[scoreSelectedIndex].pitches[0] = { step, accidental };
+      updateScoreToolbarUI();
+      renderScoreCanvas();
+      return;
+    }
+    const mods = consumeScoreModifiers();
+    scoreElements.push({
+      type: 'note', pitches: [{ step, accidental }], duration: scoreSelectedDuration,
+      dotted: mods.dotted, triplet: mods.triplet, tripletGroup: mods.tripletGroup,
+      tripletFirst: mods.tripletFirst, chord: mods.chord,
+    });
+    renderScoreCanvas();
+  }
+
+  // 鍵盤DOMは一度だけ組み立てて使い回す(音名ラベル等の静的な部分は変わらないため)。
+  // 選択中ハイライト・黒鍵の非活性状態など動的な部分だけrenderScorePianoKeyboard()で
+  // 更新する。要素ごとに絶対半音位置(absSemitone)をdatasetに持たせておき、
+  // ハイライト時の一致判定に使う。
+  let scorePianoKeysBuilt = false;
+  // ドレミ表記(白鍵の下のラベル用)。既存のSCORE_LETTER_ORDER(C~B)と対応させる。
+  const SCORE_SOLFEGE_BY_LETTER = { C: 'ド', D: 'レ', E: 'ミ', F: 'ファ', G: 'ソ', A: 'ラ', B: 'シ' };
+  function buildScorePianoKeyboard() {
+    if (scorePianoKeysBuilt) return;
+    scorePianoKeysBuilt = true;
+    scorePianoKeyboardEl.innerHTML = '';
+    for (let oct = SCORE_PIANO_FROM_OCTAVE; oct <= SCORE_PIANO_TO_OCTAVE; oct++) {
+      for (const def of SCORE_PIANO_OCTAVE) {
+        if (oct === SCORE_PIANO_TO_OCTAVE && def.white !== 'C') break; // 最後はCだけで終える(オクターブ半端を避ける)
+        if (def.white) {
+          const step = scoreLetterOctaveToStep(def.white, oct);
+          const el = document.createElement('div');
+          el.className = 'scorePianoWhiteKey';
+          el.textContent = SCORE_SOLFEGE_BY_LETTER[def.white] + oct;
+          el.dataset.absSemitone = String(oct * 12 + SCORE_PIANO_WHITE_SEMITONE[def.white]);
+          el.addEventListener('click', () => {
+            const pitch = scoreResolveWhiteKey(def.white, oct);
+            scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental);
+          });
+          scorePianoKeyboardEl.appendChild(el);
+        } else {
+          const el = document.createElement('div');
+          el.className = 'scorePianoBlackKey';
+          el.dataset.absSemitone = String(oct * 12 + SCORE_PIANO_WHITE_SEMITONE[def.black[0]] + 1);
+          el.addEventListener('click', () => {
+            if (el.classList.contains('disabled')) return;
+            const pitch = scoreResolveBlackKey({ lower: def.black[0], upper: def.black[1] }, oct);
+            scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental);
+          });
+          scorePianoKeyboardEl.appendChild(el);
+        }
+      }
+    }
+  }
+  // 選択中の音符があれば対応する鍵盤キーを青くハイライトし、見える位置までスクロール
+  // する。♮が保留中(次の新規音符に強制ナチュラルを適用する状態)の時は、黒鍵は
+  // 理論上ナチュラルになり得ないため非活性(タップ不可・薄く表示)にする。
+  function renderScorePianoKeyboard() {
+    buildScorePianoKeyboard();
+    const sel = scoreSelectedIndex !== null ? scoreElements[scoreSelectedIndex] : null;
+    const selSemitone = sel ? scoreAbsoluteSemitone(elFirstStep(sel), elFirstAccidental(sel)) : null;
+    const disableBlack = scoreSelectedIndex === null && scorePendingAccidental === 'natural';
+    let scrollTarget = null;
+    scorePianoKeyboardEl.querySelectorAll('.scorePianoWhiteKey, .scorePianoBlackKey').forEach((el) => {
+      const abs = Number(el.dataset.absSemitone);
+      const isSelected = selSemitone !== null && abs === selSemitone;
+      el.classList.toggle('selected', isSelected);
+      if (el.classList.contains('scorePianoBlackKey')) el.classList.toggle('disabled', disableBlack);
+      if (isSelected) scrollTarget = el;
+    });
+    if (scrollTarget) {
+      scrollTarget.scrollIntoView({ inline: 'center', block: 'nearest' });
+    }
+  }
+  // 楽譜エディタを開いた直後、中央付近(ハ長調ならC4〜C5あたり)が見えるよう
+  // スクロール位置を合わせる(開いた瞬間は選択中の音符が無いのでハイライト基準の
+  // 自動スクロールが効かないため、ここだけ別途行う)。
+  function scoreScrollPianoKeyboardToDefault() {
+    buildScorePianoKeyboard();
+    const c4 = scorePianoKeyboardEl.querySelector('.scorePianoWhiteKey[data-abs-semitone="' + (4 * 12) + '"]');
+    if (c4) c4.scrollIntoView({ inline: 'start', block: 'nearest' });
+  }
 
   // scoreElementsから、タイ分割された描画用の列(queue)・小節分割・各音符の
   // 実効臨時記号(調号+その小節内の直前の臨時記号を考慮した実際の音)・
@@ -2642,6 +2848,10 @@
     // タイの続き(tiedFromPrev)は直前の断片と同じ音が伸びているだけなので同じ値を継承する。
     // 表示するかどうか(調号どおり・既出なら省略)はVexFlowのAccidental.applyAccidentals
     // が自動判定するので、ここでは「実際に鳴っている音」を正しく渡すことだけ考える。
+    // (TODO 和音対応時: このexplicitStateマップは既にletter+octaveキーなので
+    // マップ自体の作り替えは不要。ただしeffectiveAccidentalは「queueインデックスに
+    // つき1つ」の配列なので、複数ピッチぶん持てるよう(queueIndex, pitchIndex)の
+    // 2次元にする必要がある。今は単音なのでpitches[0]だけを見ている。)
     const keySigMap = scoreKeySigAlterationMap(scoreKeyFifths);
     const effectiveAccidental = new Array(queue.length).fill(null);
     for (const measure of measures) {
@@ -2649,15 +2859,16 @@
       for (const i of measure) {
         const el = queue[i];
         if (el.type !== 'note') continue;
-        const { letter, octave } = scoreStaffStepToLetterOctave(el.step);
+        const { letter, octave } = scoreStaffStepToLetterOctave(elFirstStep(el));
         const key = letter + octave;
+        const accidental = elFirstAccidental(el);
         if (el.tiedFromPrev) {
           effectiveAccidental[i] = explicitState.has(key) ? explicitState.get(key) : keySigMap[letter];
           continue;
         }
-        if (el.accidental) {
-          explicitState.set(key, el.accidental);
-          effectiveAccidental[i] = el.accidental;
+        if (accidental) {
+          explicitState.set(key, accidental);
+          effectiveAccidental[i] = accidental;
         } else if (explicitState.has(key)) {
           effectiveAccidental[i] = explicitState.get(key);
         } else {
@@ -2691,8 +2902,12 @@
         const durCode = fullMeasureRest.has(idx) ? 'w' : SCORE_DURATION_TO_VEX[el.duration];
         note = new VF.StaveNote({ keys: ['b/4'], duration: durCode + 'r' });
       } else {
-        const key = scoreStepToVexKey(el.step, effectiveAccidental[idx]);
-        note = new VF.StaveNote({ keys: [key], duration: SCORE_DURATION_TO_VEX[el.duration] });
+        // TODO 和音対応時: el.pitchesが複数になったら、ここでstep昇順にソートしてから
+        // keysを作ること(VexFlowは2度音程が隣接する時のノートヘッド左右オフセットを
+        // keys配列の並び順で決めるため、未整列だと見た目が崩れる)。同一stepの重複ピッチも
+        // 入力側で弾く必要がある(VexFlowは重複キーを正しく扱えない)。今は常に1要素。
+        const keys = el.pitches.map((p) => scoreStepToVexKey(p.step, effectiveAccidental[idx]));
+        note = new VF.StaveNote({ keys, duration: SCORE_DURATION_TO_VEX[el.duration] });
         if (el.chord) {
           note.addModifier(scoreBuildChordSymbol(VF, el.chord));
         }
@@ -2826,7 +3041,7 @@
           // タップ編集用の当たり判定は、タイで分割された断片のうち最初の1つ
           // (元の音符の見た目上の開始位置)だけを覚えておけばよい。
           if (el.type === 'note' && el.srcIndex !== null && !scoreLastNotePositions.has(el.srcIndex)) {
-            scoreLastNotePositions.set(el.srcIndex, { x: note.getAbsoluteX(), sysIdx, step: el.step });
+            scoreLastNotePositions.set(el.srcIndex, { x: note.getAbsoluteX(), sysIdx, step: elFirstStep(el) });
           }
         });
 
@@ -2864,8 +3079,8 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, scoreSystemWidth, cssHeight);
-    // 今タップすると音符が追加される段(常に最後の段)だけ薄く色を付け、
-    // ユーザーがどこをタップすればよいか一目で分かるようにする。
+    // ピアノ鍵盤で今度入力すると音符が追加される段(常に最後の段)だけ薄く色を付け、
+    // どこに追加されるか一目で分かるようにする。
     const activeSysY = SCORE_TOP_MARGIN + (systemCount - 1) * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP);
     ctx.fillStyle = 'rgba(108, 204, 255, 0.12)';
     ctx.fillRect(0, activeSysY - SCORE_STAVE_LINE_SPACING * 5, scoreSystemWidth, SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP + SCORE_STAVE_LINE_SPACING * 5);
