@@ -471,6 +471,14 @@
     background: #333; color: #eee; cursor: pointer;
   }
   #btnScoreDone { background: #6cf; color: #111; font-weight: bold; }
+  /* 楽譜エディタ内から使い方マニュアルを見られる「?」リンク(2026-08-17追加)。
+     編集中の内容を失いたくないので別タブで開く(target="_blank")。ボタン群と
+     並んでも浮かないよう、他のヘッダーボタンと同じ見た目にしつつ丸くしている。 */
+  #btnScoreHelp {
+    font-size: 14px; padding: 9px 12px; border-radius: 50%; border: none;
+    background: #333; color: #eee; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
   #scoreEditorCanvasWrap {
     flex: 1; overflow-x: auto; overflow-y: auto; background: #fff;
     display: flex; align-items: flex-start; justify-content: center;
@@ -803,6 +811,7 @@
       <div id="scoreEditorHeader">
         <button id="btnScoreCancel">キャンセル</button>
         <h1>楽譜作成</h1>
+        <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067;</a>
         <button id="btnScoreDone">完了</button>
       </div>
       <div id="scoreEditorCanvasWrap">
