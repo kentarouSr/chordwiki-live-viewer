@@ -121,7 +121,8 @@
   #btnAddSetlist, #btnSongPickerDone {
     background: #6cf; color: #111; font-weight: bold;
   }
-  #setlistList, #setlistSongs, #songPickerList { display: flex; flex-direction: column; gap: 10px; }
+  #setlistList, #songPickerList { display: flex; flex-direction: column; gap: 10px; }
+  #setlistSongs { display: flex; flex-direction: column; gap: 10px; position: relative; }
   #setlistList .empty, #setlistSongs .empty, #songPickerList .empty {
     color: #999; font-size: 14px; text-align: center; margin-top: 40px;
   }
@@ -131,10 +132,31 @@
   }
   .setlistRow .songMain, .pickerRow .songMain { flex: 1; min-width: 0; cursor: pointer; }
   .setlistSongRow .songMain { flex: 1; min-width: 0; }
-  .setlistSongIndex { color: #999; font-size: 13px; width: 22px; flex-shrink: 0; }
+  /* 番号タップで「何番目に移動するか」を直接指定できる(曲数が多いセットリストで
+     ↑を何十回も押さずに済むように、2026-08-17追加)。 */
+  .setlistSongIndex {
+    color: #999; font-size: 13px; width: 22px; flex-shrink: 0; text-align: center;
+    cursor: pointer; border-radius: 4px; padding: 2px 0;
+  }
+  .setlistSongIndex:active { background: rgba(255,255,255,0.12); }
   .setlistRow button, .setlistSongRow button, .pickerRow button {
     font-size: 13px; padding: 8px 10px; border-radius: 6px; border: none;
     background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  /* ドラッグ中は絶対配置にして指に追従させる(練習ToDoリストのドラッグ並び替えと
+     同じ方式、2026-08-17)。#setlistSongsがposition:relativeなので
+     left/topはリスト内の相対座標になる。 */
+  .setlistSongRow.dragging {
+    position: absolute; z-index: 50; box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    opacity: 0.95; pointer-events: none;
+  }
+  .setlistDragPlaceholder {
+    border: 1px dashed #444; border-radius: 10px; background: rgba(255,255,255,0.03);
+  }
+  .setlistDragHandle {
+    flex-shrink: 0; width: 24px; height: 24px; display: flex; align-items: center;
+    justify-content: center; font-size: 16px; color: #777; cursor: grab;
+    touch-action: none; user-select: none; -webkit-user-select: none;
   }
 
   /* --- 練習ToDoリスト(アプリ全体で1つ、曲に紐付かない練習用チェックリスト) --- */
@@ -4545,10 +4567,21 @@
     items.forEach((item, index) => {
       const row = document.createElement('div');
       row.className = 'setlistSongRow';
+      row.dataset.itemKey = setlistItemKey(item); // ドラッグ終了後、DOM順から並び順を再構成するため
+
+      const dragHandle = document.createElement('span');
+      dragHandle.className = 'setlistDragHandle';
+      dragHandle.textContent = '⠿';
+      dragHandle.title = 'ドラッグして並び替え';
 
       const idx = document.createElement('div');
       idx.className = 'setlistSongIndex';
       idx.textContent = String(index + 1);
+      idx.title = 'タップして移動先の番号を指定';
+      // 曲数が多いと↑を何十回も押すのが辛いので、番号タップで移動先を直接指定できる
+      // ようにした(2026-08-17)。ドラッグ並び替えと相互補完(近くはドラッグ、
+      // 遠くは番号入力が速い)。
+      idx.addEventListener('click', () => moveSetlistItemByPrompt(sl, index));
 
       const main = document.createElement('div');
       main.className = 'songMain';
@@ -4585,6 +4618,7 @@
       btnDown.disabled = index === items.length - 1;
       btnDown.addEventListener('click', () => moveSetlistItem(sl, index, 1));
 
+      row.appendChild(dragHandle);
       row.appendChild(idx);
       row.appendChild(main);
       row.appendChild(btnUp);
@@ -4603,7 +4637,14 @@
       row.appendChild(btnRemove);
 
       setlistSongsEl.appendChild(row);
+      setupSetlistDrag(row, dragHandle, sl);
     });
+  }
+
+  // 曲(uuid)+メモ(id)を横断した、リスト内で一意なキー。ドラッグ後にDOM順から
+  // sl.itemsの並びを再構成する時の照合に使う。
+  function setlistItemKey(item) {
+    return item.type + ':' + (item.type === 'song' ? item.uuid : item.id);
   }
 
   async function moveSetlistItem(sl, index, delta) {
@@ -4615,6 +4656,93 @@
     sl.updatedAt = Date.now();
     await slPut(sl);
     renderSetlistEdit();
+  }
+
+  // 番号タップ→prompt()で移動先の番号を直接指定する(曲が多いセットリストで
+  // ↑連打の代わりに一発移動できるようにするため、2026-08-17)。
+  async function moveSetlistItemByPrompt(sl, index) {
+    const items = sl.items;
+    const input = prompt(`何番目に移動しますか?(1〜${items.length})`, String(index + 1));
+    if (input === null) return;
+    const target1Based = parseInt(input, 10);
+    if (!Number.isFinite(target1Based) || target1Based < 1 || target1Based > items.length) {
+      alert(`1〜${items.length}の番号を入力してください`);
+      return;
+    }
+    const targetIndex = target1Based - 1;
+    if (targetIndex === index) return;
+    const newItems = items.slice();
+    const [moved] = newItems.splice(index, 1);
+    newItems.splice(targetIndex, 0, moved);
+    sl.items = newItems;
+    sl.updatedAt = Date.now();
+    await slPut(sl);
+    renderSetlistEdit();
+  }
+
+  // 曲(&メモ)のドラッグ並び替え。練習ToDoリストのsetupTodoDragと同じ方式
+  // (ポインタイベント+setPointerCaptureで自前実装。iOS Safariはネイティブ
+  // draggable属性のD&Dがタッチでまともに動かないため、このアプリの既存パターンを
+  // 踏襲している、2026-08-17)。
+  function setupSetlistDrag(row, handle, sl) {
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const listEl = setlistSongsEl;
+      const listRect = listEl.getBoundingClientRect();
+      const rect = row.getBoundingClientRect();
+      const grabOffsetY = e.clientY - rect.top;
+
+      const placeholder = document.createElement('div');
+      placeholder.className = 'setlistDragPlaceholder';
+      placeholder.style.height = rect.height + 'px';
+      row.before(placeholder);
+
+      row.classList.add('dragging');
+      row.style.width = rect.width + 'px';
+      row.style.left = (rect.left - listRect.left) + 'px';
+      row.style.top = (rect.top - listRect.top) + 'px';
+      listEl.appendChild(row); // 兄弟の並び替えの影響を受けないよう、ドラッグ中は末尾に退避させる
+
+      handle.setPointerCapture(e.pointerId);
+
+      const onMove = (ev) => {
+        const y = clamp(ev.clientY - listRect.top - grabOffsetY, 0, listEl.scrollHeight - rect.height);
+        row.style.top = y + 'px';
+
+        const siblings = [...listEl.children].filter((el) => el !== row && el !== placeholder);
+        let target = null;
+        for (const sib of siblings) {
+          const r = sib.getBoundingClientRect();
+          if (ev.clientY < r.top + r.height / 2) { target = sib; break; }
+        }
+        if (target) listEl.insertBefore(placeholder, target);
+        else listEl.appendChild(placeholder);
+      };
+      const onUp = async () => {
+        handle.releasePointerCapture(e.pointerId);
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        handle.removeEventListener('pointercancel', onUp);
+        row.classList.remove('dragging');
+        row.style.width = '';
+        row.style.left = '';
+        row.style.top = '';
+        placeholder.replaceWith(row);
+
+        const newOrder = [...listEl.children]
+          .filter((el) => el.dataset && el.dataset.itemKey)
+          .map((el) => el.dataset.itemKey);
+        const items = sl.items.slice();
+        items.sort((a, b) => newOrder.indexOf(setlistItemKey(a)) - newOrder.indexOf(setlistItemKey(b)));
+        sl.items = items;
+        sl.updatedAt = Date.now();
+        await slPut(sl);
+        renderSetlistEdit();
+      };
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+      handle.addEventListener('pointercancel', onUp);
+    });
   }
 
   async function removeSetlistItem(sl, index) {
