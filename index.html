@@ -810,7 +810,6 @@
         <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
         <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
         <button id="btnAddScoreMemo" class="memoEditOnly">+ 楽譜</button>
-        <button id="btnMemoCalibrate" class="memoEditOnly">&#128207; この見た目を基準にする</button>
         <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
         <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
         <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
@@ -930,10 +929,11 @@
   // 基準として保存し、実際の描画時は今のcontentWidthCss()との比率でスケールする
   // (位置x/yは元々コンテンツ幅の割合で持っていたのでスケール問題がなかったが、
   // サイズはpxの生値のままだったため、狭い画面ほどメモが相対的に巨大化して
-  // 重なっていた)。baseWidthが無い(=まだ一度もこの仕組みで保存されていない)
-  // 古いメモはscale=1として扱い、勝手にサイズを変えない(端末ごとに"正しい"基準
-  // 幅を決め打ちで推測するのは不可能なため、ユーザーが「この見た目を基準にする」
-  // ボタンを押した端末での見た目をそのまま基準として焼き込む方式にした)。
+  // 重なっていた)。baseWidthは新規作成時・リサイズ時に必ずその場のcontentWidthCss()
+  // が自動で焼き込まれるので(2026-08-15〜)、通常は意識しなくてよい。baseWidthが
+  // 無い(=この仕組み導入より前に作って以来一度もリサイズしていない)古いメモだけ
+  // scale=1として扱い、勝手にサイズを変えない(端末ごとに"正しい"基準幅を決め打ちで
+  // 推測するのは不可能なため。手動で一度リサイズすれば以後は自動でスケールされる)。
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
@@ -1043,7 +1043,6 @@
   const btnAddTextMemo = document.getElementById('btnAddTextMemo');
   const btnAddImageMemo = document.getElementById('btnAddImageMemo');
   const btnAddScoreMemo = document.getElementById('btnAddScoreMemo');
-  const btnMemoCalibrate = document.getElementById('btnMemoCalibrate');
   const scoreEditorOverlay = document.getElementById('scoreEditorOverlay');
   const scoreEditorCanvas = document.getElementById('scoreEditorCanvas');
   const btnScoreCancel = document.getElementById('btnScoreCancel');
@@ -3657,30 +3656,6 @@
     setDrawMode(false);
     setPendingMemoType(pendingMemoType === 'image' ? null : 'image');
   });
-  // 端末ごとにメモの相対サイズがバラつく問題への対処。位置(x/y)はコンテンツ幅に
-  // 対する割合で持っているので端末を選ばないが、大きさ(width/fontSize)は
-  // 「どのくらいのpx幅を基準に決めたか」(memo.baseWidth)が無いと他の端末で
-  // 正しく拡大縮小できない。古いメモやbaseWidthが無いメモは今の見た目のまま
-  // (scale=1)描画されるので、「今表示中の端末での見た目が正しい」と判断した時に
-  // このボタンを押すと、その端末のcontentWidthCss()を全メモのbaseWidthとして
-  // 焼き込み、以後は他の端末でもそれを基準に自動でスケールされるようになる。
-  btnMemoCalibrate.addEventListener('click', async () => {
-    if (!currentMemos.some((m) => m.type === 'text' || m.type === 'image')) {
-      alert('この曲にはメモがありません。');
-      return;
-    }
-    if (!confirm('今この端末で見えているメモの大きさを基準として保存します。\n他の端末ではこの端末に合わせて自動的に拡大/縮小されるようになります。\nよろしいですか?')) return;
-    const cssWidth = contentWidthCss();
-    for (const memo of currentMemos) {
-      if (memo.type !== 'text' && memo.type !== 'image') continue;
-      memo.baseWidth = cssWidth;
-      memo.updatedAt = Date.now();
-    }
-    await saveCurrentMemos();
-    renderMemos();
-    alert('この端末を基準にしました。');
-  });
-
   // ==================================================
   // 手書き(ペン・蛍光ペン)
   // 座標系はメモと同じくコンテンツ幅/高さに対する割合(0〜1)。strokeLayerはtileContainerと
