@@ -201,8 +201,13 @@
   }
   .todoRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .todoRow input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; }
+  /* min-width:0だと、ドラッグハンドル・チェックボックス・優先度/コストチップ・
+     ボタン類(いずれもflex-shrink:0)がひしめく狭い画面でテキストだけが際限なく
+     押し潰され、日本語(単語間にスペースが無い)が1文字ずつ縦積みになる不具合が
+     あった(2026-08-17)。最低限の幅を確保しておき、それでも入りきらない分は
+     .todoRowのflex-wrapで他のボタン類が次の行に落ちるようにする。 */
   .todoText {
-    flex: 1; min-width: 0; font-size: 15px; word-break: break-word;
+    flex: 1 1 140px; min-width: 90px; font-size: 15px; word-break: break-word;
     padding: 4px 2px; border-radius: 4px;
   }
   .todoRow.done .todoText { color: #888; text-decoration: line-through; }
@@ -625,6 +630,18 @@
     .songRow { padding: 9px 10px; gap: 6px; }
     .songName { font-size: 14px; }
     .songRow button { font-size: 12px; padding: 7px 9px; }
+
+    /* 練習ToDo: 曲一覧と同じく、狭い画面ではチップ・ボタン類を詰めて、
+       テキストが変な位置で折り返しの巻き添えにならないようにする。 */
+    .todoItem { padding: 10px 12px; }
+    .todoRow { gap: 7px; }
+    .todoText { font-size: 14px; min-width: 70px; }
+    .todoRow button, .todoPriorityChip, .todoCostChip { font-size: 11px; padding: 5px 7px; }
+    .todoDragHandle { width: 24px; height: 24px; font-size: 16px; }
+    .todoJumpToSong { max-width: 110px; }
+    /* 31px = 詰めたドラッグハンドル幅(24px)+.todoRowのgap(7px)。親行の
+       チェックボックスの横位置に合わせて、サブタスクのインデントも詰める。 */
+    .todoSubtasks, .todoAddSubtaskRow { margin-left: 31px; }
 
     /* 楽譜エディタ: ピアノ鍵盤は全端末共通(横スクロールで対応)だが、狭い画面では
        鍵盤・ツールバーの寸法を詰めて、五線譜の可視面積をできるだけ確保する。 */
