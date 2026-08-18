@@ -867,6 +867,7 @@
         <div class="scoreEditorGroup">
           <button id="btnScoreDot">付点</button>
           <button id="btnScoreTriplet">3連</button>
+          <button id="btnScoreTie">&#8899; タイ</button>
           <button id="btnScoreSharp">&#9839;</button>
           <button id="btnScoreFlat">&#9837;</button>
           <button id="btnScoreNatural">&#9838;</button>
@@ -880,7 +881,7 @@
           <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
         </div>
       </div>
-      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。PCでは<strong>キーボード入力</strong>(A〜G:音符 / 1〜7:音価 / -,=,0:♭♯♮ / ←→:音符移動 / Delete:削除 / Ctrl+Z:取り消し)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。</p>
+      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。「⋃ タイ」で選択中の音符と直後の同じ高さの音符をつなげます。PCでは<strong>キーボード入力</strong>(A〜G:新規音符 / 1〜7:音価 / .:付点 / -,=,0:♭♯♮ / ←→:音符移動 / ↑↓:半音移動 / Delete:削除 / Ctrl+Z:取り消し。詳しい一覧は❓から)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。</p>
       <div id="scorePianoKeyboard"></div>
     </div>
   </div>
@@ -1049,6 +1050,7 @@
   const btnScoreDone = document.getElementById('btnScoreDone');
   const btnScoreDot = document.getElementById('btnScoreDot');
   const btnScoreTriplet = document.getElementById('btnScoreTriplet');
+  const btnScoreTie = document.getElementById('btnScoreTie');
   const btnScoreSharp = document.getElementById('btnScoreSharp');
   const btnScoreFlat = document.getElementById('btnScoreFlat');
   const btnScoreNatural = document.getElementById('btnScoreNatural');
@@ -2412,8 +2414,14 @@
           chord: fi === 0 ? el.chord : null,
           triplet: el.triplet, tripletGroup: el.tripletGroup,
           tripletFirst: fi === 0 ? el.tripletFirst : false,
-          tieToNext: el.type === 'note' && fi < frags.length - 1,
-          tiedFromPrev: el.type === 'note' && fi > 0,
+          // tieToNext/tiedFromPrevは2つの由来がある: ①小節に収まらず自動分割された
+          // 断片どうし(fiの内側)、②ユーザーが「タイ」ボタンで手動でつないだ、
+          // scoreElements上で隣り合う2つの音符(el.tiedToNext、2026-08-17〜)。
+          // 後者は最後の断片(fi===frags.length-1)から次の音符の最初の断片(fi===0)へ
+          // 繋がるので、そこだけ追加でtrueにする。
+          tieToNext: el.type === 'note' && (fi < frags.length - 1 || (fi === frags.length - 1 && !!el.tiedToNext)),
+          tiedFromPrev: el.type === 'note' && (fi > 0 || (fi === 0 && srcIndex > 0
+            && scoreElements[srcIndex - 1].type === 'note' && !!scoreElements[srcIndex - 1].tiedToNext)),
         });
       });
     }
@@ -2458,6 +2466,12 @@
   let scorePendingTripletCount = 0; // 3連符として残り何個入力すればグループが完成するか
   let scoreTripletGroupSeq = 0;
   let scorePendingAccidental = null; // 'sharp' | 'flat' | 'natural' | null
+  // 次に置く新規音符に付くコード名。scoreChordInput.value自体を「保留中の値」として
+  // 使うと、選択中の音符のコード名を表示するために同じ入力欄の値を書き換える処理
+  // (updateScoreToolbarUI)と衝突し、一度入力したコード名が次々と後続の音符にも
+  // 付いてしまう不具合になっていた(選択中の音符の表示用の値と、次の新規音符に
+  // 適用する保留値を、別の変数として分離することで解決、2026-08-17〜)。
+  let scorePendingChord = null;
   // ピアノ鍵盤の黒鍵をどちらの文字で表記するか。'auto'は調号から自動決定
   // (fifths>0で♯系・fifths<0で♭系、fifths===0のハ長調は♯をデフォルトにする)。
   // 単純なON/OFFではなく3値にしているのは、一度手動で♯/♭に切り替えた後も
@@ -2540,6 +2554,7 @@
     scorePendingDot = false;
     scorePendingTripletCount = 0;
     scorePendingAccidental = null;
+    scorePendingChord = null;
     scoreEnharmonicMode = 'auto';
     btnScoreEnharmonic.classList.remove('mode-sharp', 'mode-flat');
     scoreSelectedIndex = null;
@@ -2584,13 +2599,17 @@
     });
     btnScoreDot.classList.toggle('active', sel ? !!sel.dotted : scorePendingDot);
     btnScoreTriplet.classList.toggle('active', scorePendingTripletCount > 0);
+    btnScoreTie.classList.toggle('active', !!(sel && sel.tiedToNext));
     const acc = sel ? elFirstAccidental(sel) : scorePendingAccidental;
     btnScoreSharp.classList.toggle('active', acc === 'sharp');
     btnScoreFlat.classList.toggle('active', acc === 'flat');
     btnScoreNatural.classList.toggle('active', acc === 'natural');
     btnScoreUndo.innerHTML = sel ? '&#10006; 選択中の音符を削除' : '&#10006; 直前を削除';
     scoreChordInput.placeholder = sel ? 'コード名(選択中の音符に付く)' : 'コード名(次の音符に付く)';
-    if (sel) scoreChordInput.value = sel.chord || '';
+    // 選択中は「その音符のコード名」、非選択時は「次の新規音符に付く保留値」を表示する。
+    // sel.chordを表示するために書き換えた値を、非選択に戻った後もscorePendingChordに
+    // 引き継がせないことで、コード名が意図せず後続の音符に伝播するのを防ぐ。
+    scoreChordInput.value = sel ? (sel.chord || '') : (scorePendingChord || '');
     renderScorePianoKeyboard();
   }
 
@@ -2622,6 +2641,39 @@
     // 組み替えが必要で複雑になるため非対応(これまでどおり次に置く音符にのみ効く)。
     scorePendingTripletCount = scorePendingTripletCount > 0 ? 0 : 3;
     updateScoreToolbarUI();
+  });
+  // 選択中の音符と、その直後の音符(scoreElements上で1つ後ろ)をタイでつなぐ
+  // (2026-08-17〜)。この単一選択の編集モデルでは2音符を同時に選べないため、
+  // 「選択中の音符→次の音符」という決め打ちの組にしている。タイは同じ高さの
+  // 音どうしにしか音楽的な意味が無いので、声部数とstepが完全一致する時だけ許可する。
+  function scoreCanTieToNext(index) {
+    const el = scoreElements[index];
+    const next = scoreElements[index + 1];
+    if (!el || el.type !== 'note' || !next || next.type !== 'note') return false;
+    if (el.pitches.length !== next.pitches.length) return false;
+    return el.pitches.every((p, i) => p.step === next.pitches[i].step);
+  }
+  btnScoreTie.addEventListener('click', () => {
+    if (scoreSelectedIndex === null) return;
+    const el = scoreElements[scoreSelectedIndex];
+    if (el.type !== 'note') return;
+    if (el.tiedToNext) {
+      // 既につながっている状態を解除するだけなので、次の音符との整合性チェックは不要
+      // (削除等で相手が既に無くなっていても問題なく解除できる)。
+      pushScoreUndoSnapshot();
+      el.tiedToNext = false;
+      updateScoreToolbarUI();
+      renderScoreCanvas();
+      return;
+    }
+    if (!scoreCanTieToNext(scoreSelectedIndex)) {
+      alert('タイでつなぐには、次に同じ高さの音符が必要です。');
+      return;
+    }
+    pushScoreUndoSnapshot();
+    el.tiedToNext = true;
+    updateScoreToolbarUI();
+    renderScoreCanvas();
   });
   btnScoreChordMode.addEventListener('click', () => {
     scoreChordMode = !scoreChordMode;
@@ -2664,7 +2716,10 @@
     scoreChordSnapshotTaken = false;
   });
   scoreChordInput.addEventListener('input', () => {
-    if (scoreSelectedIndex === null) return; // 非選択時は完了(音符確定)時にconsumeScoreModifiersでまとめて読む
+    if (scoreSelectedIndex === null) {
+      scorePendingChord = scoreChordInput.value.trim() || null;
+      return;
+    }
     if (!scoreChordSnapshotTaken) {
       pushScoreUndoSnapshot();
       scoreChordSnapshotTaken = true;
@@ -2686,9 +2741,10 @@
       scorePendingTripletCount -= 1;
       if (scorePendingTripletCount === 0) scoreTripletGroupSeq += 1;
     }
-    const chord = scoreChordInput.value.trim() || null;
+    const chord = scorePendingChord;
     scorePendingDot = false;
     scorePendingAccidental = null;
+    scorePendingChord = null;
     scoreChordInput.value = '';
     updateScoreToolbarUI();
     return { dotted, accidental, triplet, tripletGroup, tripletFirst, chord };
@@ -3032,7 +3088,12 @@
       renderScoreCanvas();
       return;
     }
-    if (scoreSelectedIndex !== null) {
+    // 文字キー入力(opts.forceAppend)は選択中でも常に新規追加する。「入力したら
+    // 次の音符入力は次のノートになってほしい」という要望を受けて、直前に自動選択
+    // された音符へ上書きするのをやめた(2026-08-17〜)。既存の音を直したい時は
+    // ピアノ鍵盤タップ/五線譜のドラッグ・タップを使う(そちらは引き続き選択中なら
+    // 上書きする、この変更の対象外)。
+    if (scoreSelectedIndex !== null && !(opts && opts.forceAppend)) {
       scoreElements[scoreSelectedIndex].pitches[0] = { step, accidental };
       updateScoreToolbarUI();
       renderScoreCanvas();
@@ -3084,7 +3145,7 @@
     const ref = scoreReferenceAbsSemitone();
     const octave = scoreNearestOctaveForLetter(letter, ref);
     const pitch = scoreResolveWhiteKey(letter, octave);
-    scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental, { selectAfterAdd: true });
+    scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental, { selectAfterAdd: true, forceAppend: true });
   }
 
   // 選択中の音符を↑↓(Shiftでオクターブ)で半音/オクターブ単位で動かす
@@ -3178,6 +3239,7 @@
     if (key === '-') { e.preventDefault(); btnScoreFlat.click(); return; }
     if (key === '=') { e.preventDefault(); btnScoreSharp.click(); return; }
     if (key === '0') { e.preventDefault(); btnScoreNatural.click(); return; }
+    if (key === '.') { e.preventDefault(); btnScoreDot.click(); return; }
     if (key === 'ArrowLeft') { e.preventDefault(); scoreSelectRelative(-1); return; }
     if (key === 'ArrowRight') { e.preventDefault(); scoreSelectRelative(1); return; }
     if (key === 'ArrowUp') { e.preventDefault(); scoreShiftSelectedPitch(e.shiftKey ? 12 : 1); return; }
@@ -3386,6 +3448,13 @@
     // 臨時記号が異なりうるため)。explicitStateマップ自体はletter+octaveキーのままで
     // 変更不要(声部が違えばletter+octaveも普通は違うので、マップの中でちゃんと
     // 独立して扱われる)。休符のeffectiveAccidental[i]は従来どおりnullのまま。
+    // タイが小節線をまたぐ場合(自動分割・手動タイどちらも)、tiedFromPrev側の
+    // explicitStateは新しい小節でリセットされて空になっているため、そこを見に
+    // 行くと調号デフォルトに化けてしまう(タイの継続音は本来、直前の音と完全に
+    // 同じ実効臨時記号を保つべきで、小節線やタイの手動/自動の別とは無関係)。
+    // measuresはqueue全体を先頭から順にカバーしているので、effectiveAccidental[i-1]は
+    // この時点で必ず計算済み。そこから直接同じピッチ位置(pi)の値を引き継ぐことで、
+    // 小節線をまたいでも正しい値になる(2026-08-17〜、タイ機能追加のついでに修正)。
     const keySigMap = scoreKeySigAlterationMap(scoreKeyFifths);
     const effectiveAccidental = new Array(queue.length).fill(null);
     for (const measure of measures) {
@@ -3393,11 +3462,12 @@
       for (const i of measure) {
         const el = queue[i];
         if (el.type !== 'note') continue;
-        effectiveAccidental[i] = el.pitches.map((p) => {
+        effectiveAccidental[i] = el.pitches.map((p, pi) => {
           const { letter, octave } = scoreStaffStepToLetterOctave(p.step);
           const key = letter + octave;
           if (el.tiedFromPrev) {
-            return explicitState.has(key) ? explicitState.get(key) : keySigMap[letter];
+            const prev = effectiveAccidental[i - 1];
+            return (prev && prev[pi] !== undefined) ? prev[pi] : keySigMap[letter];
           }
           if (p.accidental) {
             explicitState.set(key, p.accidental);
