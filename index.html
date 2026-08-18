@@ -854,6 +854,9 @@
           <label>調号 <select id="scoreKeySelect"></select></label>
         </div>
         <div class="scoreEditorGroup">
+          <button id="btnScoreChordMode">&#9834; 単音</button>
+        </div>
+        <div class="scoreEditorGroup">
           <button class="scoreDurationBtn" data-duration="whole">全</button>
           <button class="scoreDurationBtn" data-duration="half">2分</button>
           <button class="scoreDurationBtn active" data-duration="quarter">4分</button>
@@ -878,7 +881,7 @@
           <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
         </div>
       </div>
-      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。PCでは<strong>キーボード入力</strong>(A〜G:音符 / 1〜7:音価 / -,=,0:♭♯♮ / ←→:音符移動 / Delete:削除 / Ctrl+Z:取り消し)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。</p>
+      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。PCでは<strong>キーボード入力</strong>(A〜G:音符 / 1〜7:音価 / -,=,0:♭♯♮ / ←→:音符移動 / Delete:削除 / Ctrl+Z:取り消し)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。</p>
       <div id="scorePianoKeyboard"></div>
     </div>
   </div>
@@ -1060,6 +1063,7 @@
   const btnScoreUndo = document.getElementById('btnScoreUndo');
   const btnScoreClearAll = document.getElementById('btnScoreClearAll');
   const btnScoreMidi = document.getElementById('btnScoreMidi');
+  const btnScoreChordMode = document.getElementById('btnScoreChordMode');
   const btnDrawPen = document.getElementById('btnDrawPen');
   const btnDrawHighlighter = document.getElementById('btnDrawHighlighter');
   const drawColorInput = document.getElementById('drawColorInput');
@@ -2464,6 +2468,11 @@
   let scoreKeyFifths = 0;
   let scoreSystemWidth = 640; // 段の幅(openScoreEditorでコンテナ幅に合わせて決め直す)
   let scoreSelectedIndex = null; // 編集用に選択中の音符・休符(scoreElementsのインデックス)。nullなら非選択
+  // 和音入力モード(2026-08-17〜)。単音モードは「選択中に別の音をタップ=上書き」だが、
+  // 和音モードは「選択中に音をタップ=その音符へ声部を追加(既存声部を再タップなら削除)」
+  // というトグル方式にしている(選択中の1つの音符の中で「直す」と「足す」を両立できない
+  // ため、和音モードは常に足し引きに統一した、という設計判断)。
+  let scoreChordMode = false;
 
   // Ctrl+Z/Ctrl+Y用の本物のundo/redo履歴(2026-08-17〜)。btnScoreUndoは元々
   // 「直前/選択中を削除」する単発の操作であり本物のundo履歴ではない(名前が
@@ -2535,6 +2544,9 @@
     scoreEnharmonicMode = 'auto';
     btnScoreEnharmonic.classList.remove('mode-sharp', 'mode-flat');
     scoreSelectedIndex = null;
+    scoreChordMode = false;
+    btnScoreChordMode.classList.remove('active');
+    btnScoreChordMode.innerHTML = '&#9834; 単音';
     scoreChordInput.value = '';
     scoreTimeSigIdx = 0;
     scoreKeyFifths = 0;
@@ -2611,6 +2623,19 @@
     // 組み替えが必要で複雑になるため非対応(これまでどおり次に置く音符にのみ効く)。
     scorePendingTripletCount = scorePendingTripletCount > 0 ? 0 : 3;
     updateScoreToolbarUI();
+  });
+  btnScoreChordMode.addEventListener('click', () => {
+    scoreChordMode = !scoreChordMode;
+    btnScoreChordMode.classList.toggle('active', scoreChordMode);
+    btnScoreChordMode.innerHTML = scoreChordMode ? '&#127925; 和音' : '&#9834; 単音';
+    // モード切替時に選択中の音符やドラッグ中の状態が残っていると、単音/和音で
+    // 意味が変わる「選択中にタップ」の挙動が混線するので両方クリアする
+    // (ドラッグは通常ツールバー操作と同時に起きないが、タブレットでのペン+指の
+    // 同時操作のような稀なケースへの防御、設計レビューで指摘された点)。
+    scoreSelectedIndex = null;
+    scorePitchDrag = null;
+    updateScoreToolbarUI();
+    renderScoreCanvas();
   });
   function scoreToggleAccidental(kind) {
     if (scoreSelectedIndex !== null) {
@@ -2775,9 +2800,13 @@
       const stave = scoreLastStaves[pos.sysIdx];
       if (!stave) continue;
       const spacing = stave.getSpacingBetweenLines();
-      const noteY = stave.getYForLine(4) - pos.step * (spacing / 2);
-      const dist = Math.hypot(tapX - pos.x, tapY - noteY);
-      if (dist <= hitRadius && dist < hitDist) { hitDist = dist; hitSrcIndex = srcIndex; }
+      // 和音は複数の音符頭(steps)を持つので、どれに一番近いかで判定する
+      // (どの声部をタップしても和音全体=同じ音符が選択される、2026-08-17〜)。
+      for (const step of pos.steps) {
+        const noteY = stave.getYForLine(4) - step * (spacing / 2);
+        const dist = Math.hypot(tapX - pos.x, tapY - noteY);
+        if (dist <= hitRadius && dist < hitDist) { hitDist = dist; hitSrcIndex = srcIndex; }
+      }
     }
     return hitSrcIndex;
   }
@@ -2822,7 +2851,12 @@
         const pad = spacing * 7;
         if (tapY >= stave.getYForLine(0) - pad && tapY <= stave.getYForLine(4) + pad) {
           pushScoreUndoSnapshot();
-          scoreElements[scoreSelectedIndex].pitches[0].step = Math.round((stave.getYForLine(4) - tapY) / (spacing / 2));
+          const el = scoreElements[scoreSelectedIndex];
+          const newStep = Math.round((stave.getYForLine(4) - tapY) / (spacing / 2));
+          // 和音は全声部をまとめて同じ音程だけ移調する(形を保ったまま平行移動。
+          // 1声部だけをつまんで個別に動かす機能は無い、2026-08-17〜)。
+          const delta = newStep - elFirstStep(el);
+          el.pitches.forEach((p) => { p.step += delta; });
         }
       }
       scoreSelectedIndex = null;
@@ -2851,7 +2885,9 @@
       pushScoreUndoSnapshot();
       scorePitchDrag.snapshotted = true;
     }
-    el.pitches[0].step = step;
+    // 和音は全声部をまとめて同じ音程だけ移調する(上のpointerdown分岐と同じ考え方)。
+    const delta = step - elFirstStep(el);
+    el.pitches.forEach((p) => { p.step += delta; });
     // ドラッグ中の音符は選択状態にして青く見せる(今どれを動かしているか分かるように)
     scoreSelectedIndex = scorePitchDrag.srcIndex;
     renderScoreCanvas();
@@ -2953,10 +2989,50 @@
   // 「入力→↑↓で半音/オクターブ調整→別の文字キーで音名を直す→→キーで確定して次へ」
   // という一連の編集フローを想定しているため、入力した直後の音符を選択状態にしておく
   // 必要がある(2026-08-17〜)。
+  // 和音モード中に選択中の音符へ声部を足し引きする(2026-08-17〜)。同じstepが
+  // 既にあれば削除(トグル)、無ければstep昇順を保ったまま挿入する。挿入時点で
+  // 昇順を保証しておくことで、描画側(buildScoreRenderQueue/scoreBuildMeasureNotes)は
+  // pitchesを並び替えずそのまま使える(VexFlowは2度音程が隣接する時のノートヘッドの
+  // 左右オフセットをkeys配列の並び順で決めるため、未整列だと見た目が崩れる)。
+  function scoreToggleChordPitch(el, step, accidental) {
+    const idx = el.pitches.findIndex((p) => p.step === step);
+    if (idx !== -1) {
+      if (el.pitches.length > 1) el.pitches.splice(idx, 1); // 最後の1音は消させない(無音の音符を防ぐ)
+      return;
+    }
+    const insertAt = el.pitches.findIndex((p) => p.step > step);
+    const newPitch = { step, accidental };
+    if (insertAt === -1) el.pitches.push(newPitch);
+    else el.pitches.splice(insertAt, 0, newPitch);
+  }
+
   function scoreApplyPitchFromKeyboard(step, accidental, opts) {
     // ピアノ鍵盤クリック・文字キー入力・MIDIノートオンは全てここを通る唯一の合流点
     // なので、undoスナップショットもここ1箇所で積めば全経路をカバーできる。
     pushScoreUndoSnapshot();
+    if (scoreChordMode) {
+      // 和音モードは単音モードの「選択中に別の音をタップ=上書き」と両立できない
+      // (「直す」のか「声部を足す」のか区別が付かないため)。常に足し引きの
+      // トグル方式に統一している(#scoreEditorHintに明記)。
+      if (scoreSelectedIndex !== null) {
+        scoreToggleChordPitch(scoreElements[scoreSelectedIndex], step, accidental);
+        updateScoreToolbarUI();
+        renderScoreCanvas();
+        return;
+      }
+      const mods = consumeScoreModifiers();
+      scoreElements.push({
+        type: 'note', pitches: [{ step, accidental }], duration: scoreSelectedDuration,
+        dotted: mods.dotted, triplet: mods.triplet, tripletGroup: mods.tripletGroup,
+        tripletFirst: mods.tripletFirst, chord: mods.chord,
+      });
+      // 和音モードは入力元(ピアノ鍵盤/文字キー/MIDI)を問わず常に自動選択する。
+      // そうしないと次の入力が「声部を追加」ではなく「新しい音符」になってしまう。
+      scoreSelectedIndex = scoreElements.length - 1;
+      updateScoreToolbarUI();
+      renderScoreCanvas();
+      return;
+    }
     if (scoreSelectedIndex !== null) {
       scoreElements[scoreSelectedIndex].pitches[0] = { step, accidental };
       updateScoreToolbarUI();
@@ -3022,8 +3098,15 @@
     const el = scoreElements[scoreSelectedIndex];
     if (el.type !== 'note') return;
     pushScoreUndoSnapshot();
-    const cur = scoreAbsoluteSemitone(elFirstStep(el), elFirstAccidental(el));
-    el.pitches[0] = scoreResolveFromSemitone(cur + semitoneDelta);
+    // 和音は全声部をまとめて同じ半音数だけ移調する(ドラッグでの移調と同じ考え方)。
+    // 単音(pitches.length===1)ならこれまでどおりの挙動になる。
+    el.pitches = el.pitches.map((p) => {
+      const cur = scoreAbsoluteSemitone(p.step, p.accidental);
+      return scoreResolveFromSemitone(cur + semitoneDelta);
+    });
+    // 移調自体は理論上、声部間の相対順序も重複も変えないはずだが念のため
+    // step昇順を保証しておく(pitchesの並び順=VexFlowへ渡すkeysの並び順のため)。
+    el.pitches.sort((a, b) => a.step - b.step);
     updateScoreToolbarUI();
     renderScoreCanvas();
   }
@@ -3161,7 +3244,9 @@
   function renderScorePianoKeyboard() {
     buildScorePianoKeyboard();
     const sel = scoreSelectedIndex !== null ? scoreElements[scoreSelectedIndex] : null;
-    const selSemitone = sel ? scoreAbsoluteSemitone(elFirstStep(sel), elFirstAccidental(sel)) : null;
+    // 和音は複数のピッチを持つので、選択中の音符の全ピッチぶんハイライトする
+    // (単音ならこれまでどおり1つだけ光る、2026-08-17〜)。
+    const selSemitones = sel ? new Set(sel.pitches.map((p) => scoreAbsoluteSemitone(p.step, p.accidental))) : null;
     const disableBlack = scoreSelectedIndex === null && scorePendingAccidental === 'natural';
     // MIDIで今物理的に押されている鍵(絶対半音の集合)。範囲外(3〜6オクターブの
     // 表示範囲を超える音)は該当する鍵盤DOM自体が無いので自然に何も光らない。
@@ -3169,11 +3254,11 @@
     let scrollTarget = null;
     scorePianoKeyboardEl.querySelectorAll('.scorePianoWhiteKey, .scorePianoBlackKey').forEach((el) => {
       const abs = Number(el.dataset.absSemitone);
-      const isSelected = selSemitone !== null && abs === selSemitone;
+      const isSelected = selSemitones !== null && selSemitones.has(abs);
       el.classList.toggle('selected', isSelected);
       el.classList.toggle('pressed', pressedSemitones.has(abs));
       if (el.classList.contains('scorePianoBlackKey')) el.classList.toggle('disabled', disableBlack);
-      if (isSelected) scrollTarget = el;
+      if (isSelected && !scrollTarget) scrollTarget = el;
     });
     if (scrollTarget) {
       scrollTarget.scrollIntoView({ inline: 'center', block: 'nearest' });
@@ -3214,7 +3299,17 @@
       renderScorePianoKeyboard();
     } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
       scoreMidiHeldNotes.delete(note);
-      renderScorePianoKeyboard();
+      // 和音モード中、MIDIキーボードで弾いた和音の鍵盤を全部離した瞬間に自動で
+      // 選択解除する(次に弾く和音が別の新しい音符として始まるように)。マウス/
+      // 文字キー入力にはこれに相当する「離した」シグナルが無いのでMIDI限定
+      // (2026-08-17〜)。
+      if (scoreChordMode && scoreMidiHeldNotes.size === 0) {
+        scoreSelectedIndex = null;
+        updateScoreToolbarUI(); // 内部でrenderScorePianoKeyboard()も呼ばれる
+        renderScoreCanvas();
+      } else {
+        renderScorePianoKeyboard();
+      }
     }
   }
   function scoreAttachMidiInputs(access) {
@@ -3287,10 +3382,11 @@
     // タイの続き(tiedFromPrev)は直前の断片と同じ音が伸びているだけなので同じ値を継承する。
     // 表示するかどうか(調号どおり・既出なら省略)はVexFlowのAccidental.applyAccidentals
     // が自動判定するので、ここでは「実際に鳴っている音」を正しく渡すことだけ考える。
-    // (TODO 和音対応時: このexplicitStateマップは既にletter+octaveキーなので
-    // マップ自体の作り替えは不要。ただしeffectiveAccidentalは「queueインデックスに
-    // つき1つ」の配列なので、複数ピッチぶん持てるよう(queueIndex, pitchIndex)の
-    // 2次元にする必要がある。今は単音なのでpitches[0]だけを見ている。)
+    // 和音対応(2026-08-17〜): effectiveAccidental[i]は「queueインデックスにつき1つ」
+    // ではなく、その音符のpitches配列と同じ並びの配列にした(和音は声部ごとに実効
+    // 臨時記号が異なりうるため)。explicitStateマップ自体はletter+octaveキーのままで
+    // 変更不要(声部が違えばletter+octaveも普通は違うので、マップの中でちゃんと
+    // 独立して扱われる)。休符のeffectiveAccidental[i]は従来どおりnullのまま。
     const keySigMap = scoreKeySigAlterationMap(scoreKeyFifths);
     const effectiveAccidental = new Array(queue.length).fill(null);
     for (const measure of measures) {
@@ -3298,21 +3394,19 @@
       for (const i of measure) {
         const el = queue[i];
         if (el.type !== 'note') continue;
-        const { letter, octave } = scoreStaffStepToLetterOctave(elFirstStep(el));
-        const key = letter + octave;
-        const accidental = elFirstAccidental(el);
-        if (el.tiedFromPrev) {
-          effectiveAccidental[i] = explicitState.has(key) ? explicitState.get(key) : keySigMap[letter];
-          continue;
-        }
-        if (accidental) {
-          explicitState.set(key, accidental);
-          effectiveAccidental[i] = accidental;
-        } else if (explicitState.has(key)) {
-          effectiveAccidental[i] = explicitState.get(key);
-        } else {
-          effectiveAccidental[i] = keySigMap[letter];
-        }
+        effectiveAccidental[i] = el.pitches.map((p) => {
+          const { letter, octave } = scoreStaffStepToLetterOctave(p.step);
+          const key = letter + octave;
+          if (el.tiedFromPrev) {
+            return explicitState.has(key) ? explicitState.get(key) : keySigMap[letter];
+          }
+          if (p.accidental) {
+            explicitState.set(key, p.accidental);
+            return p.accidental;
+          }
+          if (explicitState.has(key)) return explicitState.get(key);
+          return keySigMap[letter];
+        });
       }
     }
 
@@ -3341,11 +3435,11 @@
         const durCode = fullMeasureRest.has(idx) ? 'w' : SCORE_DURATION_TO_VEX[el.duration];
         note = new VF.StaveNote({ keys: ['b/4'], duration: durCode + 'r' });
       } else {
-        // TODO 和音対応時: el.pitchesが複数になったら、ここでstep昇順にソートしてから
-        // keysを作ること(VexFlowは2度音程が隣接する時のノートヘッド左右オフセットを
-        // keys配列の並び順で決めるため、未整列だと見た目が崩れる)。同一stepの重複ピッチも
-        // 入力側で弾く必要がある(VexFlowは重複キーを正しく扱えない)。今は常に1要素。
-        const keys = el.pitches.map((p) => scoreStepToVexKey(p.step, effectiveAccidental[idx]));
+        // el.pitchesはstep昇順・重複無しであることが挿入側(scoreToggleChordPitch)で
+        // 保証されているので、ここではそのままkeysに変換するだけでよい
+        // (VexFlowは2度音程が隣接する時のノートヘッド左右オフセットをkeys配列の
+        // 並び順で決めるため未整列だと見た目が崩れるが、その心配は不要)。
+        const keys = el.pitches.map((p, pi) => scoreStepToVexKey(p.step, effectiveAccidental[idx][pi]));
         note = new VF.StaveNote({ keys, duration: SCORE_DURATION_TO_VEX[el.duration] });
         if (el.chord) {
           note.addModifier(scoreBuildChordSymbol(VF, el.chord));
@@ -3480,7 +3574,7 @@
           // タップ編集用の当たり判定は、タイで分割された断片のうち最初の1つ
           // (元の音符の見た目上の開始位置)だけを覚えておけばよい。
           if (el.type === 'note' && el.srcIndex !== null && !scoreLastNotePositions.has(el.srcIndex)) {
-            scoreLastNotePositions.set(el.srcIndex, { x: note.getAbsoluteX(), sysIdx, step: elFirstStep(el) });
+            scoreLastNotePositions.set(el.srcIndex, { x: note.getAbsoluteX(), sysIdx, steps: el.pitches.map((p) => p.step) });
           }
         });
 
