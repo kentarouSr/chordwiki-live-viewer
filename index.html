@@ -665,6 +665,9 @@
         <span id="lastBackupInfo"></span>
         <button id="btnExportZip">書き出す</button>
         <button id="btnImportZip">読み込む</button>
+        <span id="localBackupInfo"></span>
+        <button id="btnRestoreLocalBackup" disabled>この端末から復元</button>
+        <button id="btnDeleteLocalBackup" disabled>&#128465; 削除</button>
       </div>
       <div class="backupGroup">
         <span class="backupGroupLabel">&#128246; オフライン</span>
@@ -949,6 +952,9 @@
   const btnExportZip = document.getElementById('btnExportZip');
   const btnImportZip = document.getElementById('btnImportZip');
   const lastBackupInfo = document.getElementById('lastBackupInfo');
+  const localBackupInfo = document.getElementById('localBackupInfo');
+  const btnRestoreLocalBackup = document.getElementById('btnRestoreLocalBackup');
+  const btnDeleteLocalBackup = document.getElementById('btnDeleteLocalBackup');
   const btnSync = document.getElementById('btnSync');
   const btnSetSyncKey = document.getElementById('btnSetSyncKey');
   const btnCopySetupLink = document.getElementById('btnCopySetupLink');
@@ -1138,11 +1144,12 @@
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
   // ==================================================
   const DB_NAME = 'chordwiki-live-viewer';
-  const DB_VERSION = 4;
+  const DB_VERSION = 5;
   const STORE = 'songs';
   const SETLIST_STORE = 'setlists';
   const TODO_STORE = 'practiceTodos'; // アプリ全体で1レコードのみ(id: 'global')固定で使う
   const STAMP_STORE = 'memoStamps';   // アプリ全体で1レコードのみ(id: 'global')固定で使う
+  const BACKUP_STORE = 'localBackup'; // 自動ローカルバックアップ用。アプリ全体で1レコードのみ(id: 'local')、常に上書き(v5で追加)
   let dbPromise = null;
 
   function openDb() {
@@ -1162,6 +1169,9 @@
         }
         if (!db.objectStoreNames.contains(STAMP_STORE)) {
           db.createObjectStore(STAMP_STORE, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(BACKUP_STORE)) {
+          db.createObjectStore(BACKUP_STORE, { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -1296,6 +1306,38 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(TODO_STORE, 'readwrite');
       const req = tx.objectStore(TODO_STORE).put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // 自動ローカルバックアップ(アプリ全体で1レコードのみ、id: 'local'固定・常に上書き)。
+  // 「書き出す」ボタンでの手動ZIPダウンロードとは別物: あちらは端末のFiles/ダウンロード
+  // フォルダに出るのでアプリ側から容量も削除も把握・操作できないが、こちらはIndexedDB内に
+  // 保存するのでアプリの画面から使用容量表示・削除ができる(2026-08-17〜)。
+  async function backupGet() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(BACKUP_STORE, 'readonly');
+      const req = tx.objectStore(BACKUP_STORE).get('local');
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function backupPut(record) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(BACKUP_STORE, 'readwrite');
+      const req = tx.objectStore(BACKUP_STORE).put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function backupDelete() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(BACKUP_STORE, 'readwrite');
+      const req = tx.objectStore(BACKUP_STORE).delete('local');
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -4065,6 +4107,8 @@
   async function renderSongList() {
     renderLastBackupInfo();
     renderOfflineCacheInfo();
+    renderLocalBackupInfo();
+    runAutoBackupIfDue(); // 前回から24時間経っていた時だけ裏で実行(内部で間引き済み)
     let songs = await dbGetAll();
     await Promise.all(songs.map(ensureSongUuid));
     sortSongs(songs, getSongSortMode());
@@ -5189,7 +5233,10 @@
     renderOfflineCacheInfo();
   }
 
-  async function exportBackupZip() {
+  // ZIPバックアップの中身(manifest.json+曲の実体+画像メモ実体)を組み立てる。
+  // 手動の「書き出す」(ファイルへダウンロード)と自動ローカルバックアップ(IndexedDBへ保存)
+  // の両方から呼ばれる共通処理。
+  async function buildBackupZipBlob() {
     const songs = await dbGetAll();
     await Promise.all(songs.map(ensureSongUuid));
     const setlists = await slGetAll();
@@ -5223,15 +5270,20 @@
         }
       }
     }
+    return buildZip(entries);
+  }
 
-    const zipBlob = buildZip(entries);
+  async function exportBackupZip() {
+    const zipBlob = await buildBackupZipBlob();
     downloadBlob(zipBlob, `chordwiki-backup-${formatTimestampForFilename(new Date())}.zip`);
     localStorage.setItem(LAST_BACKUP_KEY, String(Date.now()));
     renderLastBackupInfo();
   }
 
-  async function importBackupZip(file) {
-    const buf = new Uint8Array(await file.arrayBuffer());
+  // 引数はUint8Array(ZIPファイルの中身そのもの)。手動インポート(File→ArrayBuffer)と
+  // 自動ローカルバックアップからの復元(IndexedDB内のArrayBuffer)の両方で共有するため、
+  // File依存を切り離してある。
+  async function importBackupZipFromBuffer(buf) {
     const entries = parseZip(buf);
     const manifestEntry = entries.find((e) => e.name === 'manifest.json');
     if (!manifestEntry) {
@@ -5330,10 +5382,81 @@
     const file = zipInput.files && zipInput.files[0];
     zipInput.value = '';
     if (!file) return;
-    importBackupZip(file).catch((err) => {
+    file.arrayBuffer().then((buf) => importBackupZipFromBuffer(new Uint8Array(buf))).catch((err) => {
       console.error(err);
       alert('読み込みエラー: ' + (err && err.message ? err.message : err));
     });
+  });
+
+  // ==================================================
+  // 自動ローカルバックアップ(IndexedDB内に1件だけ保存、常に上書き。2026-08-17〜)
+  // 「バックアップを自動化してほしい、どんどん上書いていくイメージ」という要望を受けて
+  // 追加。手動の「書き出す」(端末のFiles/ダウンロードフォルダへ出るのでアプリからは
+  // 容量も削除も把握できない)とは別に、アプリ自身のストレージ内に最新版を1つだけ
+  // 持ち続ける方式にすることで、使用容量の表示と削除ボタンを両立させている。
+  // ==================================================
+  const AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 毎回作り直すのは重いので間引く
+
+  function formatBackupSize(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+    return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+  }
+
+  async function renderLocalBackupInfo() {
+    const rec = await backupGet();
+    if (!rec) {
+      localBackupInfo.textContent = '自動バックアップ: なし';
+      btnDeleteLocalBackup.disabled = true;
+      btnRestoreLocalBackup.disabled = true;
+      return;
+    }
+    const days = Math.floor((Date.now() - rec.updatedAt) / 86400000);
+    localBackupInfo.textContent =
+      `自動バックアップ: ${days === 0 ? '今日' : days + '日前'}(${formatBackupSize(rec.size)})`;
+    btnDeleteLocalBackup.disabled = false;
+    btnRestoreLocalBackup.disabled = false;
+  }
+
+  // 曲一覧を開くたび(=このアプリを使うたび)に呼ばれる想定。実際にZIPを作り直すのは
+  // 前回から24時間以上経っている時だけなので、頻繁に呼んでも無駄にはならない。
+  // 自動同期(btnSync自動実行分)と同じく、失敗しても画面には出さず静かに諦める。
+  let autoBackupRunning = false; // renderSongList()は短時間に何度も呼ばれ得るので、二重実行を防ぐ
+  async function runAutoBackupIfDue() {
+    if (autoBackupRunning) return;
+    autoBackupRunning = true;
+    try {
+      const songs = await dbGetAll();
+      if (songs.length === 0) return; // 何も無ければ作らない
+      const existing = await backupGet();
+      if (existing && Date.now() - existing.updatedAt < AUTO_BACKUP_INTERVAL_MS) return;
+      const blob = await buildBackupZipBlob();
+      const data = await blob.arrayBuffer();
+      await backupPut({ id: 'local', data, size: data.byteLength, updatedAt: Date.now() });
+      renderLocalBackupInfo();
+    } catch (err) {
+      console.error('自動バックアップに失敗しました', err);
+    } finally {
+      autoBackupRunning = false;
+    }
+  }
+
+  btnDeleteLocalBackup.addEventListener('click', async () => {
+    if (!confirm('端末に自動保存されているバックアップを削除しますか？(クラウド同期や「書き出す」でのファイル保存には影響しません)')) return;
+    await backupDelete();
+    renderLocalBackupInfo();
+  });
+
+  btnRestoreLocalBackup.addEventListener('click', async () => {
+    const rec = await backupGet();
+    if (!rec) return;
+    if (!confirm('自動バックアップから復元しますか？(今のデータより新しい曲は上書きされません)')) return;
+    try {
+      await importBackupZipFromBuffer(new Uint8Array(rec.data));
+    } catch (err) {
+      console.error(err);
+      alert('復元エラー: ' + (err && err.message ? err.message : err));
+    }
   });
 
   // ==================================================
