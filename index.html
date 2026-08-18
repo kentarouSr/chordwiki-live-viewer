@@ -130,8 +130,19 @@
     display: flex; align-items: center; gap: 8px; padding: 12px 14px;
     background: #1c1c1c; border-radius: 10px;
   }
-  .setlistRow .songMain, .pickerRow .songMain { flex: 1; min-width: 0; cursor: pointer; }
-  .setlistSongRow .songMain { flex: 1; min-width: 0; }
+  /* 曲一覧の.songName(1行+ellipsis)と違い、ここは長らく単純な複数行折り返しの
+     ままだった。ChordWikiから書き出した曲名(「- ChordWiki_コード譜共有サイト -
+     [xxx.chordwiki.org]」まで含む長いもの)だと2〜3行に伸びてセットリストが
+     縦に間延びする(2026-08-17、スマホでの見た目を洗い出す過程で発見)。
+     曲一覧と同じ1行+ellipsisに揃えて解決する。 */
+  .setlistRow .songMain, .pickerRow .songMain {
+    flex: 1; min-width: 0; cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .setlistSongRow .songMain {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   /* 番号タップで「何番目に移動するか」を直接指定できる(曲数が多いセットリストで
      ↑を何十回も押さずに済むように、2026-08-17追加)。 */
   .setlistSongIndex {
