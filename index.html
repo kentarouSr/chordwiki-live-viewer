@@ -919,6 +919,7 @@
       <div class="backupGroup">
         <span class="backupGroupLabel">&#128246; オフライン</span>
         <span id="offlineCacheInfo"></span>
+        <span id="appVersionInfo" title="今この端末で動いているアプリの版。サポート時の切り分け用"></span>
         <button id="btnUpdateOfflineCache">データを更新</button>
       </div>
     </div>
@@ -1079,6 +1080,7 @@
         <span id="speedLabel">速度 20</span>
         <button id="btnSpeedUp">+</button>
         <button id="btnSpeedUp5">+5</button>
+        <button id="btnCalcSpeed" class="appModeEditOnly" title="曲の演奏時間から、最後までちょうど流れる速度を計算します">&#9201; 速度計算</button>
         <button id="btnPlay">&#9654; 再生</button>
       </div>
     </div>
@@ -1299,6 +1301,7 @@
   const btnAppMode = document.getElementById('btnAppMode');
   const offlineCacheInfo = document.getElementById('offlineCacheInfo');
   const btnUpdateOfflineCache = document.getElementById('btnUpdateOfflineCache');
+  const appVersionInfo = document.getElementById('appVersionInfo');
   const btnToggleSettings = document.getElementById('btnToggleSettings');
   const backupBar = document.getElementById('backupBar');
 
@@ -1426,6 +1429,7 @@
   const btnSpeedUp = document.getElementById('btnSpeedUp');
   const btnSpeedDown = document.getElementById('btnSpeedDown');
   const btnSpeedUp5 = document.getElementById('btnSpeedUp5');
+  const btnCalcSpeed = document.getElementById('btnCalcSpeed');
   const btnSpeedDown5 = document.getElementById('btnSpeedDown5');
   const speedLabel = document.getElementById('speedLabel');
   const btnZoomIn = document.getElementById('btnZoomIn');
@@ -5583,6 +5587,54 @@
     scheduleSpeedSave();
   }
 
+  // ==================================================
+  // 演奏時間から自動スクロール速度を計算する(2026-08-19〜)
+  // ==================================================
+  // 再生ループは scrollY += speed * SPEED_TO_PXPERSEC * dt で進むので、
+  // 「譜面の最後まで動く距離(maxScroll)」を演奏時間で割れば必要なpx/秒が出る。
+  // それをSPEED_TO_PXPERSECで割り戻したものが、画面に出ている「速度」の値。
+  //
+  // 距離にcontentHeightではなくmaxScroll()を使うのが要点。譜面の末尾が画面の
+  // 下端に来た時点で終わりなので、実際に動く距離は画面の高さぶん短い。
+  // ズーム倍率を変えるとmaxScroll()も変わるため、計算は「今の倍率」が前提になる。
+  function parseDurationToSeconds(input) {
+    const t = String(input || '').trim();
+    if (!t) return null;
+    // 「3:45」「03:45」「1:02:03」形式
+    if (/^\d{1,2}(:\d{1,2}){1,2}$/.test(t)) {
+      const parts = t.split(':').map(Number);
+      const sec = parts.reduce((acc, v) => acc * 60 + v, 0);
+      return sec > 0 ? sec : null;
+    }
+    // 秒数の直接指定
+    const n = Number(t);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  btnCalcSpeed.addEventListener('click', () => {
+    const distance = maxScroll();
+    if (distance <= 0) {
+      alert('この譜面は画面に収まりきっているので、自動スクロールの必要がありません。');
+      return;
+    }
+    const input = prompt(
+      '曲の長さを入れてください(例: 3:45 または 225)。'
+      + 'YouTubeの再生時間や音源の長さをそのまま入れると、最後までちょうど流れる速度になります。');
+    if (input === null) return;
+    const sec = parseDurationToSeconds(input);
+    if (sec == null) {
+      alert('長さを読み取れませんでした。「3:45」または秒数で入れてください。');
+      return;
+    }
+    const calculated = Math.max(MIN_SPEED, Math.round(distance / sec / SPEED_TO_PXPERSEC));
+    speed = calculated;
+    speedLabel.textContent = `速度 ${speed}`;
+    scheduleSpeedSave();
+    const mm = Math.floor(sec / 60), ss = String(Math.round(sec % 60)).padStart(2, '0');
+    alert(`速度を ${calculated} に設定しました(${mm}:${ss} で最後まで流れます)。`
+      + '実際に流して微調整したい時は「−」「＋」で変えられます。');
+  });
+
   function scheduleSpeedSave() {
     if (currentSongId == null) return;
     clearTimeout(speedSaveTimer);
@@ -5735,6 +5787,7 @@
   async function renderSongList() {
     renderLastBackupInfo();
     renderOfflineCacheInfo();
+    renderAppVersionInfo();
     renderLocalBackupInfo();
     runAutoBackupIfDue(); // 前回から24時間経っていた時だけ裏で実行(内部で間引き済み)
     let songs = await dbGetAll();
@@ -7192,10 +7245,17 @@
   // ---- オフラインキャッシュ更新 ----
   // Service Workerのキャッシュ(cwlv-shell-v1)を、ボタン操作で明示的に最新化する。
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
+  // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
+  // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
+  const APP_BUILD = '20260819-1941';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
   // ボタンが無反応だった(2026-08-19に二重管理をやめた)。
+
+  function renderAppVersionInfo() {
+    appVersionInfo.textContent = '版: ' + APP_BUILD;
+  }
 
   function renderOfflineCacheInfo() {
     const ts = parseInt(localStorage.getItem(OFFLINE_CACHE_UPDATED_KEY), 10);
@@ -8179,6 +8239,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
