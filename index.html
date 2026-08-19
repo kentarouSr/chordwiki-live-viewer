@@ -1107,6 +1107,9 @@
         <button id="btnScoreDot">付点</button>
         <button id="btnScoreTriplet">3連</button>
         <button id="btnScoreTie">&#8899; タイ</button>
+        <button id="btnScoreSlur" title="選択中の音符と次の音符をスラーで結ぶ">&#8995; スラー</button>
+        <button id="btnScoreRepeatStart" title="選択中の音符が入っている小節から反復を始める">&#124;: 反復開始</button>
+        <button id="btnScoreRepeatEnd" title="選択中の音符が入っている小節で反復を終える">:&#124; 反復終了</button>
         <button id="btnScoreSharp">&#9839;</button>
         <button id="btnScoreFlat">&#9837;</button>
         <button id="btnScoreNatural">&#9838;</button>
@@ -1309,6 +1312,9 @@
   const btnScoreDot = document.getElementById('btnScoreDot');
   const btnScoreTriplet = document.getElementById('btnScoreTriplet');
   const btnScoreTie = document.getElementById('btnScoreTie');
+  const btnScoreSlur = document.getElementById('btnScoreSlur');
+  const btnScoreRepeatStart = document.getElementById('btnScoreRepeatStart');
+  const btnScoreRepeatEnd = document.getElementById('btnScoreRepeatEnd');
   const btnScoreSharp = document.getElementById('btnScoreSharp');
   const btnScoreFlat = document.getElementById('btnScoreFlat');
   const btnScoreNatural = document.getElementById('btnScoreNatural');
@@ -2910,6 +2916,9 @@
           // scoreElements上で隣り合う2つの音符(el.tiedToNext、2026-08-17〜)。
           // 後者は最後の断片(fi===frags.length-1)から次の音符の最初の断片(fi===0)へ
           // 繋がるので、そこだけ追加でtrueにする。
+          // スラーは分割された断片の内側には引かず、元の音符の最後の断片から
+          // 次の音符へだけ引く(タイと違い、同じ音の継続を表すものではないため)。
+          slurToNext: el.type === 'note' && fi === frags.length - 1 && !!el.slurToNext,
           tieToNext: el.type === 'note' && (fi < frags.length - 1 || (fi === frags.length - 1 && !!el.tiedToNext)),
           tiedFromPrev: el.type === 'note' && (fi > 0 || (fi === 0 && srcIndex > 0
             && scoreElements[srcIndex - 1].type === 'note' && !!scoreElements[srcIndex - 1].tiedToNext)),
@@ -3243,6 +3252,9 @@
     btnScoreDot.classList.toggle('active', sel ? !!sel.dotted : scorePendingDot);
     btnScoreTriplet.classList.toggle('active', scorePendingTripletCount > 0);
     btnScoreTie.classList.toggle('active', !!(sel && sel.tiedToNext));
+    btnScoreSlur.classList.toggle('active', !!(sel && sel.slurToNext));
+    btnScoreRepeatStart.classList.toggle('active', !!(sel && sel.repeatStart));
+    btnScoreRepeatEnd.classList.toggle('active', !!(sel && sel.repeatEnd));
     const acc = sel ? elFirstAccidental(sel) : scorePendingAccidental;
     btnScoreSharp.classList.toggle('active', acc === 'sharp');
     btnScoreFlat.classList.toggle('active', acc === 'flat');
@@ -3303,6 +3315,43 @@
     if (el.pitches.length !== next.pitches.length) return false;
     return el.pitches.every((p, i) => p.step === next.pitches[i].step);
   }
+  // スラー: タイと違い「同じ高さ」の制約は無い(フレーズのまとまりを示すもので、
+  // 音の継続を示すものではないため)。次に音符があれば結べる。
+  btnScoreSlur.addEventListener('click', () => {
+    if (scoreSelectedIndex === null) return;
+    const el = scoreElements[scoreSelectedIndex];
+    if (el.type !== 'note') return;
+    if (el.slurToNext) {
+      pushScoreUndoSnapshot();
+      el.slurToNext = false;
+      updateScoreToolbarUI();
+      renderScoreCanvas();
+      return;
+    }
+    const next = scoreElements[scoreSelectedIndex + 1];
+    if (!next || next.type !== 'note') {
+      alert('スラーで結ぶには、次に音符が必要です。');
+      return;
+    }
+    pushScoreUndoSnapshot();
+    el.slurToNext = true;
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  });
+
+  // 反復記号: 実際には「小節」に付くものだが、このエディタが選択できるのは音符なので
+  // 「選択中の音符が入っている小節に付ける」という形にしている。
+  function scoreToggleRepeat(field) {
+    if (scoreSelectedIndex === null) return;
+    const el = scoreElements[scoreSelectedIndex];
+    pushScoreUndoSnapshot();
+    el[field] = !el[field];
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+  btnScoreRepeatStart.addEventListener('click', () => scoreToggleRepeat('repeatStart'));
+  btnScoreRepeatEnd.addEventListener('click', () => scoreToggleRepeat('repeatEnd'));
+
   btnScoreTie.addEventListener('click', () => {
     if (scoreSelectedIndex === null) return;
     const el = scoreElements[scoreSelectedIndex];
@@ -4510,7 +4559,22 @@
       }
     });
 
-    return { queue, measures, effectiveAccidental, fullMeasureRest };
+    // 反復記号(2026-08-19〜)。反復は「小節」に付くものだが、このエディタが
+    // 選択できるのは音符なので、「その音符が入っている小節に付ける」という形で
+    // 持たせている(el.repeatStart / el.repeatEnd)。ここで小節単位に畳み直す。
+    const measureRepeats = measures.map((measure) => {
+      let start = false, end = false;
+      for (const qi of measure) {
+        const src = queue[qi].srcIndex;
+        const el = src !== null ? scoreElements[src] : null;
+        if (!el) continue;
+        if (el.repeatStart) start = true;
+        if (el.repeatEnd) end = true;
+      }
+      return { start, end };
+    });
+
+    return { queue, measures, effectiveAccidental, fullMeasureRest, measureRepeats };
   }
 
   // 1小節ぶんのVexFlow音符配列(StaveNote)・付点・3連符括弧を組み立てる
@@ -4572,7 +4636,7 @@
   // VexFlowの幅計算(Formatter.preCalculateMinTotalWidth・Stave.getNoteStartX)は
   // 実際のcanvasコンテキスト無しでも動くので、ここでは描画は一切行わない。
   function scoreComputeSystems(VF) {
-    const { queue, measures, effectiveAccidental, fullMeasureRest } = computeScoreLayout();
+    const { queue, measures, effectiveAccidental, fullMeasureRest, measureRepeats } = computeScoreLayout();
     const keyName = scoreKeyOption().vexName;
     const ts = scoreCurrentTimeSig();
 
@@ -4614,7 +4678,7 @@
       if (cur.length) systems.push(cur);
       if (systems.length === 0) systems.push([]); // 音符が1つも無くても五線だけは表示する
     }
-    return { queue, measureData, systems, keyName, ts, headerFirst, headerRest };
+    return { queue, measureData, systems, keyName, ts, headerFirst, headerRest, measureRepeats };
   }
 
   // 実際のcanvasに描画する。五線・ト音記号・調号・拍子記号・小節線・音符・休符・
@@ -4623,7 +4687,7 @@
   // 段(システム)への折り返しを行うだけ。設計判断の詳細は
   // SCORE_ENGRAVING_RULES.md / SCORE_NOTATION_NOTES.md 参照。
   function drawScoreFromLayout(VF, ctx, layout) {
-    const { queue, measureData, systems, keyName, ts, headerFirst, headerRest } = layout;
+    const { queue, measureData, systems, keyName, ts, headerFirst, headerRest, measureRepeats } = layout;
     scoreLastStaves = [];
     scoreLastNotePositions = new Map();
     const notesByQueueIndex = new Map();
@@ -4660,7 +4724,10 @@
         // 貼り付ける「メロディーの断片」であり、独立した「完結した1曲」ではない
         // ため、曲の終わりを示す記号を末尾に出すのは意味が合わない
         // (ユーザー指摘で撤回、2026-08-15)。常に普通の小節線のみ。
-        stave.setEndBarType(VF.Barline.type.SINGLE);
+        // ただし反復記号が指定されている小節だけは、その線に差し替える(2026-08-19〜)。
+        const rep = (measureRepeats && measureRepeats[m]) || { start: false, end: false };
+        if (rep.start) stave.setBegBarType(VF.Barline.type.REPEAT_BEGIN);
+        stave.setEndBarType(rep.end ? VF.Barline.type.REPEAT_END : VF.Barline.type.SINGLE);
         stave.setContext(ctx).draw();
         if (!staveOfSystem) staveOfSystem = stave;
 
@@ -4694,6 +4761,17 @@
       if (!p1 || !p2 || p1.sysIdx !== p2.sysIdx) return;
       const tie = new VF.StaveTie({ firstNote: p1.note, lastNote: p2.note, firstIndices: [0], lastIndices: [0] });
       tie.setContext(ctx).draw();
+    });
+
+    // スラー(2026-08-19〜)。タイと見た目は似ているが意味が違う(タイは同じ音の
+    // 継続、スラーはフレーズのまとまり)ので別扱いにしている。VexFlowのCurveは
+    // 音符の高さに応じて弧の向き・カーブを自動で決めてくれる。
+    // 段をまたぐ場合はタイと同じく描かない(音符自体は正しく出るので実害は無い)。
+    queue.forEach((el, i) => {
+      if (!el.slurToNext) return;
+      const p1 = notesByQueueIndex.get(i), p2 = notesByQueueIndex.get(i + 1);
+      if (!p1 || !p2 || p1.sysIdx !== p2.sysIdx) return;
+      new VF.Curve(p1.note, p2.note, {}).setContext(ctx).draw();
     });
 
     return y - SCORE_SYSTEM_GAP + SCORE_BOTTOM_MARGIN + scoreExtraBottomRoom(); // 実際に使った高さ
@@ -7793,6 +7871,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
