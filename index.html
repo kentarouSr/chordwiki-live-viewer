@@ -669,6 +669,9 @@
     background: #333; color: #eee; cursor: pointer;
   }
   #scoreEditorToolbar button.active { background: #6cf; color: #111; font-weight: bold; }
+  /* ツールバーを畳んだ状態(2026-08-19)。スマホだとボタン群が画面の大半を占めて
+     譜面がほとんど見えないため、まるごと隠せるようにした。 */
+  #scoreEditorToolbar.collapsed { display: none; }
   .scoreEditorGroup label { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 4px; }
   .scoreEditorGroup select {
     font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid #333;
@@ -830,6 +833,11 @@
 
     /* 楽譜エディタ: ピアノ鍵盤は全端末共通(横スクロールで対応)だが、狭い画面では
        鍵盤・ツールバーの寸法を詰めて、五線譜の可視面積をできるだけ確保する。 */
+    /* ヘッダーのボタンが増えて「楽譜作成」が縦に潰れるようになったので、
+       狭い画面では見出しを消す(この画面に居ることは中身から自明なため)。 */
+    #scoreEditorHeader h1 { display: none; }
+    #scoreEditorHeader { gap: 6px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); }
+    #scoreEditorHeader button, #btnScoreHelp { font-size: 12px; padding: 7px 10px; }
     #scoreEditorToolbar { gap: 6px; padding: 6px 10px; }
     .scoreEditorGroup { gap: 5px; padding: 4px 7px; }
     #scoreEditorToolbar button { font-size: 12px; padding: 7px 9px; }
@@ -1044,6 +1052,7 @@
       <button id="btnScoreCancel">キャンセル</button>
       <h1>楽譜作成</h1>
       <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067; 使い方</a>
+      <button id="btnScoreToolsToggle" title="ツールバーを開閉する(譜面を広く見たい時に)">&#9662; ツール</button>
       <button id="btnScoreShortcutToggle" title="キーボードショートカット一覧を表示/隠す">&#9000; キー</button>
       <button id="btnScoreDone">完了</button>
     </div>
@@ -1075,6 +1084,7 @@
         <label>拍子 <select id="scoreTimeSigSelect"></select></label>
         <label>調号 <select id="scoreKeySelect"></select></label>
         <label>音部 <select id="scoreClefSelect"></select></label>
+        <button id="btnScoreClefKey" title="各段の頭の音部記号と調号を表示するか">&#119070; 冒頭記号</button>
         <label title="曲が1拍目から始まらない時に、1小節目だけ短くする">弱起 <select id="scorePickupSelect"></select></label>
         <label title="選択中の音符に強弱記号を付ける">強弱 <select id="scoreDynamicSelect"></select></label>
         <label title="選択中の音符に奏法記号を付ける">奏法 <select id="scoreArticulationSelect"></select></label>
@@ -1110,6 +1120,7 @@
         <button id="btnScoreSlur" title="選択中の音符と次の音符をスラーで結ぶ">&#8995; スラー</button>
         <button id="btnScoreRepeatStart" title="選択中の音符が入っている小節から反復を始める">&#124;: 反復開始</button>
         <button id="btnScoreRepeatEnd" title="選択中の音符が入っている小節で反復を終える">:&#124; 反復終了</button>
+        <button id="btnScoreLineBreak" title="選択中の音符が入っている小節の後ろで段を変える">&#8629; 改行</button>
         <button id="btnScoreSharp">&#9839;</button>
         <button id="btnScoreFlat">&#9837;</button>
         <button id="btnScoreNatural">&#9838;</button>
@@ -1315,6 +1326,10 @@
   const btnScoreSlur = document.getElementById('btnScoreSlur');
   const btnScoreRepeatStart = document.getElementById('btnScoreRepeatStart');
   const btnScoreRepeatEnd = document.getElementById('btnScoreRepeatEnd');
+  const btnScoreLineBreak = document.getElementById('btnScoreLineBreak');
+  const btnScoreClefKey = document.getElementById('btnScoreClefKey');
+  const btnScoreToolsToggle = document.getElementById('btnScoreToolsToggle');
+  const scoreEditorToolbar = document.getElementById('scoreEditorToolbar');
   const btnScoreSharp = document.getElementById('btnScoreSharp');
   const btnScoreFlat = document.getElementById('btnScoreFlat');
   const btnScoreNatural = document.getElementById('btnScoreNatural');
@@ -3004,6 +3019,11 @@
   let scoreKeyFifths = 0;
   let scoreClef = 'treble';
   let scorePickupUnits = 0; // 弱起の長さ(全音符=1単位)。0なら弱起なし
+  // 冒頭記号(音部記号+調号)を描くか(2026-08-19〜)。
+  // このエディタで作る譜面はコード譜に貼る「断片」なので、毎段の頭に音部記号と
+  // 調号が出ると場所を食ううえ情報としても冗長なことが多い。消せるようにした。
+  // あくまで表示の話で、音の高さの解釈(scoreClef/scoreKeyFifths)には影響しない。
+  let scoreShowClefKey = true;
   let scoreSystemWidth = 640; // 段の幅(openScoreEditorでコンテナ幅に合わせて決め直す)
   let scoreSelectedIndex = null; // 編集用に選択中の音符・休符(scoreElementsのインデックス)。nullなら非選択
   // 和音入力モード(2026-08-17〜)。単音モードは「選択中に別の音をタップ=上書き」だが、
@@ -3024,6 +3044,8 @@
   // (電車内・楽屋・本番直前のステージ袖など)でも譜面の打ち込みはしたいため。
   // 端末ごとの好みなのでlocalStorageに保存する(曲データには入れない)。
   const SCORE_SOUND_KEY = 'cwlv_score_sound';
+  const SCORE_CLEFKEY_KEY = 'cwlv_score_clefkey';
+  const SCORE_TOOLS_OPEN_KEY = 'cwlv_score_tools_open';
   let scoreSoundOn = localStorage.getItem(SCORE_SOUND_KEY) !== '0';
 
   // Ctrl+Z/Ctrl+Y用の本物のundo/redo履歴(2026-08-17〜)。btnScoreUndoは元々
@@ -3200,6 +3222,12 @@
     // 音のオン/オフは端末ごとの設定なので、開くたびにリセットせず記憶した値を反映する。
     btnScoreSound.textContent = scoreSoundOn ? '\u{1F50A} 音あり' : '\u{1F507} 音なし';
     btnScoreSound.classList.toggle('active', scoreSoundOn);
+    // 冒頭記号の表示・ツールバーの開閉も端末ごとの好みなので記憶した値を使う
+    // (既定はどちらも表示。初めて開いた人が機能を見失わないように)。
+    setScoreShowClefKey(localStorage.getItem(SCORE_CLEFKEY_KEY) !== '0');
+    scoreEditorToolbar.classList.toggle('collapsed', localStorage.getItem(SCORE_TOOLS_OPEN_KEY) === '0');
+    btnScoreToolsToggle.innerHTML = scoreEditorToolbar.classList.contains('collapsed')
+      ? '▸ ツール' : '▾ ツール';
     scoreChordInput.value = '';
     // 拍子・調号は、フレーズを開いた場合はその値を復元する(新規なら4/4・ハ長調)。
     scoreTimeSigIdx = Number.isFinite(src.timeSigIdx) ? src.timeSigIdx : 0;
@@ -3255,6 +3283,7 @@
     btnScoreSlur.classList.toggle('active', !!(sel && sel.slurToNext));
     btnScoreRepeatStart.classList.toggle('active', !!(sel && sel.repeatStart));
     btnScoreRepeatEnd.classList.toggle('active', !!(sel && sel.repeatEnd));
+    btnScoreLineBreak.classList.toggle('active', !!(sel && sel.lineBreak));
     const acc = sel ? elFirstAccidental(sel) : scorePendingAccidental;
     btnScoreSharp.classList.toggle('active', acc === 'sharp');
     btnScoreFlat.classList.toggle('active', acc === 'flat');
@@ -3351,6 +3380,33 @@
   }
   btnScoreRepeatStart.addEventListener('click', () => scoreToggleRepeat('repeatStart'));
   btnScoreRepeatEnd.addEventListener('click', () => scoreToggleRepeat('repeatEnd'));
+  // 改行も反復記号と同じ「選択中の音符が入っている小節」への指定。
+  btnScoreLineBreak.addEventListener('click', () => scoreToggleRepeat('lineBreak'));
+
+  // 冒頭記号(音部記号+調号)の表示切替。表示だけの話なので音符データは触らない。
+  function setScoreShowClefKey(on) {
+    scoreShowClefKey = on;
+    btnScoreClefKey.classList.toggle('active', on);
+    localStorage.setItem(SCORE_CLEFKEY_KEY, on ? '1' : '0');
+  }
+  btnScoreClefKey.addEventListener('click', () => {
+    setScoreShowClefKey(!scoreShowClefKey);
+    renderScoreCanvas();
+  });
+
+  // ツールバーの開閉(2026-08-19〜)。スマホだとボタン群が画面の大半を占めて
+  // 譜面がほとんど見えないため、まとめて畳めるようにした。
+  function setScoreToolsOpen(open) {
+    scoreEditorToolbar.classList.toggle('collapsed', !open);
+    btnScoreToolsToggle.innerHTML = open ? '▾ ツール' : '▸ ツール';
+    localStorage.setItem(SCORE_TOOLS_OPEN_KEY, open ? '1' : '0');
+    // 折り返し幅は変わらないが、譜面の表示領域が変わるので測り直す
+    scoreSystemWidth = Math.max(360, Math.min(900, scoreEditorCanvasWrap.clientWidth - 8));
+    renderScoreCanvas();
+  }
+  btnScoreToolsToggle.addEventListener('click', () => {
+    setScoreToolsOpen(scoreEditorToolbar.classList.contains('collapsed'));
+  });
 
   btnScoreTie.addEventListener('click', () => {
     if (scoreSelectedIndex === null) return;
@@ -4574,7 +4630,16 @@
       return { start, end };
     });
 
-    return { queue, measures, effectiveAccidental, fullMeasureRest, measureRepeats };
+    // 手動の改行(2026-08-19〜)。反復記号と同じく「その音符が入っている小節の
+    // 後ろで段を変える」という持ち方にしている(小節番号で持つと、途中に音符を
+    // 挿入して区切りが変わったときにずれるため)。
+    const measureBreaks = measures.map((measure) => measure.some((qi) => {
+      const src = queue[qi].srcIndex;
+      const el = src !== null ? scoreElements[src] : null;
+      return !!(el && el.lineBreak);
+    }));
+
+    return { queue, measures, effectiveAccidental, fullMeasureRest, measureRepeats, measureBreaks };
   }
 
   // 1小節ぶんのVexFlow音符配列(StaveNote)・付点・3連符括弧を組み立てる
@@ -4636,7 +4701,7 @@
   // VexFlowの幅計算(Formatter.preCalculateMinTotalWidth・Stave.getNoteStartX)は
   // 実際のcanvasコンテキスト無しでも動くので、ここでは描画は一切行わない。
   function scoreComputeSystems(VF) {
-    const { queue, measures, effectiveAccidental, fullMeasureRest, measureRepeats } = computeScoreLayout();
+    const { queue, measures, effectiveAccidental, fullMeasureRest, measureRepeats, measureBreaks } = computeScoreLayout();
     const keyName = scoreKeyOption().vexName;
     const ts = scoreCurrentTimeSig();
 
@@ -4656,15 +4721,20 @@
     // (実際の記譜法どおり)。Staveはcanvasに描かなくても幅を計算できる。
     function headerWidth(withTimeSig) {
       const probe = new VF.Stave(0, 0, 400);
-      probe.addClef(scoreClef);
-      if (keyName !== 'C') probe.addKeySignature(keyName);
+      if (scoreShowClefKey) {
+        probe.addClef(scoreClef);
+        if (keyName !== 'C') probe.addKeySignature(keyName);
+      }
       if (withTimeSig) probe.addTimeSignature(`${ts.beats}/${ts.unit}`);
       return probe.getNoteStartX() - probe.getX();
     }
     const headerFirst = headerWidth(true);
     const headerRest = headerWidth(false);
 
-    // 段への折り返し: 各段の内容幅に収まるだけ貪欲に小節を詰める。
+    // 段への折り返し。基本は各段の内容幅に収まるだけ貪欲に詰めるが、
+    // 「⏎ 改行」を指定した小節の後ろでは必ず段を変える(2026-08-19〜)。
+    // 自動折り返しを残しているのは、幅を超えた分の受け皿が無いと音符が
+    // 画面外へ流れてしまうため(手動指定はあくまで「ここでも改行する」の追加)。
     const contentWidth = Math.max(150, scoreSystemWidth - SCORE_LEFT_MARGIN - SCORE_RIGHT_MARGIN);
     const systems = [];
     { let cur = [], curW = 0;
@@ -4674,6 +4744,7 @@
         if (cur.length > 0 && curW + w > contentWidth) { systems.push(cur); cur = []; }
         if (cur.length === 0) curW = 0;
         cur.push(m); curW += w;
+        if (measureBreaks && measureBreaks[m]) { systems.push(cur); cur = []; curW = 0; }
       }
       if (cur.length) systems.push(cur);
       if (systems.length === 0) systems.push([]); // 音符が1つも無くても五線だけは表示する
@@ -4703,8 +4774,10 @@
         const blankStave = new VF.Stave(x, y, Math.max(150, scoreSystemWidth - SCORE_LEFT_MARGIN - SCORE_RIGHT_MARGIN), {
           spacing_between_lines_px: SCORE_STAVE_LINE_SPACING,
         });
-        blankStave.addClef(scoreClef);
-        if (keyName !== 'C') blankStave.addKeySignature(keyName);
+        if (scoreShowClefKey) {
+          blankStave.addClef(scoreClef);
+          if (keyName !== 'C') blankStave.addKeySignature(keyName);
+        }
         if (isFirstSystem) blankStave.addTimeSignature(`${ts.beats}/${ts.unit}`);
         blankStave.setEndBarType(VF.Barline.type.SINGLE);
         blankStave.setContext(ctx).draw();
@@ -4716,8 +4789,10 @@
         const header = isFirstOfSystem ? (isFirstSystem ? headerFirst : headerRest) : 0;
         const stave = new VF.Stave(x, y, width + header, { spacing_between_lines_px: SCORE_STAVE_LINE_SPACING });
         if (isFirstOfSystem) {
-          stave.addClef(scoreClef);
-          if (keyName !== 'C') stave.addKeySignature(keyName);
+          if (scoreShowClefKey) {
+            stave.addClef(scoreClef);
+            if (keyName !== 'C') stave.addKeySignature(keyName);
+          }
           if (isFirstSystem) stave.addTimeSignature(`${ts.beats}/${ts.unit}`);
         }
         // 終止線(二重線)は描かない。このアプリのスコアはコード譜の特定箇所に
@@ -7871,6 +7946,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
