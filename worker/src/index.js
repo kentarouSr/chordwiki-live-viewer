@@ -317,6 +317,31 @@ export default {
         return json({ ok: true });
       }
 
+      // フレーズ集(本棚ごとに1つ、練習ToDoと同じ持ち方)。
+      // 1件ごとにプレビュー用のPNG(data URL)を持つぶん他より重くなりうるが、
+      // 数十件程度の想定なのでJSONまるごと方式のままで問題ない。
+      if (path === '/api/phrases' && request.method === 'GET') {
+        const key = await requireKey();
+        if (!key) return err('invalid key', 401);
+        const row = await env.DB
+          .prepare('SELECT items_json, updated_at FROM music_phrases WHERE sync_key = ?')
+          .bind(key).first();
+        if (!row) return json({ items: [], updatedAt: 0 });
+        return json({ items: JSON.parse(row.items_json), updatedAt: row.updated_at });
+      }
+      if (path === '/api/phrases' && request.method === 'PUT') {
+        const key = await requireKey();
+        if (!key) return err('invalid key', 401);
+        const body = await request.json();
+        const { items, updatedAt } = body;
+        if (!Array.isArray(items) || !Number.isFinite(updatedAt)) return err('missing fields');
+        await env.DB.prepare(
+          `INSERT INTO music_phrases (sync_key, items_json, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT(sync_key) DO UPDATE SET items_json = excluded.items_json, updated_at = excluded.updated_at`
+        ).bind(key, JSON.stringify(items), updatedAt).run();
+        return json({ ok: true });
+      }
+
       // 招待: 今すでに有効なキーを持っている人なら誰でも、新しい(別の本棚の)キーを
       // その場で発行できる。発行されたキーはこのリクエストのキーとは完全に独立した
       // 新しい本棚になる(データを共有しない、一からの空の本棚)。

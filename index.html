@@ -39,11 +39,11 @@
   }
   #songListHeader h1 { font-size: 18px; margin: 0; margin-right: auto; }
   #songListHeader { gap: 8px; }
-  #btnGoSetlists, #btnAppMode, #btnGoTodos, #btnGoLinks {
+  #btnGoSetlists, #btnAppMode, #btnGoTodos, #btnGoLinks, #btnGoPhrases {
     font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer;
   }
-  #btnGoSetlists:active, #btnAppMode:active, #btnGoTodos:active, #btnGoLinks:active { background: #444; }
+  #btnGoSetlists:active, #btnAppMode:active, #btnGoTodos:active, #btnGoLinks:active, #btnGoPhrases:active { background: #444; }
   #btnAppMode.mode-perform { background: #6cf; color: #111; font-weight: bold; }
   #btnAddSong {
     font-size: 15px; padding: 10px 16px; border-radius: 8px; border: none;
@@ -245,6 +245,60 @@
     .linkItem { padding: 10px 12px; gap: 6px; }
     .linkItemName { font-size: 14px; }
     .linkItem button { font-size: 11px; padding: 5px 7px; }
+  }
+
+  /* --- フレーズ集(2026-08-19)。楽譜エディタで作った譜面を貯めておく画面 --- */
+  #phraseListScreen {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    padding: 20px; padding-top: max(20px, env(safe-area-inset-top));
+    overflow-y: auto; scrollbar-gutter: stable;
+  }
+  #phraseListScreen.hidden { display: none; }
+  #phraseListHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  #phraseListHeader h1 { font-size: 18px; margin: 0; flex: 1; min-width: 0; }
+  #phraseListHeader button {
+    font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  #btnPhraseNew { background: #6cf; color: #111; font-weight: bold; }
+  /* タグ絞り込みのチップ列。横に溢れたら折り返す */
+  #phraseTagFilter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  #phraseTagFilter:empty { display: none; }
+  .phraseTagChip {
+    font-size: 12px; padding: 5px 10px; border-radius: 999px; border: 1px solid #444;
+    background: #1c1c1c; color: #ccc; cursor: pointer;
+  }
+  .phraseTagChip.active { background: #6cf; color: #111; border-color: #6cf; font-weight: bold; }
+  #phraseList { display: flex; flex-direction: column; gap: 10px; }
+  #phraseList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
+  .phraseItem { background: #1c1c1c; border-radius: 10px; padding: 12px 14px; }
+  .phraseItemTop { display: flex; align-items: center; gap: 8px; }
+  .phraseItemName {
+    flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: bold;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .phraseItemMeta { font-size: 12px; color: #888; flex-shrink: 0; }
+  .phraseItem button {
+    font-size: 12px; padding: 6px 9px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  /* 保存時に作ったプレビュー画像。譜面なので白背景で出す(五線が黒インクのため) */
+  .phrasePreview {
+    display: block; width: 100%; max-width: 520px; margin-top: 10px;
+    border-radius: 6px; background: #fff;
+  }
+  .phraseItemTags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .phraseItemTag {
+    font-size: 11px; padding: 3px 8px; border-radius: 999px;
+    background: #2a2a2a; color: #9cf;
+  }
+  @media (max-width: 500px) {
+    #phraseListScreen { padding: 14px; }
+    #phraseListHeader h1 { font-size: 16px; }
+    #phraseListHeader button { font-size: 12px; padding: 7px 10px; }
+    .phraseItem { padding: 10px 12px; }
+    .phraseItemName { font-size: 14px; }
+    .phraseItem button { font-size: 11px; padding: 5px 7px; }
   }
 
   #todoList { display: flex; flex-direction: column; gap: 10px; position: relative; }
@@ -574,6 +628,8 @@
     padding: 6px 10px; border-radius: 12px;
     background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.09);
   }
+  /* グループ内の見出し(「転調」など)。selectのlabelと同じ見え方に揃える */
+  .scoreGroupLabel { font-size: 12px; color: #aaa; }
   #scoreEditorToolbar button {
     font-size: 14px; padding: 9px 12px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer;
@@ -683,7 +739,7 @@
     #btnBack { font-size: 12px; }
 
     /* 曲一覧・セットリスト等: 曲が出てくるまでのヘッダ部分を圧縮する */
-    #songListScreen, #setlistListScreen, #setlistEditScreen, #songPickerScreen, #todoListScreen, #linkListScreen {
+    #songListScreen, #setlistListScreen, #setlistEditScreen, #songPickerScreen, #todoListScreen, #linkListScreen, #phraseListScreen {
       padding: 12px; padding-top: max(12px, env(safe-area-inset-top));
     }
     /* タイトルを1行占有させ、ボタン群をその下にまとめて並べる(中途半端に
@@ -691,7 +747,7 @@
        折り返した行のボタンが左右に引き離されて隙間だらけになるので詰める。 */
     #songListHeader { justify-content: flex-start; }
     #songListHeader h1 { font-size: 16px; flex-basis: 100%; margin-right: 0; }
-    #btnGoSetlists, #btnAppMode, #btnGoTodos, #btnGoLinks { font-size: 12px; padding: 7px 10px; }
+    #btnGoSetlists, #btnAppMode, #btnGoTodos, #btnGoLinks, #btnGoPhrases { font-size: 12px; padding: 7px 10px; }
     #btnAddSong { font-size: 13px; padding: 8px 12px; }
     #backupBar { gap: 6px; margin-bottom: 10px; }
     #backupBar button, #backupBar a { font-size: 11px; padding: 5px 8px; }
@@ -742,6 +798,7 @@
       <button id="btnGoSetlists">&#128203; セットリスト</button>
       <button id="btnGoTodos">&#9989; 練習ToDo</button>
       <button id="btnGoLinks">&#128279; リンク集</button>
+      <button id="btnGoPhrases">&#127925; フレーズ集</button>
       <button id="btnAddSong">＋ 曲を追加</button>
     </div>
     <button id="btnToggleSettings" aria-expanded="false">&#9881; 設定・バックアップ &#9662;</button>
@@ -807,6 +864,16 @@
       <button id="btnLinkAdd">＋ 追加</button>
     </div>
     <div id="linkList"></div>
+  </div>
+
+  <div id="phraseListScreen" class="hidden">
+    <div id="phraseListHeader">
+      <button id="btnPhraseBack">&larr; 曲一覧</button>
+      <h1>フレーズ集</h1>
+      <button id="btnPhraseNew">＋ 新しいフレーズ</button>
+    </div>
+    <div id="phraseTagFilter"></div>
+    <div id="phraseList"></div>
   </div>
 
   <div id="setlistListScreen" class="hidden">
@@ -938,6 +1005,13 @@
           <button id="btnScoreChordMode">&#9834; 単音</button>
         </div>
         <div class="scoreEditorGroup">
+          <span class="scoreGroupLabel">転調</span>
+          <button id="btnScoreTransposeDown" title="半音下げる(音符・コード名・調号をまとめて)">&minus;1</button>
+          <button id="btnScoreTransposeUp" title="半音上げる(音符・コード名・調号をまとめて)">+1</button>
+          <button id="btnScoreTransposeDownOct" title="1オクターブ下げる">&minus;12</button>
+          <button id="btnScoreTransposeUpOct" title="1オクターブ上げる">+12</button>
+        </div>
+        <div class="scoreEditorGroup">
           <button class="scoreDurationBtn" data-duration="whole">全</button>
           <button class="scoreDurationBtn" data-duration="half">2分</button>
           <button class="scoreDurationBtn active" data-duration="quarter">4分</button>
@@ -958,6 +1032,7 @@
         </div>
         <div class="scoreEditorGroup">
           <input id="scoreChordInput" type="text" placeholder="コード名(次の音符に付く)">
+          <button id="btnScoreLoadPhrase" title="保存したフレーズを読み込む">&#127925; フレーズ読込</button>
           <button id="btnScoreChordShortcut" title="ChordWikiエディタと同じキー割り当てでコード名を入力する">&#9889; コード略記</button>
           <button id="btnScoreSound">&#128266; 音あり</button>
           <button id="btnScoreUndo">&#10006; 直前を削除</button>
@@ -965,7 +1040,7 @@
           <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
         </div>
       </div>
-      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。「⋃ タイ」で選択中の音符と直後の同じ高さの音符をつなげます。PCでは<strong>キーボード入力</strong>(A〜G:新規音符 / 1〜7:音価 / .:付点 / -,=,0:♭♯♮ / ←→:音符移動 / ↑↓:半音移動 / Delete:削除 / Ctrl+Z:取り消し。詳しい一覧は❓から)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。<strong>入力した音は実際に鳴ります</strong>(←→↑↓で音符をたどる時も鳴るので、音を確かめながら打ち込めます。静かな場所では「🔊 音あり」ボタンでオフにできます)。コード名は<strong>「⚡ コード略記」</strong>をオンにすると、ChordWikiのコード譜エディタと同じキー割り当て(Shift不要)で入力できます。</p>
+      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。「⋃ タイ」で選択中の音符と直後の同じ高さの音符をつなげます。PCでは<strong>キーボード入力</strong>(A〜G:新規音符 / 1〜7:音価 / .:付点 / -,=,0:♭♯♮ / ←→:音符移動 / ↑↓:半音移動 / Delete:削除 / Ctrl+Z:取り消し。詳しい一覧は❓から)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。<strong>入力した音は実際に鳴ります</strong>(←→↑↓で音符をたどる時も鳴るので、音を確かめながら打ち込めます。静かな場所では「🔊 音あり」ボタンでオフにできます)。コード名は<strong>「⚡ コード略記」</strong>をオンにすると、ChordWikiのコード譜エディタと同じキー割り当て(Shift不要)で入力できます。<strong>「転調」の&minus;1/+1で半音ずつ、&minus;12/+12でオクターブ単位で移調できます</strong>(音符・コード名・調号がまとめて動きます)。<strong>「🎵 フレーズ読込」</strong>で、フレーズ集に保存した譜面を読み込んで貼れます。</p>
       <div id="scorePianoKeyboard"></div>
     </div>
   </div>
@@ -1092,6 +1167,12 @@
   const linkNewUrl = document.getElementById('linkNewUrl');
   const btnLinkAdd = document.getElementById('btnLinkAdd');
   const linkListEl = document.getElementById('linkList');
+  const btnGoPhrases = document.getElementById('btnGoPhrases');
+  const phraseListScreen = document.getElementById('phraseListScreen');
+  const btnPhraseBack = document.getElementById('btnPhraseBack');
+  const btnPhraseNew = document.getElementById('btnPhraseNew');
+  const phraseTagFilterEl = document.getElementById('phraseTagFilter');
+  const phraseListEl = document.getElementById('phraseList');
   const btnTodoBack = document.getElementById('btnTodoBack');
   const todoNewInput = document.getElementById('todoNewInput');
   const btnTodoAdd = document.getElementById('btnTodoAdd');
@@ -1158,6 +1239,11 @@
   const btnScoreChordMode = document.getElementById('btnScoreChordMode');
   const btnScoreChordShortcut = document.getElementById('btnScoreChordShortcut');
   const btnScoreSound = document.getElementById('btnScoreSound');
+  const btnScoreTransposeDown = document.getElementById('btnScoreTransposeDown');
+  const btnScoreTransposeUp = document.getElementById('btnScoreTransposeUp');
+  const btnScoreTransposeDownOct = document.getElementById('btnScoreTransposeDownOct');
+  const btnScoreTransposeUpOct = document.getElementById('btnScoreTransposeUpOct');
+  const btnScoreLoadPhrase = document.getElementById('btnScoreLoadPhrase');
   const btnDrawPen = document.getElementById('btnDrawPen');
   const btnDrawHighlighter = document.getElementById('btnDrawHighlighter');
   const drawColorInput = document.getElementById('drawColorInput');
@@ -1242,7 +1328,7 @@
   let viewerReturnScreen = null; // ビューアの「戻る」で戻る先の画面
 
   // ---- 画面切り替え ----
-  const allScreens = [songListScreen, todoListScreen, linkListScreen, setlistListScreen, setlistEditScreen, songPickerScreen, viewer];
+  const allScreens = [songListScreen, todoListScreen, linkListScreen, phraseListScreen, setlistListScreen, setlistEditScreen, songPickerScreen, viewer];
   function showScreen(screen) {
     for (const s of allScreens) s.classList.toggle('hidden', s !== screen);
     // 画面消灯防止(Wake Lock)は自動スクロール中だけでなく、ビューア画面にいる間は
@@ -1273,13 +1359,14 @@
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
   // ==================================================
   const DB_NAME = 'chordwiki-live-viewer';
-  const DB_VERSION = 6;
+  const DB_VERSION = 7;
   const STORE = 'songs';
   const SETLIST_STORE = 'setlists';
   const TODO_STORE = 'practiceTodos'; // アプリ全体で1レコードのみ(id: 'global')固定で使う
   const STAMP_STORE = 'memoStamps';   // アプリ全体で1レコードのみ(id: 'global')固定で使う
   const BACKUP_STORE = 'localBackup'; // 自動ローカルバックアップ用。アプリ全体で1レコードのみ(id: 'local')、常に上書き(v5で追加)
   const LINK_STORE = 'musicLinks';    // 音楽関連サイトのリンク集。アプリ全体で1レコードのみ(id: 'global')固定(v6で追加)
+  const PHRASE_STORE = 'phrases';     // フレーズ集(楽譜エディタで作った譜面そのもの)。アプリ全体で1レコードのみ(id: 'global')固定(v7で追加)
   let dbPromise = null;
 
   function openDb() {
@@ -1305,6 +1392,9 @@
         }
         if (!db.objectStoreNames.contains(LINK_STORE)) {
           db.createObjectStore(LINK_STORE, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(PHRASE_STORE)) {
+          db.createObjectStore(PHRASE_STORE, { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -1459,6 +1549,29 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(LINK_STORE, 'readwrite');
       const req = tx.objectStore(LINK_STORE).put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // フレーズ集(アプリ全体で1レコードのみ、id: 'global'固定)。
+  // 楽譜エディタで作った譜面データ(scoreElements)そのものを保存するので、
+  // 後から開き直して編集・転調できる(画像として貼るだけだった従来の使い方に対し、
+  // 「作った譜面を資産として貯めていく」ための機能、2026-08-19〜)。
+  async function phraseGet() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(PHRASE_STORE, 'readonly');
+      const req = tx.objectStore(PHRASE_STORE).get('global');
+      req.onsuccess = () => resolve(req.result || { id: 'global', items: [], updatedAt: 0 });
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function phrasePut(record) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(PHRASE_STORE, 'readwrite');
+      const req = tx.objectStore(PHRASE_STORE).put(record);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -2435,8 +2548,109 @@
     { fifths: -3, label: 'Eb', vexName: 'Eb' },
     { fifths: -4, label: 'Ab', vexName: 'Ab' },
     { fifths: -5, label: 'Db', vexName: 'Db' },
+    // F#/Gbは同じ音のキーだが、♯系/♭系のどちらで書くかで調号が変わる。
+    // どちらも用意しておかないと、転調ボタン(2026-08-19〜)で半音6つぶん
+    // ずれた先を表現できなくなる(12音のうちここだけ穴が空いてしまう)。
+    { fifths: 6, label: 'F#', vexName: 'F#' },
+    { fifths: -6, label: 'Gb', vexName: 'Gb' },
   ];
+  // 主音の絶対半音(Cを0とした0〜11)→調号のfifths。転調で「移調先の調号」を
+  // 決めるのに使う。半音6つ(F#/Gb)だけは♯系/♭系の両方が同じ枚数(6つ)なので、
+  // 元の調が♯系だったか♭系だったかを引き継ぐ。それ以外は「臨時記号が少ない方」
+  // が一意に決まる(例: 半音1はC#(♯7つ)ではなくDb(♭5つ)を選ぶ)。
+  const SCORE_FIFTHS_BY_SEMITONE = { 0: 0, 1: -5, 2: 2, 3: -3, 4: 4, 5: -1, 6: null, 7: 1, 8: -4, 9: 3, 10: -2, 11: 5 };
+  // 調号のfifths→主音の絶対半音。上の逆引き。
+  const SCORE_SEMITONE_BY_FIFTHS = { 0: 0, 1: 7, 2: 2, 3: 9, 4: 4, 5: 11, 6: 6, '-1': 5, '-2': 10, '-3': 3, '-4': 8, '-5': 1, '-6': 6 };
   function scoreKeyOption() { return SCORE_KEY_OPTIONS.find((k) => k.fifths === scoreKeyFifths); }
+
+  // ==================================================
+  // 転調(2026-08-19〜)。音符の高さだけでなく、音符に振ってあるコード名と
+  // 調号もまとめて動かす。
+  // ==================================================
+  // コード名のルート音を解析する。先頭のA〜Gと、それに続く臨時記号(#/b/♯/♭を
+  // 何個でも)までがルート。コードの語尾(m7・aug・sus4など)は臨時記号では
+  // 始まらないので、♯♭を貪欲に食べてしまって問題ない
+  // (例: "Cb9" は「Cフラットの9」と解釈する。これは一般的なコード表記の慣習)。
+  const SCORE_CHORD_ROOT_SEMITONE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const SCORE_PITCH_NAME_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const SCORE_PITCH_NAME_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+  // 1つのコード表記(スラッシュで区切る前の単位)のルートを移調する。
+  // ルートとして解釈できない文字列(空文字や "N.C." など)はそのまま返す。
+  function scoreTransposeChordToken(token, semitoneDelta, preferFlat) {
+    const m = token.match(/^([A-G])((?:##|bb|[#b♯♭])*)(.*)$/);
+    if (!m) return token;
+    const [, letter, accidentalsRaw, suffix] = m;
+    // ♯♭(全角の音楽記号)も打てるようにしているので、両方を数える。
+    let alter = 0;
+    for (const ch of accidentalsRaw) {
+      if (ch === '#' || ch === '♯') alter += 1;
+      else if (ch === 'b' || ch === '♭') alter -= 1;
+    }
+    const semitone = (((SCORE_CHORD_ROOT_SEMITONE[letter] + alter + semitoneDelta) % 12) + 12) % 12;
+    const name = (preferFlat ? SCORE_PITCH_NAME_FLAT : SCORE_PITCH_NAME_SHARP)[semitone];
+    // 元の表記が全角の♯♭だったら、移調後もそちらに揃える(見た目の一貫性のため)。
+    const usesUnicode = /[♯♭]/.test(accidentalsRaw);
+    const converted = usesUnicode ? name.replace('#', '♯').replace('b', '♭') : name;
+    return converted + suffix;
+  }
+
+  // コード名まるごと(分数コードのベース音も含む)を移調する。
+  function scoreTransposeChordName(chord, semitoneDelta, preferFlat) {
+    if (!chord) return chord;
+    // "C/G" のようなオンコードは、ルートとベースを別々に移調する。
+    return chord.split('/').map((part, i) => {
+      const trimmed = part.trim();
+      if (!trimmed) return part;
+      return scoreTransposeChordToken(trimmed, semitoneDelta, preferFlat);
+    }).join('/');
+  }
+
+  // 転調時の音符の解決。既存のscoreResolveFromSemitoneは「次に置く音符用の
+  // 保留中♯♭」や選択状態を見てしまうので、転調では使わずに専用の解決を使う
+  // (一括変換なので、保留中の指定に引きずられてはいけない)。
+  function scoreResolvePitchForTranspose(absSemitone, preferFlat) {
+    const octave = Math.floor(absSemitone / 12);
+    const idx = ((absSemitone % 12) + 12) % 12;
+    const def = SCORE_PIANO_OCTAVE[idx];
+    if (def.white) return { step: scoreLetterOctaveToStep(def.white, octave), accidental: null };
+    const letter = preferFlat ? def.black[1] : def.black[0];
+    return { step: scoreLetterOctaveToStep(letter, octave), accidental: preferFlat ? 'flat' : 'sharp' };
+  }
+
+  // 譜面全体を半音単位で転調する。音符の高さ・コード名・調号を一度に動かす。
+  function scoreTransposeAll(semitoneDelta) {
+    if (!semitoneDelta) return;
+    // 移調先の調号を先に決める。これで♯系/♭系のどちらで書くかが決まり、
+    // 音符もコード名も同じ基準で表記が揃う。
+    const curTonic = SCORE_SEMITONE_BY_FIFTHS[String(scoreKeyFifths)] ?? 0;
+    const newTonic = (((curTonic + semitoneDelta) % 12) + 12) % 12;
+    let newFifths = SCORE_FIFTHS_BY_SEMITONE[newTonic];
+    // 半音6つ(F#/Gb)は♯系・♭系が同数なので、元の調の性格を引き継ぐ。
+    if (newFifths === null) newFifths = scoreKeyFifths >= 0 ? 6 : -6;
+    const preferFlat = newFifths < 0;
+
+    pushScoreUndoSnapshot();
+    scoreKeyFifths = newFifths;
+    scoreKeySelect.value = String(newFifths);
+    for (const el of scoreElements) {
+      if (el.type === 'note') {
+        el.pitches = el.pitches.map((p) => {
+          const abs = scoreAbsoluteSemitone(p.step, p.accidental);
+          return scoreResolvePitchForTranspose(abs + semitoneDelta, preferFlat);
+        });
+        el.pitches.sort((a, b) => a.step - b.step);
+      }
+      if (el.chord) el.chord = scoreTransposeChordName(el.chord, semitoneDelta, preferFlat);
+    }
+    // 転調後は表記の基準が変わるので、手動で♯/♭に固定していた場合は
+    // 調号追従('auto')に戻す(そうしないと調号と音符の表記が食い違って見える)。
+    scoreEnharmonicMode = 'auto';
+    btnScoreEnharmonic.classList.remove('mode-sharp', 'mode-flat');
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+    renderScorePianoKeyboard();
+  }
   // 調号(fifths)から「どの文字に♯/♭が付くか」のマップを作る(C→null=無変化)。
   function scoreKeySigAlterationMap(fifths) {
     const map = {};
@@ -2581,6 +2795,11 @@
   // 複数ピッチを持てる形にしてある。読み取りはelFirstStep/elFirstAccidental経由で統一)。
   let scoreElements = [];
   let scorePlacementXY = null; // 完了時に画像メモとして置く先の相対座標({x,y})
+  // 楽譜エディタの用途(2026-08-19〜)。'memo'は従来どおり「完了で画像メモとして
+  // 譜面に貼る」、'phrase'は「完了でフレーズ集に保存する」。同じエディタUIを
+  // 2つの出口で使い回すため、完了ボタンの動作だけをこのモードで切り替える。
+  let scoreEditorMode = 'memo';
+  let scoreEditingPhraseId = null; // 'phrase'モードで既存フレーズを編集中ならそのid
   let scoreSelectedDuration = 'quarter';
   let scorePendingDot = false;
   let scorePendingTripletCount = 0; // 3連符として残り何個入力すればグループが完成するか
@@ -2671,9 +2890,17 @@
     renderScorePianoKeyboard(); // auto時の黒鍵表記が調号に追従するため再描画
   });
 
-  function openScoreEditor(x, y) {
-    scorePlacementXY = { x, y };
-    scoreElements = [];
+  // 楽譜エディタを開く共通処理。
+  // opts.mode: 'memo'(既定、完了で画像メモとして貼る) | 'phrase'(完了でフレーズ集に保存)
+  // opts.phrase: 'phrase'モードで既存フレーズを開く場合のレコード(新規ならnull)
+  // opts.elements/timeSigIdx/keyFifths: 初期内容(フレーズを読み込んで貼る時に使う)
+  function openScoreEditor(x, y, opts) {
+    const o = opts || {};
+    scorePlacementXY = (x === null || x === undefined) ? null : { x, y };
+    scoreEditorMode = o.mode || 'memo';
+    scoreEditingPhraseId = o.phrase ? o.phrase.id : null;
+    const src = o.phrase || o;
+    scoreElements = src.elements ? cloneScoreElements(src.elements) : [];
     scoreUndoStack = [];
     scoreRedoStack = [];
     scoreSelectedDuration = 'quarter';
@@ -2693,10 +2920,13 @@
     btnScoreSound.textContent = scoreSoundOn ? '\u{1F50A} 音あり' : '\u{1F507} 音なし';
     btnScoreSound.classList.toggle('active', scoreSoundOn);
     scoreChordInput.value = '';
-    scoreTimeSigIdx = 0;
-    scoreKeyFifths = 0;
-    scoreTimeSigSelect.value = '0';
-    scoreKeySelect.value = '0';
+    // 拍子・調号は、フレーズを開いた場合はその値を復元する(新規なら4/4・ハ長調)。
+    scoreTimeSigIdx = Number.isFinite(src.timeSigIdx) ? src.timeSigIdx : 0;
+    scoreKeyFifths = Number.isFinite(src.keyFifths) ? src.keyFifths : 0;
+    scoreTimeSigSelect.value = String(scoreTimeSigIdx);
+    scoreKeySelect.value = String(scoreKeyFifths);
+    // 完了ボタンのラベルを出口に合わせる(貼るのか保存するのかを取り違えないように)。
+    btnScoreDone.textContent = scoreEditorMode === 'phrase' ? '保存' : '完了';
     updateScoreToolbarUI();
     scoreEditorOverlay.classList.remove('hidden');
     // 幅はコンテナに合わせて決める(表示してからでないとclientWidthが0のため、
@@ -2903,6 +3133,42 @@
     scoreChordInput.focus();
   });
 
+  // 保存済みフレーズを今のエディタに読み込む。「+ 楽譜」で開いたエディタから使えば、
+  // 貯めたフレーズをそのまま曲の譜面に貼れる(読み込んでから転調して貼ることもできる)。
+  // 今の内容は置き換わるので、何か入力済みなら確認する。
+  btnScoreLoadPhrase.addEventListener('click', async () => {
+    const record = await phraseGet();
+    if (record.items.length === 0) {
+      alert('保存されているフレーズがありません。「🎵 フレーズ集」から作成してください。');
+      return;
+    }
+    const list = record.items.map((p, i) => `${i + 1}: ${p.name}`).join('\n');
+    const answer = prompt(`読み込むフレーズの番号を入力してください:\n${list}`, '1');
+    if (answer === null) return;
+    const idx = parseInt(answer, 10) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= record.items.length) {
+      alert('番号が正しくありません。');
+      return;
+    }
+    if (scoreElements.length > 0 && !confirm('今の内容は置き換わります。よろしいですか？')) return;
+    const p = record.items[idx];
+    pushScoreUndoSnapshot();
+    scoreElements = cloneScoreElements(p.elements || []);
+    scoreTimeSigIdx = Number.isFinite(p.timeSigIdx) ? p.timeSigIdx : 0;
+    scoreKeyFifths = Number.isFinite(p.keyFifths) ? p.keyFifths : 0;
+    scoreTimeSigSelect.value = String(scoreTimeSigIdx);
+    scoreKeySelect.value = String(scoreKeyFifths);
+    scoreSelectedIndex = null;
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+    renderScorePianoKeyboard();
+  });
+
+  btnScoreTransposeDown.addEventListener('click', () => scoreTransposeAll(-1));
+  btnScoreTransposeUp.addEventListener('click', () => scoreTransposeAll(1));
+  btnScoreTransposeDownOct.addEventListener('click', () => scoreTransposeAll(-12));
+  btnScoreTransposeUpOct.addEventListener('click', () => scoreTransposeAll(12));
+
   btnScoreSound.addEventListener('click', () => {
     scoreSoundOn = !scoreSoundOn;
     localStorage.setItem(SCORE_SOUND_KEY, scoreSoundOn ? '1' : '0');
@@ -2977,9 +3243,17 @@
   });
   btnScoreCancel.addEventListener('click', () => {
     if (scoreElements.length > 0 && !confirm('作成中の楽譜を破棄しますか？')) return;
+    const wasPhrase = scoreEditorMode === 'phrase';
     closeScoreEditor();
+    // フレーズ編集から抜けた時は、曲の譜面ではなくフレーズ一覧に戻す
+    // (フレーズ一覧から開いているので、そこへ戻るのが自然)。
+    if (wasPhrase) showScreen(phraseListScreen);
   });
   btnScoreDone.addEventListener('click', async () => {
+    if (scoreEditorMode === 'phrase') {
+      await saveCurrentScoreAsPhrase();
+      return;
+    }
     if (scoreElements.length === 0) {
       if (!confirm('音符が1つもありません。空のまま挿入しますか？')) return;
     }
@@ -4800,6 +5074,231 @@
   });
 
   // ==================================================
+  // フレーズ集(2026-08-19)。楽譜エディタで作った譜面データそのものを貯めておき、
+  // 後から開き直して編集・転調したり、曲の譜面に画像として貼ったりできる。
+  // 画像だけを貼っていた従来の使い方(+ 楽譜)と違い、音符データを保持するので
+  // 「作ったフレーズを資産として使い回す」ことができる。
+  // ==================================================
+  let musicPhrases = { id: 'global', items: [], updatedAt: 0 };
+  let phraseTagFilter = null; // 選択中の絞り込みタグ(nullなら全部表示)
+
+  async function saveMusicPhrases() {
+    musicPhrases.updatedAt = Date.now();
+    await phrasePut(musicPhrases);
+  }
+
+  // タグはカンマ/読点/空白区切りで入力させ、重複と空要素を潰して配列にする。
+  function parsePhraseTags(raw) {
+    return Array.from(new Set(
+      (raw || '').split(/[,、\s]+/).map((t) => t.trim()).filter(Boolean)
+    ));
+  }
+
+  // 登録済みの全タグを、使われている順に重複なく集める(絞り込みチップ用)。
+  function collectPhraseTags() {
+    const seen = [];
+    for (const p of musicPhrases.items) {
+      for (const t of (p.tags || [])) if (!seen.includes(t)) seen.push(t);
+    }
+    return seen;
+  }
+
+  function renderPhraseTagFilter() {
+    phraseTagFilterEl.innerHTML = '';
+    const tags = collectPhraseTags();
+    if (tags.length === 0) return; // タグが1つも無いうちは絞り込み自体を出さない
+    const makeChip = (label, value) => {
+      const chip = document.createElement('button');
+      chip.className = 'phraseTagChip';
+      chip.textContent = label;
+      chip.classList.toggle('active', phraseTagFilter === value);
+      chip.addEventListener('click', () => {
+        phraseTagFilter = value;
+        renderPhraseTagFilter();
+        renderPhraseList();
+      });
+      return chip;
+    };
+    phraseTagFilterEl.appendChild(makeChip('すべて', null));
+    for (const t of tags) phraseTagFilterEl.appendChild(makeChip(t, t));
+  }
+
+  function renderPhraseList() {
+    phraseListEl.innerHTML = '';
+    const shown = phraseTagFilter
+      ? musicPhrases.items.filter((p) => (p.tags || []).includes(phraseTagFilter))
+      : musicPhrases.items;
+    if (shown.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = musicPhrases.items.length === 0
+        ? 'まだフレーズがありません。「＋ 新しいフレーズ」から作成してください。'
+        : 'このタグのフレーズはありません。';
+      phraseListEl.appendChild(empty);
+      return;
+    }
+    for (const item of shown) {
+      const row = document.createElement('div');
+      row.className = 'phraseItem';
+
+      const top = document.createElement('div');
+      top.className = 'phraseItemTop';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'phraseItemName';
+      nameEl.textContent = item.name;
+      top.appendChild(nameEl);
+
+      const meta = document.createElement('span');
+      meta.className = 'phraseItemMeta';
+      const key = SCORE_KEY_OPTIONS.find((k) => k.fifths === item.keyFifths);
+      const ts = SCORE_TIME_SIGS[item.timeSigIdx] || SCORE_TIME_SIGS[0];
+      meta.textContent = `${key ? key.label : 'C'} / ${ts.beats}/${ts.unit}`;
+      top.appendChild(meta);
+
+      const btnEdit = document.createElement('button');
+      btnEdit.textContent = '✎ 編集';
+      btnEdit.addEventListener('click', () => {
+        openScoreEditor(null, null, { mode: 'phrase', phrase: item });
+      });
+      top.appendChild(btnEdit);
+
+      const btnRename = document.createElement('button');
+      btnRename.textContent = '名前/タグ';
+      btnRename.addEventListener('click', async () => {
+        const newName = prompt('フレーズ名', item.name);
+        if (newName === null) return;
+        const newTags = prompt('タグ(カンマ区切り。例: ジャズ, リフ, 練習中)', (item.tags || []).join(', '));
+        if (newTags === null) return;
+        item.name = newName.trim() || item.name;
+        item.tags = parsePhraseTags(newTags);
+        await saveMusicPhrases();
+        // 絞り込み中のタグが外れた場合に備えて、チップ側も作り直す。
+        if (phraseTagFilter && !collectPhraseTags().includes(phraseTagFilter)) phraseTagFilter = null;
+        renderPhraseTagFilter();
+        renderPhraseList();
+      });
+      top.appendChild(btnRename);
+
+      const btnTodo = document.createElement('button');
+      btnTodo.textContent = '✅';
+      btnTodo.title = '練習ToDoに追加';
+      btnTodo.addEventListener('click', async () => {
+        const todos = await todoGet();
+        todos.items.push({
+          id: crypto.randomUUID(), text: `フレーズ: ${item.name}`,
+          done: false, subtasks: [], updatedAt: Date.now(),
+        });
+        todos.updatedAt = Date.now();
+        await todoPut(todos);
+        alert('練習ToDoに追加しました。');
+      });
+      top.appendChild(btnTodo);
+
+      const btnDel = document.createElement('button');
+      btnDel.textContent = '🗑';
+      btnDel.title = '削除';
+      btnDel.addEventListener('click', async () => {
+        if (!confirm(`「${item.name}」を削除しますか？`)) return;
+        musicPhrases.items = musicPhrases.items.filter((p) => p.id !== item.id);
+        await saveMusicPhrases();
+        if (phraseTagFilter && !collectPhraseTags().includes(phraseTagFilter)) phraseTagFilter = null;
+        renderPhraseTagFilter();
+        renderPhraseList();
+      });
+      top.appendChild(btnDel);
+
+      row.appendChild(top);
+
+      if (item.preview) {
+        const img = document.createElement('img');
+        img.className = 'phrasePreview';
+        img.alt = item.name;
+        img.src = item.preview;
+        row.appendChild(img);
+      }
+
+      if ((item.tags || []).length > 0) {
+        const tagsEl = document.createElement('div');
+        tagsEl.className = 'phraseItemTags';
+        for (const t of item.tags) {
+          const tag = document.createElement('span');
+          tag.className = 'phraseItemTag';
+          tag.textContent = t;
+          tagsEl.appendChild(tag);
+        }
+        row.appendChild(tagsEl);
+      }
+
+      phraseListEl.appendChild(row);
+    }
+  }
+
+  // 楽譜エディタの「保存」(phraseモード)から呼ばれる。新規なら名前とタグを聞き、
+  // 既存フレーズの編集ならそのまま上書きする。
+  async function saveCurrentScoreAsPhrase() {
+    if (scoreElements.length === 0) {
+      alert('音符が1つもありません。');
+      return;
+    }
+    musicPhrases = await phraseGet();
+    const existing = scoreEditingPhraseId
+      ? musicPhrases.items.find((p) => p.id === scoreEditingPhraseId)
+      : null;
+
+    let name = existing ? existing.name : '';
+    let tags = existing ? (existing.tags || []) : [];
+    if (!existing) {
+      const inputName = prompt('フレーズ名を入力してください', '');
+      if (inputName === null) return;
+      name = inputName.trim() || '名称未設定';
+      const inputTags = prompt('タグ(カンマ区切り。例: ジャズ, リフ, 練習中)。不要なら空のままでOK', '');
+      if (inputTags === null) return;
+      tags = parsePhraseTags(inputTags);
+    }
+
+    // 一覧でひと目で分かるようにプレビュー画像(PNGのdata URL)も持たせる。
+    // 譜面の再描画はVexFlowの読み込みが必要で一覧表示のたびには重いため、
+    // 保存時に1枚焼いておく方式にしている。
+    await renderScoreCanvas();
+    const preview = scoreEditorCanvas.toDataURL('image/png');
+
+    if (existing) {
+      Object.assign(existing, {
+        elements: cloneScoreElements(scoreElements),
+        timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths,
+        preview, updatedAt: Date.now(),
+      });
+    } else {
+      musicPhrases.items.push({
+        id: crypto.randomUUID(), name, tags,
+        elements: cloneScoreElements(scoreElements),
+        timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths,
+        preview, createdAt: Date.now(), updatedAt: Date.now(),
+      });
+    }
+    await saveMusicPhrases();
+    closeScoreEditor();
+    renderPhraseTagFilter();
+    renderPhraseList();
+    showScreen(phraseListScreen);
+  }
+
+  btnPhraseNew.addEventListener('click', () => {
+    openScoreEditor(null, null, { mode: 'phrase' });
+  });
+  btnGoPhrases.addEventListener('click', async () => {
+    musicPhrases = await phraseGet();
+    phraseTagFilter = null;
+    renderPhraseTagFilter();
+    renderPhraseList();
+    showScreen(phraseListScreen);
+  });
+  btnPhraseBack.addEventListener('click', () => {
+    showScreen(songListScreen);
+    renderSongList();
+  });
+
+  // ==================================================
   // 練習ToDo(アプリ全体で1つ。曲/セットリストに紐付かない練習用チェックリスト。
   // サブタスクは1段階のみ。チェックした項目は自動では消さず、手動で外すまで残す)
   // ==================================================
@@ -5863,12 +6362,14 @@
     const todos = await todoGet();
     const stamps = await stampGet();
     const links = await linkGet();
+    const phrases = await phraseGet();
     const manifest = {
       songs: songManifest,
       setlists: setlistManifest,
       todos: { items: todos.items || [], updatedAt: todos.updatedAt || 0 },
       stamps: { items: stamps.items || [], updatedAt: stamps.updatedAt || 0 },
       links: { items: links.items || [], updatedAt: links.updatedAt || 0 },
+      phrases: { items: phrases.items || [], updatedAt: phrases.updatedAt || 0 },
     };
     const entries = [
       { name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) },
@@ -5990,6 +6491,11 @@
       // 復元した内容を画面にも反映する(リンク集を開いたまま復元した場合のため)。
       musicLinks = await linkGet();
       if (!linkListScreen.classList.contains('hidden')) renderLinkList();
+    }
+    if (await restoreGlobalList(parsedObj.phrases, phraseGet, phrasePut)) {
+      updated++;
+      musicPhrases = await phraseGet();
+      if (!phraseListScreen.classList.contains('hidden')) { renderPhraseTagFilter(); renderPhraseList(); }
     }
 
     alert(`復元完了: 追加${added}件 / 更新${updated}件 / スキップ${skipped}件`);
@@ -6399,6 +6905,24 @@
       await syncFetch(`${SYNC_API_URL}/api/links`, {
         method: 'PUT', headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: localLinks.items, updatedAt: localLinks.updatedAt }),
+      });
+      uploaded++;
+    }
+
+    // フレーズ集(同じくアプリ全体で1つのJSONまるごとを、新しい方が勝つ方式で同期)
+    const localPhrases = await phraseGet();
+    const phraseRes = await syncFetch(`${SYNC_API_URL}/api/phrases`, { headers: { 'X-Sync-Key': key } });
+    if (!phraseRes.ok) throw new Error(`サーバーエラー(フレーズ集) (${phraseRes.status})`);
+    const remotePhrases = await phraseRes.json();
+    if (remotePhrases.updatedAt > localPhrases.updatedAt) {
+      await phrasePut({ id: 'global', items: remotePhrases.items, updatedAt: remotePhrases.updatedAt });
+      musicPhrases = { id: 'global', items: remotePhrases.items, updatedAt: remotePhrases.updatedAt };
+      if (!phraseListScreen.classList.contains('hidden')) { renderPhraseTagFilter(); renderPhraseList(); }
+      downloaded++;
+    } else if (localPhrases.updatedAt > remotePhrases.updatedAt) {
+      await syncFetch(`${SYNC_API_URL}/api/phrases`, {
+        method: 'PUT', headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: localPhrases.items, updatedAt: localPhrases.updatedAt }),
       });
       uploaded++;
     }

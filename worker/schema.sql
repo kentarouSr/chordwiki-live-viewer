@@ -67,6 +67,14 @@ CREATE TABLE IF NOT EXISTS music_links (
   updated_at INTEGER NOT NULL DEFAULT 0
 );
 
+-- フレーズ集(2026-08-19)。楽譜エディタで作った譜面データそのもの。
+-- practice_todosと同じ持ち方(1件ごとにプレビューPNGを持つぶん行は大きい)。
+CREATE TABLE IF NOT EXISTS music_phrases (
+  sync_key TEXT PRIMARY KEY,
+  items_json TEXT NOT NULL DEFAULT '[]',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+
 -- 使用を許可する同期キーの一覧。POST /api/invite で、既に有効なキーを
 -- 持っている人なら誰でも新しいキーをここに追加できる(2026-08-16)。
 CREATE TABLE IF NOT EXISTS allowed_keys (
