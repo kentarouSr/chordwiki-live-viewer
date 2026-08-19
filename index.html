@@ -5655,19 +5655,57 @@
   // あえてURLからは消さない: 「ホーム画面に追加」はその時点のアドレスバーのURLを
   // そのままブックマークするため、ここで消してしまうと後から追加した時にキーが
   // 失われてしまう(実際に発生した不具合)。
+  //
+  // URLにもlocalStorageにもキーが無い「真っさらな初回訪問」の場合だけ、その場で
+  // 同期キーの設定を促す。以前は何もしないと設定画面の存在にすら気づきにくかった
+  // ため。「キャンセル」を選べばそのままローカル利用のみ続けられ、この確認は
+  // 端末ごとに一度きりにする(うるさくならないようフラグをlocalStorageに残す)。
+  const SYNC_PROMPT_SHOWN_KEY = 'cwlv_sync_prompt_shown';
   (() => {
     const params = new URLSearchParams(location.search);
     const keyFromUrl = params.get('key');
     if (keyFromUrl) {
       localStorage.setItem(SYNC_KEY_STORAGE, keyFromUrl);
+      return;
+    }
+    if (localStorage.getItem(SYNC_KEY_STORAGE)) return;
+    if (localStorage.getItem(SYNC_PROMPT_SHOWN_KEY)) return;
+    localStorage.setItem(SYNC_PROMPT_SHOWN_KEY, '1');
+    if (confirm('同期キーがまだ設定されていません。\n他の端末ともデータを共有するには同期キーの設定が必要です。\n今すぐ設定しますか？\n(「キャンセル」を選んでもこのままローカルで使えます。後から「設定・バックアップ」内の「同期キーを設定」でいつでも設定できます)')) {
+      promptAndSetSyncKey('');
     }
   })();
+
+  // 同期キーをlocalStorageに保存し、アドレスバーのURLにも ?key=... を反映する。
+  // 「ホーム画面に追加」はその時点のURLをそのままブックマークするため、これを
+  // しておかないと後から手入力でキーを設定した端末では、ホーム画面追加後に
+  // キーが失われてしまう。
+  function saveSyncKey(key) {
+    localStorage.setItem(SYNC_KEY_STORAGE, key);
+    const url = `${location.pathname}?key=${encodeURIComponent(key)}`;
+    history.replaceState(null, '', url);
+  }
+
+  // 同期キーをprompt()で入力させて保存する共通処理。初回訪問時の自動プロンプトと、
+  // 「同期キーを設定」ボタンの両方から呼ばれる。
+  function promptAndSetSyncKey(current) {
+    const input = prompt('同期キーを入力してください(空にすると解除されます)', current || '');
+    if (input === null) return;
+    const trimmed = input.trim();
+    if (trimmed === '') {
+      localStorage.removeItem(SYNC_KEY_STORAGE);
+      alert('同期キーを解除しました。');
+      return;
+    }
+    saveSyncKey(trimmed);
+    alert('同期キーを設定しました。URLにも反映したので、このままホーム画面に追加すれば次回からこのキーで開けます。');
+  }
 
   function getSyncKey() {
     let key = localStorage.getItem(SYNC_KEY_STORAGE);
     if (!key) {
       key = prompt('同期キーを入力してください');
-      if (key) localStorage.setItem(SYNC_KEY_STORAGE, key);
+      if (key) saveSyncKey(key);
     }
     return key || null;
   }
@@ -5963,17 +6001,7 @@
   // URL経由の自動取得がうまくいかない場合(ホーム画面PWAでURLのkeyが渡らない等)の
   // 手動フォールバック。現在の値を初期値にして入力し直せる。空にすれば解除。
   btnSetSyncKey.addEventListener('click', () => {
-    const current = localStorage.getItem(SYNC_KEY_STORAGE) || '';
-    const input = prompt('同期キーを入力してください(空にすると解除されます)', current);
-    if (input === null) return;
-    const trimmed = input.trim();
-    if (trimmed === '') {
-      localStorage.removeItem(SYNC_KEY_STORAGE);
-      alert('同期キーを解除しました。');
-    } else {
-      localStorage.setItem(SYNC_KEY_STORAGE, trimmed);
-      alert('同期キーを設定しました。');
-    }
+    promptAndSetSyncKey(localStorage.getItem(SYNC_KEY_STORAGE) || '');
   });
 
   // 他端末のセットアップ用に、同期キー入り(?key=...)のURLをコピーする。
