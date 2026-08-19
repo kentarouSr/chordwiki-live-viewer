@@ -607,14 +607,48 @@
     background: #333; color: #eee; cursor: pointer;
   }
   #btnScoreDone { background: #6cf; color: #111; font-weight: bold; }
-  /* 楽譜エディタ内から使い方マニュアルを見られる「?」リンク(2026-08-17追加)。
-     編集中の内容を失いたくないので別タブで開く(target="_blank")。ボタン群と
-     並んでも浮かないよう、他のヘッダーボタンと同じ見た目にしつつ丸くしている。 */
+  /* 楽譜エディタ内から使い方マニュアルを見られるリンク(2026-08-17追加)。
+     編集中の内容を失いたくないので別タブで開く(target="_blank")。
+     以前は画面内に長い説明文を常時表示していたが、譜面が見えなくなるほど
+     場所を取っていたため全て削除し、説明はマニュアルに集約した(2026-08-19)。
+     その導線がこのボタンなので、「?」だけの丸ボタンから文言付きに変えて
+     押せば説明が出ると分かるようにしている。 */
   #btnScoreHelp {
-    font-size: 14px; padding: 9px 12px; border-radius: 50%; border: none;
+    font-size: 13px; padding: 9px 12px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer; text-decoration: none;
     display: inline-flex; align-items: center; justify-content: center;
+    white-space: nowrap; flex-shrink: 0;
   }
+  /* --- キーボードショートカット一覧の浮遊パネル(2026-08-19) ---
+     物理キーボードがある環境でしか意味が無いので、マウスを持つ端末
+     (hover可能かつpointerが精密)でだけ表示する。画面幅で出し分けると
+     iPadのような「広いがキーボードが無い」端末で無駄に出てしまうため、
+     幅ではなくポインタの種類で判定している(UA判定はしない方針)。
+     既定では非表示(.hidden)で、ヘッダーの「⌨ キー」ボタンで出す。 */
+  #scoreShortcutPanel { display: none; }
+  #btnScoreShortcutToggle { display: none; }
+  @media (hover: hover) and (pointer: fine) {
+    #btnScoreShortcutToggle { display: inline-flex; }
+    #scoreShortcutPanel {
+      display: block; position: absolute; top: 72px; right: 16px; z-index: 25;
+      background: rgba(20,20,20,0.95); border: 1px solid #3a3a3a; border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5); overflow: hidden; min-width: 190px;
+    }
+    #scoreShortcutPanel.hidden { display: none; }
+  }
+  #scoreShortcutHeader {
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+    background: #262626; cursor: grab; touch-action: none;
+  }
+  #scoreShortcutHeader:active { cursor: grabbing; }
+  #scoreShortcutTitle { flex: 1; font-size: 11px; color: #999; white-space: nowrap; }
+  #btnScoreShortcutClose {
+    font-size: 12px; padding: 2px 7px; border-radius: 5px; border: none;
+    background: #3a3a3a; color: #eee; cursor: pointer; line-height: 1.4;
+  }
+  #scoreShortcutTable { border-collapse: collapse; font-size: 11px; margin: 4px 8px 8px; }
+  #scoreShortcutTable td { padding: 2px 6px 2px 0; color: #ddd; white-space: nowrap; }
+  #scoreShortcutTable td:first-child { color: #6cf; font-weight: bold; padding-right: 12px; }
   #scoreEditorCanvasWrap {
     flex: 1; overflow-x: auto; overflow-y: auto; background: #fff;
     display: flex; align-items: flex-start; justify-content: center;
@@ -644,7 +678,6 @@
     font-size: 14px; padding: 9px 10px; border-radius: 8px; border: 1px solid #333;
     background: #1c1c1c; color: #eee; width: 160px;
   }
-  #scoreEditorHint { margin: 0 16px 10px; font-size: 12px; color: #999; }
 
   /* ピアノ鍵盤(2026-08-17〜。Flat風に、音符の新規入力はここから行う方式に刷新)。
      白鍵は通常のflex行に並べ、黒鍵は左右にマイナスマージンを掛けて隣接する白鍵の
@@ -677,6 +710,12 @@
   /* MIDIキーボードで今物理的に押されている鍵(「選択中」の青とは意味が違うので
      別の色にする。選択中と同時に光ることもあるためリング状の重ね掛けにしている) */
   .scorePianoWhiteKey.pressed, .scorePianoBlackKey.pressed { box-shadow: inset 0 0 0 3px #2ecc71; }
+  /* タップ/クリックした瞬間に光らせる(2026-08-19)。:activeだけだとタッチ端末では
+     指を離した後の余韻が無く「押せたのか分からない」ため、JSで一定時間クラスを
+     付ける方式にしている。MIDIの.pressedとは別クラスにして、両方光っても
+     喧嘩しないようにしてある(こちらは背景色、あちらはリング)。 */
+  .scorePianoWhiteKey.tapped { background: #9fd8f7; }
+  .scorePianoBlackKey.tapped { background: #2b6cb0; }
   #btnScoreEnharmonic.mode-sharp, #btnScoreEnharmonic.mode-flat { background: #6cf; color: #111; font-weight: bold; }
   #btnScoreMidi.hidden { display: none; }
   #btnScoreMidi.on { background: #2ecc71; color: #111; font-weight: bold; }
@@ -782,7 +821,6 @@
     .scoreEditorGroup { gap: 5px; padding: 4px 7px; }
     #scoreEditorToolbar button { font-size: 12px; padding: 7px 9px; }
     #scoreChordInput { font-size: 12px; padding: 7px 8px; width: 120px; }
-    #scoreEditorHint { font-size: 11px; margin: 0 10px 8px; }
     .scorePianoWhiteKey { width: 34px; height: 92px; font-size: 9px; padding-bottom: 4px; }
     .scorePianoBlackKey { width: 21px; height: 58px; margin-left: -10.5px; margin-right: -10.5px; }
   }
@@ -992,8 +1030,28 @@
     <div id="scoreEditorHeader">
       <button id="btnScoreCancel">キャンセル</button>
       <h1>楽譜作成</h1>
-      <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067;</a>
+      <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067; 使い方</a>
+      <button id="btnScoreShortcutToggle" title="キーボードショートカット一覧を表示/隠す">&#9000; キー</button>
       <button id="btnScoreDone">完了</button>
+    </div>
+    <div id="scoreShortcutPanel" class="hidden">
+      <div id="scoreShortcutHeader">
+        <span id="scoreShortcutTitle">&#10021; ショートカット</span>
+        <button id="btnScoreShortcutClose" title="閉じる">&times;</button>
+      </div>
+      <table id="scoreShortcutTable">
+        <tr><td>A〜G</td><td>音符を追加</td></tr>
+        <tr><td>1〜7</td><td>音価(全〜64分)</td></tr>
+        <tr><td>.</td><td>付点</td></tr>
+        <tr><td>- = 0</td><td>♭ ♯ ♮</td></tr>
+        <tr><td>← →</td><td>音符を選択</td></tr>
+        <tr><td>↑ ↓</td><td>半音</td></tr>
+        <tr><td>Shift+↑↓</td><td>オクターブ</td></tr>
+        <tr><td>Home / End</td><td>最初 / 最後</td></tr>
+        <tr><td>Delete</td><td>削除</td></tr>
+        <tr><td>Ctrl+Z / Y</td><td>取消 / やり直し</td></tr>
+        <tr><td>Esc</td><td>選択解除</td></tr>
+      </table>
     </div>
     <div id="scoreEditorCanvasWrap">
       <canvas id="scoreEditorCanvas"></canvas>
@@ -1042,7 +1100,6 @@
         <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
       </div>
     </div>
-    <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。「⋃ タイ」で選択中の音符と直後の同じ高さの音符をつなげます。PCでは<strong>キーボード入力</strong>(A〜G:新規音符 / 1〜7:音価 / .:付点 / -,=,0:♭♯♮ / ←→:音符移動 / ↑↓:半音移動 / Delete:削除 / Ctrl+Z:取り消し。詳しい一覧は❓から)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。<strong>入力した音は実際に鳴ります</strong>(←→↑↓で音符をたどる時も鳴るので、音を確かめながら打ち込めます。静かな場所では「🔊 音あり」ボタンでオフにできます)。コード名は<strong>「⚡ コード略記」</strong>をオンにすると、ChordWikiのコード譜エディタと同じキー割り当て(Shift不要)で入力できます。<strong>「転調」の&minus;1/+1で半音ずつ、&minus;12/+12でオクターブ単位で移調できます</strong>(音符・コード名・調号がまとめて動きます)。<strong>「🎵 フレーズ読込」</strong>で、フレーズ集に保存した譜面を読み込んで貼れます。</p>
     <div id="scorePianoKeyboard"></div>
   </div>
 
@@ -1245,6 +1302,10 @@
   const btnScoreTransposeDownOct = document.getElementById('btnScoreTransposeDownOct');
   const btnScoreTransposeUpOct = document.getElementById('btnScoreTransposeUpOct');
   const btnScoreLoadPhrase = document.getElementById('btnScoreLoadPhrase');
+  const scoreShortcutPanel = document.getElementById('scoreShortcutPanel');
+  const scoreShortcutHeader = document.getElementById('scoreShortcutHeader');
+  const btnScoreShortcutToggle = document.getElementById('btnScoreShortcutToggle');
+  const btnScoreShortcutClose = document.getElementById('btnScoreShortcutClose');
   const btnDrawPen = document.getElementById('btnDrawPen');
   const btnDrawHighlighter = document.getElementById('btnDrawHighlighter');
   const drawColorInput = document.getElementById('drawColorInput');
@@ -2933,6 +2994,7 @@
     // 幅はコンテナに合わせて決める(表示してからでないとclientWidthが0のため、
     // hiddenクラスを外した直後に測る)。鍵盤のスクロール位置も同じ理由でここで合わせる。
     scoreSystemWidth = Math.max(360, Math.min(900, scoreEditorCanvasWrap.clientWidth - 8));
+    restoreScoreShortcutPanel();
     scoreScrollPianoKeyboardToDefault();
     renderScoreCanvas();
     // 前回MIDIをオンにしていた場合、静かに再接続を試みる(既に許可済みなら
@@ -3163,6 +3225,70 @@
     updateScoreToolbarUI();
     renderScoreCanvas();
     renderScorePianoKeyboard();
+  });
+
+  // ---- ショートカット一覧パネル(2026-08-19) ----
+  // 表示するかどうか自体はCSSのメディアクエリ((hover:hover) and (pointer:fine))が
+  // 決めるので、JS側では端末判定をしない(UA判定を避ける方針)。ここでは
+  // 開閉状態と位置の記憶だけを扱う。
+  const SCORE_SHORTCUT_OPEN_KEY = 'cwlv_score_shortcut_open';
+  const SCORE_SHORTCUT_POS_KEY = 'cwlv_score_shortcut_pos';
+  function setScoreShortcutOpen(open) {
+    scoreShortcutPanel.classList.toggle('hidden', !open);
+    btnScoreShortcutToggle.classList.toggle('active', open);
+    localStorage.setItem(SCORE_SHORTCUT_OPEN_KEY, open ? '1' : '0');
+  }
+  // 既定は開いた状態(PCで初めて開いた人にショートカットの存在を知らせるため)。
+  // 一度閉じればその状態を覚える。
+  function restoreScoreShortcutPanel() {
+    setScoreShortcutOpen(localStorage.getItem(SCORE_SHORTCUT_OPEN_KEY) !== '0');
+    try {
+      const pos = JSON.parse(localStorage.getItem(SCORE_SHORTCUT_POS_KEY) || 'null');
+      if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
+        // 前回の位置が画面外に出ないように収める(ウィンドウを小さくした場合など)。
+        const maxLeft = Math.max(0, window.innerWidth - 200);
+        const maxTop = Math.max(0, window.innerHeight - 60);
+        scoreShortcutPanel.style.right = 'auto';
+        scoreShortcutPanel.style.left = Math.min(Math.max(0, pos.left), maxLeft) + 'px';
+        scoreShortcutPanel.style.top = Math.min(Math.max(0, pos.top), maxTop) + 'px';
+      }
+    } catch (e) { /* 壊れた値なら既定位置のまま */ }
+  }
+  btnScoreShortcutToggle.addEventListener('click', () => {
+    setScoreShortcutOpen(scoreShortcutPanel.classList.contains('hidden'));
+  });
+  btnScoreShortcutClose.addEventListener('click', () => setScoreShortcutOpen(false));
+
+  // ヘッダーを掴んで移動できる(YouTube子画面と同じPointer Events自前実装)。
+  scoreShortcutHeader.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return; // 閉じるボタンはドラッグ扱いにしない
+    e.preventDefault();
+    scoreShortcutHeader.setPointerCapture(e.pointerId);
+    const rect = scoreShortcutPanel.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const startLeft = rect.left, startTop = rect.top;
+    scoreShortcutPanel.style.right = 'auto';
+    scoreShortcutPanel.style.left = startLeft + 'px';
+    scoreShortcutPanel.style.top = startTop + 'px';
+
+    const onMove = (ev) => {
+      const maxLeft = window.innerWidth - scoreShortcutPanel.offsetWidth;
+      const maxTop = window.innerHeight - scoreShortcutPanel.offsetHeight;
+      const left = Math.min(Math.max(0, startLeft + ev.clientX - startX), Math.max(0, maxLeft));
+      const top = Math.min(Math.max(0, startTop + ev.clientY - startY), Math.max(0, maxTop));
+      scoreShortcutPanel.style.left = left + 'px';
+      scoreShortcutPanel.style.top = top + 'px';
+    };
+    const onUp = () => {
+      const r = scoreShortcutPanel.getBoundingClientRect();
+      localStorage.setItem(SCORE_SHORTCUT_POS_KEY, JSON.stringify({ left: Math.round(r.left), top: Math.round(r.top) }));
+      scoreShortcutHeader.removeEventListener('pointermove', onMove);
+      scoreShortcutHeader.removeEventListener('pointerup', onUp);
+      scoreShortcutHeader.removeEventListener('pointercancel', onUp);
+    };
+    scoreShortcutHeader.addEventListener('pointermove', onMove);
+    scoreShortcutHeader.addEventListener('pointerup', onUp);
+    scoreShortcutHeader.addEventListener('pointercancel', onUp);
   });
 
   btnScoreTransposeDown.addEventListener('click', () => scoreTransposeAll(-1));
@@ -3581,7 +3707,7 @@
     if (scoreChordMode) {
       // 和音モードは単音モードの「選択中に別の音をタップ=上書き」と両立できない
       // (「直す」のか「声部を足す」のか区別が付かないため)。常に足し引きの
-      // トグル方式に統一している(#scoreEditorHintに明記)。
+      // トグル方式に統一している(詳しくはマニュアルの「+ 楽譜」の節)。
       if (scoreSelectedIndex !== null) {
         const chordEl = scoreElements[scoreSelectedIndex];
         scoreToggleChordPitch(chordEl, step, accidental);
@@ -3789,6 +3915,18 @@
   // 選択中ハイライト・黒鍵の非活性状態など動的な部分だけrenderScorePianoKeyboard()で
   // 更新する。要素ごとに絶対半音位置(absSemitone)をdatasetに持たせておき、
   // ハイライト時の一致判定に使う。
+  // タップした鍵を一瞬光らせる(2026-08-19)。連打しても前回のタイマーで途中消灯
+  // しないよう、要素ごとにタイマーIDを持たせて張り替える。
+  const SCORE_KEY_FLASH_MS = 180;
+  function flashScorePianoKey(el) {
+    el.classList.add('tapped');
+    if (el.__flashTimer) clearTimeout(el.__flashTimer);
+    el.__flashTimer = setTimeout(() => {
+      el.classList.remove('tapped');
+      el.__flashTimer = null;
+    }, SCORE_KEY_FLASH_MS);
+  }
+
   let scorePianoKeysBuilt = false;
   // ドレミ表記(白鍵の下のラベル用)。既存のSCORE_LETTER_ORDER(C~B)と対応させる。
   const SCORE_SOLFEGE_BY_LETTER = { C: 'ド', D: 'レ', E: 'ミ', F: 'ファ', G: 'ソ', A: 'ラ', B: 'シ' };
@@ -3806,6 +3944,7 @@
           el.textContent = SCORE_SOLFEGE_BY_LETTER[def.white] + oct;
           el.dataset.absSemitone = String(oct * 12 + SCORE_PIANO_WHITE_SEMITONE[def.white]);
           el.addEventListener('click', () => {
+            flashScorePianoKey(el);
             const pitch = scoreResolveWhiteKey(def.white, oct);
             scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental);
           });
@@ -3816,6 +3955,7 @@
           el.dataset.absSemitone = String(oct * 12 + SCORE_PIANO_WHITE_SEMITONE[def.black[0]] + 1);
           el.addEventListener('click', () => {
             if (el.classList.contains('disabled')) return;
+            flashScorePianoKey(el);
             const pitch = scoreResolveBlackKey({ lower: def.black[0], upper: def.black[1] }, oct);
             scoreApplyPitchFromKeyboard(pitch.step, pitch.accidental);
           });
