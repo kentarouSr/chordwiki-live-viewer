@@ -450,6 +450,13 @@
     transition: background 0.2s, transform 0.2s;
   }
   #viewer.memo-edit-mode .memo-add-todo { display: block; }
+  /* 楽譜メモを開き直すボタン(2026-08-19)。削除(右上)・ToDo(左上)と被らない左下に置く。 */
+  .memo-edit-score {
+    position: absolute; bottom: -10px; left: -10px; width: 22px; height: 22px;
+    border-radius: 50%; border: none; background: #2b6cb0; color: #fff;
+    font-size: 13px; line-height: 1; cursor: pointer; display: none;
+  }
+  #viewer.memo-edit-mode .memo-edit-score { display: block; }
   .memo-add-todo.done-flash { background: #6cf; transform: scale(1.3); }
   /* ToDoからジャンプしてきた時に対象のメモを一時的に目立たせる */
   .memo.memo-highlight { outline: 3px solid #6cf; outline-offset: 3px; animation: memoHighlightPulse 1.4s ease-out 2; }
@@ -873,9 +880,11 @@
        相対的に縮んだメモの上では巨大に見えて重なり合っていた(2026-08-19)。
        タップ target として成立する範囲で少し詰める。表示は編集モード中だけなので、
        演奏中の見た目には影響しない。 */
-    .memo-delete, .memo-add-todo {
-      width: 18px; height: 18px; top: -8px; font-size: 11px;
+    .memo-delete, .memo-add-todo, .memo-edit-score {
+      width: 18px; height: 18px; font-size: 11px;
     }
+    .memo-delete, .memo-add-todo { top: -8px; }
+    .memo-edit-score { bottom: -8px; left: -8px; }
     .memo-delete { right: -8px; }
     .memo-add-todo { left: -8px; }
 
@@ -2279,6 +2288,20 @@
         img.style.width = Math.round(clamp((memo.width || 160) * memoScale, 40, 600)) + 'px';
         el.appendChild(img);
         el.appendChild(makeResizeHandle(memo, img, 40, 600, null, cssWidth));
+        // 楽譜データを持っている画像メモは、開き直して編集できる(2026-08-19〜)
+        if (memo.scoreData) {
+          const editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.className = 'memo-edit-score';
+          editBtn.textContent = '♪';
+          editBtn.title = 'この楽譜を編集する';
+          editBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+          editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openScoreEditor(memo.x, memo.y, { memoId: memo.id, ...memo.scoreData });
+          });
+          el.appendChild(editBtn);
+        }
       }
 
       const delBtn = document.createElement('button');
@@ -2680,13 +2703,42 @@
     imagePickerHintEl.classList.add('hidden');
   });
 
-  async function addImageMemoFromFile(file, x, y) {
+  // scoreDataを渡すと、貼り付けた画像に「元の楽譜データ」を添えて保存する
+  // (2026-08-19〜)。それまでは画像化した時点で音符データが失われ、後から直したい
+  // 時は最初から打ち直すしかなかった。添えておけば、メモをタップして開き直せる。
+  async function addImageMemoFromFile(file, x, y, scoreData) {
     const data = await file.arrayBuffer();
-    await addMemo({
+    const memo = {
       id: crypto.randomUUID(), type: 'image', x, y,
       data, mimeType: file.type || 'image/png', width: 160, baseWidth: contentWidthCss(),
       createdAt: Date.now(), updatedAt: Date.now(),
-    });
+    };
+    if (scoreData) memo.scoreData = scoreData;
+    await addMemo(memo);
+    return memo;
+  }
+
+  // 楽譜エディタの今の状態を、後から開き直せる形にまとめる。
+  function currentScoreDataSnapshot() {
+    return {
+      elements: cloneScoreElements(scoreElements),
+      timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths,
+      clef: scoreClef, pickupUnits: scorePickupUnits,
+    };
+  }
+
+  // 既存の画像メモを、新しく描き直した楽譜で差し替える(再編集の保存先)。
+  async function replaceScoreMemo(memoId, blob, scoreData) {
+    const memo = currentMemos.find((m) => m.id === memoId);
+    if (!memo) return false;
+    memo.data = await blob.arrayBuffer();
+    memo.mimeType = 'image/png';
+    memo.scoreData = scoreData;
+    memo.updatedAt = Date.now();
+    // 幅は元のまま保つ(再編集のたびに大きさが変わると位置合わせが崩れるため)
+    await saveMemos();
+    renderMemos();
+    return true;
   }
 
   // クリップボードから画像を貼り付け(コピペ対応)。tap→種類選択で位置決め済みの時だけ有効。
@@ -3009,8 +3061,12 @@
   // 記号ごとに専用グリフへ厳密変換する複雑なパーサーは組まず、上付きテキストとして
   // そのまま描画する(ChordSymbolはaddTextSuperscriptに△や♭等のUnicode文字を渡しても
   // そのまま綺麗に描画できることをヘッドレスブラウザで確認済み)。
+  // コード名の文字サイズ。VexFlowの既定は五線に対して小さめで、コード譜に貼った時に
+  // 読みづらいという指摘があったため大きくしている(2026-08-19)。
+  const SCORE_CHORD_FONT_SIZE = Math.round(SCORE_STAVE_LINE_SPACING * 1.5);
   function scoreBuildChordSymbol(VF, text) {
     const cs = new VF.ChordSymbol().setVertical(VF.ChordSymbolVerticalJustify.TOP);
+    cs.setFontSize(SCORE_CHORD_FONT_SIZE);
     const m = String(text).match(/^([A-Ga-g])([#♯b♭]?)(.*)$/);
     if (!m) { cs.addText(String(text)); return cs; }
     cs.addText(m[1].toUpperCase() + m[2]);
@@ -3143,6 +3199,9 @@
   // 2つの出口で使い回すため、完了ボタンの動作だけをこのモードで切り替える。
   let scoreEditorMode = 'memo';
   let scoreEditingPhraseId = null; // 'phrase'モードで既存フレーズを編集中ならそのid
+  // 既存の楽譜メモを開き直して編集中なら、その画像メモのid(2026-08-19〜)。
+  // 完了時に新規追加ではなく差し替えを行うための目印。
+  let scoreEditingMemoId = null;
   let scoreSelectedDuration = 'quarter';
   let scorePendingDot = false;
   let scorePendingTripletCount = 0; // 3連符として残り何個入力すればグループが完成するか
@@ -3170,6 +3229,22 @@
   let scoreShowClefKey = true;
   let scoreSystemWidth = 640; // 段の幅(openScoreEditorでコンテナ幅に合わせて決め直す)
   let scoreSelectedIndex = null; // 編集用に選択中の音符・休符(scoreElementsのインデックス)。nullなら非選択
+  // 複数選択(2026-08-19〜)。Shift+クリックで範囲を選ぶ。
+  // scoreSelectedIndexは従来どおり「主となる1つ」を指し続ける(音価や♯♭の編集は
+  // これまでどおりそこに効く)。scoreSelectedRangeは削除/コピー/切り取りの対象。
+  // 単一選択の時もscoreSelectedIndexだけを入れた集合として揃えておくことで、
+  // 「選択されているか」の判定を1箇所にまとめられる。
+  let scoreSelectedRange = new Set();
+  // 切り取り/コピーした音符の控え。コード名や強弱もそのまま複製される
+  // (要素まるごとのディープコピーなので、後から仕様が増えても追従する)。
+  let scoreClipboard = [];
+  function scoreSetSelection(index) {
+    scoreSelectedIndex = index;
+    scoreSelectedRange = index === null ? new Set() : new Set([index]);
+  }
+  function scoreSelectedSorted() {
+    return Array.from(scoreSelectedRange).sort((a, b) => a - b);
+  }
   // 和音入力モード(2026-08-17〜)。単音モードは「選択中に別の音をタップ=上書き」だが、
   // 和音モードは「選択中に音をタップ=その音符へ声部を追加(既存声部を再タップなら削除)」
   // というトグル方式にしている(選択中の1つの音符の中で「直す」と「足す」を両立できない
@@ -3216,7 +3291,7 @@
     if (scoreUndoStack.length === 0) return;
     scoreRedoStack.push(cloneScoreElements(scoreElements));
     scoreElements = scoreUndoStack.pop();
-    scoreSelectedIndex = null; // 選択していた要素が履歴を跨いで同一とは限らないため単純化
+    scoreSetSelection(null); // 選択していた要素が履歴を跨いで同一とは限らないため単純化
     updateScoreToolbarUI();
     renderScoreCanvas();
   }
@@ -3224,7 +3299,7 @@
     if (scoreRedoStack.length === 0) return;
     scoreUndoStack.push(cloneScoreElements(scoreElements));
     scoreElements = scoreRedoStack.pop();
-    scoreSelectedIndex = null;
+    scoreSetSelection(null);
     updateScoreToolbarUI();
     renderScoreCanvas();
   }
@@ -3345,6 +3420,7 @@
     scorePlacementXY = (x === null || x === undefined) ? null : { x, y };
     scoreEditorMode = o.mode || 'memo';
     scoreEditingPhraseId = o.phrase ? o.phrase.id : null;
+    scoreEditingMemoId = o.memoId || null;
     const src = o.phrase || o;
     scoreElements = src.elements ? cloneScoreElements(src.elements) : [];
     scoreUndoStack = [];
@@ -3356,7 +3432,7 @@
     scorePendingChord = null;
     scoreEnharmonicMode = 'auto';
     btnScoreEnharmonic.classList.remove('mode-sharp', 'mode-flat');
-    scoreSelectedIndex = null;
+    scoreSetSelection(null);
     scoreChordMode = false;
     btnScoreChordMode.classList.remove('active');
     btnScoreChordMode.innerHTML = '&#9834; 単音';
@@ -3387,7 +3463,7 @@
     scorePianoKeysBuilt = false;      // 音域が変わっている可能性があるので作り直す
     scorePianoKeyboardEl.innerHTML = '';
     // 完了ボタンのラベルを出口に合わせる(貼るのか保存するのかを取り違えないように)。
-    btnScoreDone.textContent = scoreEditorMode === 'phrase' ? '保存' : '完了';
+    btnScoreDone.textContent = scoreEditorMode === 'phrase' ? '保存' : (scoreEditingMemoId ? '更新' : '完了');
     updateScoreToolbarUI();
     scoreEditorOverlay.classList.remove('hidden');
     // 幅はコンテナに合わせて決める(表示してからでないとclientWidthが0のため、
@@ -3582,7 +3658,7 @@
     // 意味が変わる「選択中にタップ」の挙動が混線するので両方クリアする
     // (ドラッグは通常ツールバー操作と同時に起きないが、タブレットでのペン+指の
     // 同時操作のような稀なケースへの防御、設計レビューで指摘された点)。
-    scoreSelectedIndex = null;
+    scoreSetSelection(null);
     scorePitchDrag = null;
     // 和音モードと挿入モードは"選択中"の意味を奪い合うので同時にオンにしない
     if (scoreChordMode) setScoreInsertMode(false);
@@ -3601,7 +3677,7 @@
       scoreChordMode = false;
       btnScoreChordMode.classList.remove('active');
       btnScoreChordMode.innerHTML = '&#9834; 単音';
-      scoreSelectedIndex = null;
+      scoreSetSelection(null);
       renderScoreCanvas();
     }
     updateScoreToolbarUI();
@@ -3730,7 +3806,7 @@
     scoreKeySelect.value = String(scoreKeyFifths);
     scoreClefSelect.value = scoreClef;
     scorePickupSelect.value = String(scorePickupUnits);
-    scoreSelectedIndex = null;
+    scoreSetSelection(null);
     scoreRebuildPianoKeyboardForClef(); // 音域が変わるので鍵盤を作り直す
     updateScoreToolbarUI();
     renderScoreCanvas();
@@ -3869,7 +3945,7 @@
     pushScoreUndoSnapshot();
     if (scoreSelectedIndex !== null) {
       scoreElements.splice(scoreSelectedIndex, 1);
-      scoreSelectedIndex = null;
+      scoreSetSelection(null);
     } else {
       scoreElements.pop();
     }
@@ -3881,7 +3957,7 @@
     if (!confirm('全ての音符・休符を削除しますか？')) return;
     pushScoreUndoSnapshot();
     scoreElements = [];
-    scoreSelectedIndex = null;
+    scoreSetSelection(null);
     updateScoreToolbarUI();
     renderScoreCanvas();
   });
@@ -3901,12 +3977,20 @@
     if (scoreElements.length === 0) {
       if (!confirm('音符が1つもありません。空のまま挿入しますか？')) return;
     }
-    const { x, y } = scorePlacementXY;
     await renderScoreCanvas();
     const blob = await scoreCanvasToBlob();
+    const snapshot = currentScoreDataSnapshot();
+    const editingId = scoreEditingMemoId;
+    const place = scorePlacementXY;
     closeScoreEditor();
+    if (editingId) {
+      // 既存の楽譜メモを開き直して直した場合は、その場で差し替える
+      const ok = await replaceScoreMemo(editingId, blob, snapshot);
+      if (ok) return;
+      // 差し替え先が見つからない(削除された等)場合は新規として置く
+    }
     const file = new File([blob], 'score.png', { type: 'image/png' });
-    await addImageMemoFromFile(file, x, y);
+    await addImageMemoFromFile(file, place ? place.x : 0.1, place ? place.y : 0.1, snapshot);
   });
 
   // 新しい音符は常に末尾(＝現在最後の段)に追記される。段が複数あるとき、
@@ -4003,6 +4087,7 @@
       scorePitchDrag = {
         srcIndex: hitSrcIndex,
         pointerId: e.pointerId,
+        shiftKey: e.shiftKey,
         startY: tapY,
         moved: false,
         baseY: stave ? stave.getYForLine(4) : null,
@@ -4028,7 +4113,7 @@
           el.pitches.forEach((p) => { p.step += delta; });
         }
       }
-      scoreSelectedIndex = null;
+      scoreSetSelection(null);
       updateScoreToolbarUI();
       renderScoreCanvas();
       return;
@@ -4058,7 +4143,7 @@
     const delta = step - elFirstStep(el);
     el.pitches.forEach((p) => { p.step += delta; });
     // ドラッグ中の音符は選択状態にして青く見せる(今どれを動かしているか分かるように)
-    scoreSelectedIndex = scorePitchDrag.srcIndex;
+    scoreSetSelection(scorePitchDrag.srcIndex);
     renderScoreCanvas();
   });
 
@@ -4069,10 +4154,17 @@
     if (drag.moved) {
       // ドラッグで音高を変えた後は、その音符を選択したまま残す
       // (続けて音価や♯♭も直せるように)
-      scoreSelectedIndex = drag.srcIndex;
+      scoreSetSelection(drag.srcIndex);
+    } else if (drag.shiftKey && scoreSelectedIndex !== null) {
+      // Shift+タップ: 主選択から今タップした音符までをまとめて選ぶ。
+      // 主選択自体は動かさない(音価等の編集先が飛ばないように)。
+      const a = Math.min(scoreSelectedIndex, drag.srcIndex);
+      const b = Math.max(scoreSelectedIndex, drag.srcIndex);
+      scoreSelectedRange = new Set();
+      for (let i = a; i <= b; i++) scoreSelectedRange.add(i);
     } else {
       // 指を動かさずに離した=タップ。従来どおり選択/選択解除のトグル
-      scoreSelectedIndex = scoreSelectedIndex === drag.srcIndex ? null : drag.srcIndex;
+      scoreSetSelection(scoreSelectedIndex === drag.srcIndex ? null : drag.srcIndex);
     }
     updateScoreToolbarUI();
     renderScoreCanvas();
@@ -4263,7 +4355,7 @@
       });
       // 和音モードは入力元(ピアノ鍵盤/文字キー/MIDI)を問わず常に自動選択する。
       // そうしないと次の入力が「声部を追加」ではなく「新しい音符」になってしまう。
-      scoreSelectedIndex = scoreElements.length - 1;
+      scoreSetSelection(scoreElements.length - 1);
       scorePlayPitches([{ step, accidental }]);
       updateScoreToolbarUI();
       renderScoreCanvas();
@@ -4306,9 +4398,55 @@
     });
     scorePlayPitches([{ step, accidental }]);
     if (opts && opts.selectAfterAdd) {
-      scoreSelectedIndex = scoreElements.length - 1;
+      scoreSetSelection(scoreElements.length - 1);
       updateScoreToolbarUI();
     }
+    renderScoreCanvas();
+  }
+
+  // ==================================================
+  // 複数選択した音符の削除・コピー・切り取り・貼り付け(2026-08-19〜)
+  // ==================================================
+  // 対象はscoreSelectedRange(Shift+クリックで作った範囲)。単一選択の時も
+  // その1つだけが入った集合なので、同じ処理で扱える。
+  // 複製は要素まるごとのディープコピーなので、コード名・強弱・奏法などもそのまま
+  // 一緒に運ばれる(項目が増えても追従する)。
+  function scoreDeleteSelected() {
+    const idxs = scoreSelectedSorted();
+    if (idxs.length === 0) return;
+    pushScoreUndoSnapshot();
+    const del = new Set(idxs);
+    scoreElements = scoreElements.filter((_, i) => !del.has(i));
+    scoreSetSelection(null);
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+  function scoreCopySelected() {
+    const idxs = scoreSelectedSorted();
+    if (idxs.length === 0) return false;
+    scoreClipboard = idxs.map((i) => JSON.parse(JSON.stringify(scoreElements[i])));
+    // 範囲の最後の音符に付いていたタイ/スラーは、貼り付け先では相手が居ないので外す
+    const last = scoreClipboard[scoreClipboard.length - 1];
+    if (last) { last.tiedToNext = false; last.slurToNext = false; }
+    return true;
+  }
+  function scoreCutSelected() {
+    if (!scoreCopySelected()) return;
+    scoreDeleteSelected();
+  }
+  function scorePasteClipboard() {
+    if (scoreClipboard.length === 0) return;
+    pushScoreUndoSnapshot();
+    const copies = scoreClipboard.map((el) => JSON.parse(JSON.stringify(el)));
+    // 貼り付け位置: 選択中ならその直後、未選択なら末尾
+    const idxs = scoreSelectedSorted();
+    const at = idxs.length > 0 ? idxs[idxs.length - 1] + 1 : scoreElements.length;
+    scoreElements.splice(at, 0, ...copies);
+    // 貼り付けた範囲をそのまま選択状態にして、続けて移動・削除しやすくする
+    scoreSelectedIndex = at;
+    scoreSelectedRange = new Set();
+    for (let k = at; k < at + copies.length; k++) scoreSelectedRange.add(k);
+    updateScoreToolbarUI();
     renderScoreCanvas();
   }
 
@@ -4388,16 +4526,16 @@
     if (idxs.length === 0) return;
     const curPos = scoreSelectedIndex === null ? -1 : idxs.indexOf(scoreSelectedIndex);
     if (curPos === -1) {
-      scoreSelectedIndex = idxs[delta > 0 ? 0 : idxs.length - 1];
+      scoreSetSelection(idxs[delta > 0 ? 0 : idxs.length - 1]);
     } else {
       const nextPos = curPos + delta;
       // 端まで来たら選択解除する(「入力→→で確定して次の音を入力」という流れの
       // ため、末尾の音符で→を押すと選択が外れ、次の文字キーが新規追加になる。
       // 従来はここでクランプして同じ音符のまま留まっていた、2026-08-17変更)。
       if (nextPos < 0 || nextPos >= idxs.length) {
-        scoreSelectedIndex = null;
+        scoreSetSelection(null);
       } else {
-        scoreSelectedIndex = idxs[nextPos];
+        scoreSetSelection(idxs[nextPos]);
       }
     }
     // 選択が移った先の音を鳴らす(←→で音符をたどりながら音を確認できるように)。
@@ -4409,7 +4547,7 @@
   function scoreSelectEdge(first) {
     const idxs = scoreNoteIndices();
     if (idxs.length === 0) return;
-    scoreSelectedIndex = first ? idxs[0] : idxs[idxs.length - 1];
+    scoreSetSelection(first ? idxs[0] : idxs[idxs.length - 1]);
     scorePlayPitches(scoreElements[scoreSelectedIndex].pitches);
     updateScoreToolbarUI();
     renderScoreCanvas();
@@ -4428,6 +4566,17 @@
       const k = e.key.toLowerCase();
       if (k === 'z' && !e.shiftKey) { e.preventDefault(); scoreUndo(); return; }
       if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); scoreRedo(); return; }
+      if (k === 'c') { e.preventDefault(); scoreCopySelected(); return; }
+      if (k === 'x') { e.preventDefault(); scoreCutSelected(); return; }
+      if (k === 'v') { e.preventDefault(); scorePasteClipboard(); return; }
+      if (k === 'a') {
+        e.preventDefault(); // 全選択(まるごとコピー/削除したい時)
+        if (scoreElements.length === 0) return;
+        scoreSelectedIndex = 0;
+        scoreSelectedRange = new Set(scoreElements.map((_, i) => i));
+        updateScoreToolbarUI(); renderScoreCanvas();
+        return;
+      }
       return; // 他のCtrl/Cmd併用キーはブラウザ標準の挙動に任せる
     }
     if (e.altKey) return;
@@ -4456,13 +4605,18 @@
     if (key === 'ArrowDown') { e.preventDefault(); scoreShiftSelectedPitch(e.shiftKey ? -12 : -1); return; }
     if (key === 'Home') { e.preventDefault(); scoreSelectEdge(true); return; }
     if (key === 'End') { e.preventDefault(); scoreSelectEdge(false); return; }
-    if (key === 'Delete' || key === 'Backspace') { e.preventDefault(); btnScoreUndo.click(); return; }
+    if (key === 'Delete' || key === 'Backspace') {
+      e.preventDefault();
+      // 複数選んでいる時はまとめて削除。1つ以下なら従来どおりのボタン動作
+      if (scoreSelectedRange.size > 1) scoreDeleteSelected(); else btnScoreUndo.click();
+      return;
+    }
     if (key === 'Escape') {
       // 選択解除のみ行い、編集画面自体は閉じない(誤操作で作業中の譜面を
       // 失わないようにするため。閉じる操作は明示的にキャンセル/完了ボタンで行う)。
       if (scoreSelectedIndex !== null) {
         e.preventDefault();
-        scoreSelectedIndex = null;
+        scoreSetSelection(null);
         updateScoreToolbarUI();
         renderScoreCanvas();
       }
@@ -4628,7 +4782,7 @@
       // 文字キー入力にはこれに相当する「離した」シグナルが無いのでMIDI限定
       // (2026-08-17〜)。
       if (scoreChordMode && scoreMidiHeldNotes.size === 0) {
-        scoreSelectedIndex = null;
+        scoreSetSelection(null);
         updateScoreToolbarUI(); // 内部でrenderScorePianoKeyboard()も呼ばれる
         renderScoreCanvas();
       } else {
@@ -4826,7 +4980,7 @@
       }
       // 編集用に選択中の音符は色を変えて分かるようにする(タップした音符を
       // 選び直して音高等を修正できる機能、2026-08-15)。
-      if (el.srcIndex === scoreSelectedIndex) {
+      if (scoreSelectedRange.has(el.srcIndex)) {
         note.setStyle({ fillStyle: '#2b6cb0', strokeStyle: '#2b6cb0' });
       }
       note.__scoreQueueIndex = idx; // タイ作成時に元のqueueインデックスへ逆引きするため
@@ -7379,7 +7533,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260819-1954';
+  const APP_BUILD = '20260819-2013';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -8371,6 +8525,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
