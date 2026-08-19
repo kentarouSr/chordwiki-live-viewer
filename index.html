@@ -433,10 +433,20 @@
 
   /* --- YouTube子画面(譜面を見ながら参考動画を再生するための浮遊パネル) --- */
   #youtubePanel {
-    position: absolute; top: 16px; right: 16px; width: 240px; z-index: 6;
+    position: absolute; top: 16px; right: 16px; width: 240px; min-width: 200px; max-width: 90vw; z-index: 6;
     background: rgba(17,17,17,0.92); border: 1px solid #333; border-radius: 10px;
     overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   }
+  /* iOSのタッチ操作でも掴めるよう、CSSのresizeプロパティ(マウスのみ対応)ではなく
+     Pointer Eventsで自前実装したドラッグハンドル。#youtubePanelHeaderの移動ドラッグと
+     同じ実装パターン。 */
+  #youtubePanelResizeHandle {
+    position: absolute; right: 2px; bottom: 2px; width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: #999; cursor: nwse-resize; touch-action: none;
+    background: rgba(0,0,0,0.3); border-radius: 4px; z-index: 1;
+  }
+  #youtubePanel.hidden #youtubePanelResizeHandle { display: none; }
   #youtubePanel.hidden { display: none; }
   #youtubePanelHeader {
     display: flex; align-items: center; gap: 6px; padding: 6px 8px;
@@ -458,8 +468,9 @@
     background: #6cf; color: #111; font-weight: bold; cursor: pointer;
   }
   #youtubeEmptyState.hidden { display: none; }
-  #youtubePlayerHost { width: 240px; height: 135px; background: #000; }
+  #youtubePlayerHost { width: 100%; aspect-ratio: 16 / 9; height: auto; background: #000; }
   #youtubePlayerHost.hidden { display: none; }
+  #youtubePlayerHost iframe { width: 100% !important; height: 100% !important; }
   #youtubePanelControls {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px;
     background: #1c1c1c;
@@ -782,6 +793,7 @@
       </div>
       <div id="youtubeEmptyState">
         <p>この曲の動画URLが未設定です</p>
+        <button id="btnYoutubeSearch">&#128269; YouTubeで検索</button>
         <button id="btnYoutubeSetUrl">YouTubeのURLを設定</button>
       </div>
       <div id="youtubePlayerHost" class="hidden"></div>
@@ -793,6 +805,7 @@
         <span id="youtubeRewindSecLabel">5秒</span>
         <button id="btnYoutubeRewindSecPlus">+</button>
       </div>
+      <div id="youtubePanelResizeHandle" title="ドラッグして幅を変更">&#10530;</div>
     </div>
     <div id="toolbar">
       <button id="btnToolbarMinimize" title="バーを最小化">&#9207;</button>
@@ -1091,6 +1104,7 @@
   const btnYoutubeChangeUrl = document.getElementById('btnYoutubeChangeUrl');
   const btnYoutubeClose = document.getElementById('btnYoutubeClose');
   const youtubeEmptyState = document.getElementById('youtubeEmptyState');
+  const btnYoutubeSearch = document.getElementById('btnYoutubeSearch');
   const btnYoutubeSetUrl = document.getElementById('btnYoutubeSetUrl');
   const youtubePlayerHost = document.getElementById('youtubePlayerHost');
   const youtubePanelControls = document.getElementById('youtubePanelControls');
@@ -1100,6 +1114,7 @@
   const btnYoutubeRewindSecMinus = document.getElementById('btnYoutubeRewindSecMinus');
   const btnYoutubeRewindSecPlus = document.getElementById('btnYoutubeRewindSecPlus');
   const youtubeRewindSecLabel = document.getElementById('youtubeRewindSecLabel');
+  const youtubePanelResizeHandle = document.getElementById('youtubePanelResizeHandle');
 
   // ---- 状態 ----
   let contentHeight = 0;   // タイル全体のCSS高さ(ズーム後の実際の高さ)
@@ -1116,6 +1131,7 @@
   let currentPdfDoc = null;     // kind==='pdf' 用
   let currentSongId = null;     // IndexedDBに保存されている曲のid(未保存時はnull)
   let currentSongUuid = null;   // 開いている曲のuuid(ToDo↔メモの紐付け先特定に使う)
+  let currentSongName = null;   // YouTube自動検索のクエリに使う曲名
   let currentMemos = [];        // 開いている曲のメモ配列
   let currentBpm = null;        // 開いている曲のBPM(未設定はnull)
   let currentYoutubeUrl = null; // 開いている曲の参考動画URL(未設定はnull)
@@ -3989,6 +4005,20 @@
     youtubePanelControls.classList.toggle('hidden', !hasUrl);
   }
 
+  // 動画URL未設定の曲向け。曲名をそのまま検索語にしてYouTubeの検索結果ページを
+  // 新しいタブで開く(検索結果ページは埋め込み(iframe)ができない仕様のため新規タブ)。
+  function openYoutubeSearch() {
+    const q = currentSongName || '';
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+    window.open(url, '_blank', 'noopener');
+  }
+  btnYoutubeSearch.addEventListener('click', openYoutubeSearch);
+
+  // 動画パネルを開いた時、URL未設定ならその場でYouTube検索を自動で開く。
+  // パネルの開閉を繰り返すたびに新しいタブが何度も開かないよう、同じ曲では
+  // 一度だけに限定する(URLを設定するか曲を切り替えるまで再度は開かない)。
+  let youtubeAutoSearchedForSongId = null;
+
   async function ensureYtPlayer() {
     if (ytPlayer || !currentYoutubeUrl) return;
     const videoId = extractYoutubeId(currentYoutubeUrl);
@@ -4034,7 +4064,12 @@
     if (opening) {
       renderYoutubePanelState();
       setRewindSec(getRewindSec());
-      await ensureYtPlayer();
+      if (currentYoutubeUrl) {
+        await ensureYtPlayer();
+      } else if (youtubeAutoSearchedForSongId !== currentSongId) {
+        youtubeAutoSearchedForSongId = currentSongId;
+        openYoutubeSearch();
+      }
     }
   });
 
@@ -4107,6 +4142,39 @@
     youtubePanelHeader.addEventListener('pointermove', onMove);
     youtubePanelHeader.addEventListener('pointerup', onUp);
     youtubePanelHeader.addEventListener('pointercancel', onUp);
+  });
+
+  // 動画パネルの幅をドラッグで変更する(CSSのresizeプロパティはiOS Safariで
+  // ハンドルが出ないため、ヘッダーの移動ドラッグと同じPointer Events自前実装で揃える)。
+  // 高さは#youtubePlayerHostのaspect-ratioで動画の縦横比に追従するので、
+  // 幅だけ変えられれば十分。選んだ幅は端末に記憶し、次回起動時にも復元する。
+  const YT_PANEL_WIDTH_KEY = 'cwlv_yt_panel_width';
+  (() => {
+    const saved = parseInt(localStorage.getItem(YT_PANEL_WIDTH_KEY), 10);
+    if (Number.isFinite(saved) && saved > 0) youtubePanel.style.width = saved + 'px';
+  })();
+  youtubePanelResizeHandle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    youtubePanelResizeHandle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = youtubePanel.getBoundingClientRect().width;
+    const maxWidth = window.innerWidth - 32;
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX;
+      const newWidth = Math.min(Math.max(200, startWidth + dx), maxWidth);
+      youtubePanel.style.width = newWidth + 'px';
+    };
+    const onUp = () => {
+      localStorage.setItem(YT_PANEL_WIDTH_KEY, String(Math.round(youtubePanel.getBoundingClientRect().width)));
+      youtubePanelResizeHandle.removeEventListener('pointermove', onMove);
+      youtubePanelResizeHandle.removeEventListener('pointerup', onUp);
+      youtubePanelResizeHandle.removeEventListener('pointercancel', onUp);
+    };
+    youtubePanelResizeHandle.addEventListener('pointermove', onMove);
+    youtubePanelResizeHandle.addEventListener('pointerup', onUp);
+    youtubePanelResizeHandle.addEventListener('pointercancel', onUp);
   });
 
   // ==================================================
@@ -6124,6 +6192,7 @@
     resetYoutubePanelForSongSwitch();
     currentSongId = song.id;
     currentSongUuid = song.uuid;
+    currentSongName = song.name;
     speed = song.speed || DEFAULT_SPEED;
     currentMemos = song.memos || [];
     currentBpm = song.bpm ?? null;
@@ -6175,6 +6244,7 @@
     currentPdfDoc = null;
     currentSongId = null;
     currentSongUuid = null;
+    currentSongName = null;
     currentMemos = [];
     currentBpm = null;
     currentYoutubeUrl = null;
