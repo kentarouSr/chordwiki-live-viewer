@@ -570,6 +570,56 @@
   #zoomLabel { font-size: 12px; color: #ccc; min-width: 38px; text-align: center; }
   /* 演奏モードでは .appModeEditOnly が消えるので、この指定だけで両立する */
 
+  /* --- 音源パネル(2026-08-19)。YouTubeの広告やログインの制約を避けたい場合に、
+     自分で用意した音源ファイルを端末内に持って再生する。動画パネルと同じ
+     浮遊パネルの作りに揃えている。 --- */
+  #audioPanel {
+    position: absolute; z-index: 6; width: 260px; max-width: 92vw;
+    top: max(60px, calc(env(safe-area-inset-top) + 52px));
+    left: max(16px, calc(env(safe-area-inset-left) + 8px));
+    background: rgba(17,17,17,0.94); border: 1px solid #333; border-radius: 10px;
+    overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  #audioPanel.hidden { display: none; }
+  #audioPanelHeader {
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+    background: #1c1c1c; cursor: grab; touch-action: none;
+  }
+  #audioPanelHeader:active { cursor: grabbing; }
+  #audioPanelTitle { flex: 1; font-size: 11px; color: #999; }
+  #audioPanelHeader button {
+    font-size: 12px; padding: 4px 8px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #audioEmptyState { padding: 14px; text-align: center; }
+  #audioEmptyState p { font-size: 12px; color: #aaa; margin: 0 0 8px; }
+  #audioEmptyState button {
+    font-size: 13px; padding: 8px 12px; border-radius: 8px; border: none;
+    background: #6cf; color: #111; font-weight: bold; cursor: pointer;
+  }
+  #audioEmptyState.hidden { display: none; }
+  #audioPlayerBody { padding: 8px; }
+  #audioPlayerBody.hidden { display: none; }
+  #audioFileName {
+    font-size: 11px; color: #bbb; margin-bottom: 6px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #audioSeek { width: 100%; }
+  #audioTimeRow { text-align: center; }
+  #audioTime { font-size: 11px; color: #ccc; font-variant-numeric: tabular-nums; }
+  #audioControls, #audioControls2, #audioLoopControls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px;
+  }
+  #audioControls button, #audioControls2 button, #audioLoopControls button {
+    font-size: 12px; padding: 6px 8px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #audioLoopControls button.active { background: #6cf; color: #111; font-weight: bold; }
+  #audioLoopLabel { flex: 1; min-width: 0; font-size: 11px; color: #ccc; }
+  #audioRateLabel { font-size: 11px; color: #ccc; }
+  #audioRate { font-size: 11px; background: #1c1c1c; color: #eee; border: 1px solid #333; border-radius: 5px; }
+  #audioFileInput { display: none; }
+
   /* --- YouTube子画面(譜面を見ながら参考動画を再生するための浮遊パネル) --- */
   #youtubePanel {
     position: absolute; width: 240px; min-width: 200px; max-width: 90vw; z-index: 6;
@@ -1046,6 +1096,42 @@
       <span id="zoomLabel">100%</span>
       <button id="btnZoomIn" title="拡大">+</button>
     </div>
+    <div id="audioPanel" class="hidden">
+      <div id="audioPanelHeader">
+        <span id="audioPanelTitle">&#10021; 音源</span>
+        <button id="btnAudioClose">&times;</button>
+      </div>
+      <div id="audioEmptyState">
+        <p>この曲の音源が未登録です</p>
+        <button id="btnAudioPick">音源ファイルを選ぶ</button>
+      </div>
+      <div id="audioPlayerBody" class="hidden">
+        <div id="audioFileName"></div>
+        <input id="audioSeek" type="range" min="0" max="1000" value="0">
+        <div id="audioTimeRow"><span id="audioTime">0:00 / 0:00</span></div>
+        <div id="audioControls">
+          <button id="btnAudioBack">&#9664; 戻る</button>
+          <button id="btnAudioPlay">&#9654;</button>
+          <button id="btnAudioFwd">進む &#9654;</button>
+        </div>
+        <div id="audioLoopControls">
+          <button id="btnAudioLoopA" title="今の再生位置を繰り返しの開始点にする">A</button>
+          <button id="btnAudioLoopB" title="今の再生位置を繰り返しの終了点にする">B</button>
+          <span id="audioLoopLabel">A-B: 未設定</span>
+          <button id="btnAudioLoopClear" title="繰り返しを解除">&#10006;</button>
+        </div>
+        <div id="audioControls2">
+          <label id="audioRateLabel">速さ <select id="audioRate">
+            <option value="0.5">0.5x</option><option value="0.75">0.75x</option>
+            <option value="1" selected>1x</option><option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+          </select></label>
+          <button id="btnAudioReplace">差し替え</button>
+          <button id="btnAudioRemove">&#128465; 削除</button>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="audioFileInput" accept="audio/*">
     <div id="youtubePanel" class="hidden">
       <div id="youtubePanelHeader">
         <span id="youtubePanelTitle">&#10021; ここをドラッグで移動</span>
@@ -1089,6 +1175,7 @@
         <button id="btnDrawPen" class="appModeEditOnly">&#9998; ペン</button>
         <button id="btnMemoEdit" class="appModeEditOnly">&#128221; メモ</button>
         <button id="btnToggleYoutube" class="appModeEditOnly">&#127909; 動画</button>
+        <button id="btnToggleAudio" class="appModeEditOnly" title="この曲の音源ファイルを再生する(端末内に保存されます)">&#127925; 音源</button>
       </div>
       <div class="toolbarGroup">
         <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
@@ -1475,6 +1562,27 @@
   const btnZoomOut = document.getElementById('btnZoomOut');
   const zoomLabel = document.getElementById('zoomLabel');
   const btnToggleYoutube = document.getElementById('btnToggleYoutube');
+  const btnToggleAudio = document.getElementById('btnToggleAudio');
+  const audioPanel = document.getElementById('audioPanel');
+  const audioPanelHeader = document.getElementById('audioPanelHeader');
+  const btnAudioClose = document.getElementById('btnAudioClose');
+  const audioEmptyState = document.getElementById('audioEmptyState');
+  const btnAudioPick = document.getElementById('btnAudioPick');
+  const audioPlayerBody = document.getElementById('audioPlayerBody');
+  const audioFileName = document.getElementById('audioFileName');
+  const audioSeek = document.getElementById('audioSeek');
+  const audioTime = document.getElementById('audioTime');
+  const btnAudioBack = document.getElementById('btnAudioBack');
+  const btnAudioPlay = document.getElementById('btnAudioPlay');
+  const btnAudioFwd = document.getElementById('btnAudioFwd');
+  const btnAudioLoopA = document.getElementById('btnAudioLoopA');
+  const btnAudioLoopB = document.getElementById('btnAudioLoopB');
+  const btnAudioLoopClear = document.getElementById('btnAudioLoopClear');
+  const audioLoopLabel = document.getElementById('audioLoopLabel');
+  const audioRate = document.getElementById('audioRate');
+  const btnAudioReplace = document.getElementById('btnAudioReplace');
+  const btnAudioRemove = document.getElementById('btnAudioRemove');
+  const audioFileInput = document.getElementById('audioFileInput');
   const youtubePanel = document.getElementById('youtubePanel');
   const youtubePanelHeader = document.getElementById('youtubePanelHeader');
   const btnYoutubeChangeUrl = document.getElementById('btnYoutubeChangeUrl');
@@ -1574,7 +1682,7 @@
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
   // ==================================================
   const DB_NAME = 'chordwiki-live-viewer';
-  const DB_VERSION = 7;
+  const DB_VERSION = 8;
   const STORE = 'songs';
   const SETLIST_STORE = 'setlists';
   const TODO_STORE = 'practiceTodos'; // アプリ全体で1レコードのみ(id: 'global')固定で使う
@@ -1582,6 +1690,10 @@
   const BACKUP_STORE = 'localBackup'; // 自動ローカルバックアップ用。アプリ全体で1レコードのみ(id: 'local')、常に上書き(v5で追加)
   const LINK_STORE = 'musicLinks';    // 音楽関連サイトのリンク集。アプリ全体で1レコードのみ(id: 'global')固定(v6で追加)
   const PHRASE_STORE = 'phrases';     // フレーズ集(楽譜エディタで作った譜面そのもの)。アプリ全体で1レコードのみ(id: 'global')固定(v7で追加)
+  // 曲ごとの音源ファイル(v8で追加)。1曲5〜10MBと大きいので曲レコード本体には
+  // 入れず、songUuidをキーにした別ストアに置く(曲一覧の読み込みを重くしないため)。
+  // クラウド同期はしない(端末内のみ)。R2の容量と同期時間に見合わないため。
+  const AUDIO_STORE = 'songAudio';
   let dbPromise = null;
 
   function openDb() {
@@ -1610,6 +1722,9 @@
         }
         if (!db.objectStoreNames.contains(PHRASE_STORE)) {
           db.createObjectStore(PHRASE_STORE, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(AUDIO_STORE)) {
+          db.createObjectStore(AUDIO_STORE, { keyPath: 'songUuid' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -1787,6 +1902,36 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(PHRASE_STORE, 'readwrite');
       const req = tx.objectStore(PHRASE_STORE).put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // 曲ごとの音源(songUuidをキーにした別ストア)。端末内のみで同期はしない。
+  async function audioGet(songUuid) {
+    if (!songUuid) return null;
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE, 'readonly');
+      const req = tx.objectStore(AUDIO_STORE).get(songUuid);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function audioPut(record) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE, 'readwrite');
+      const req = tx.objectStore(AUDIO_STORE).put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function audioDelete(songUuid) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE, 'readwrite');
+      const req = tx.objectStore(AUDIO_STORE).delete(songUuid);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -7385,6 +7530,7 @@
       stopPlayback();
       stopMetronome();
       resetYoutubePanelForSongSwitch();
+    resetAudioPanelForSongSwitch();
       viewer.classList.add('setlist-memo-mode');
       showScreen(viewer);
       setlistMemoText.textContent = item.text;
@@ -7591,7 +7737,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260819-2013';
+  const APP_BUILD = '20260819-2027';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -7897,6 +8043,183 @@
       console.error(err);
       alert('復元エラー: ' + (err && err.message ? err.message : err));
     }
+  });
+
+  // ==================================================
+  // 曲ごとの音源ファイル(2026-08-19〜)
+  // ==================================================
+  // YouTubeは広告が入るうえ、埋め込みではログイン状態を引き継げず、規約上も
+  // 音声だけの再生やダウンロードはできない。自分で用意した音源を端末内に
+  // 持っておけば、広告なし・オフライン・任意区間のリピートまで自由にできる。
+  // 1曲5〜10MBと大きいのでクラウド同期はしない(端末内のみ)。
+  const audioEl = new Audio();
+  let audioObjectUrl = null;
+  let audioLoopA = null, audioLoopB = null;
+  let audioSeekDragging = false;
+
+  function formatAudioTime(sec) {
+    if (!Number.isFinite(sec)) return '0:00';
+    const m = Math.floor(sec / 60), ss = Math.floor(sec % 60);
+    return m + ':' + String(ss).padStart(2, '0');
+  }
+  function renderAudioLoopUI() {
+    btnAudioLoopA.classList.toggle('active', audioLoopA != null);
+    btnAudioLoopB.classList.toggle('active', audioLoopB != null);
+    if (audioLoopA == null && audioLoopB == null) {
+      audioLoopLabel.textContent = 'A-B: 未設定';
+    } else if (audioLoopA != null && audioLoopB != null) {
+      audioLoopLabel.textContent = 'A-B: ' + formatAudioTime(audioLoopA) + ' 〜 ' + formatAudioTime(audioLoopB);
+    } else if (audioLoopA != null) {
+      audioLoopLabel.textContent = 'A: ' + formatAudioTime(audioLoopA) + '(Bで開始)';
+    } else {
+      audioLoopLabel.textContent = 'B: ' + formatAudioTime(audioLoopB) + '(Aで開始)';
+    }
+  }
+  function renderAudioTime() {
+    const cur = audioEl.currentTime || 0, dur = audioEl.duration || 0;
+    audioTime.textContent = formatAudioTime(cur) + ' / ' + formatAudioTime(dur);
+    if (dur > 0 && !audioSeekDragging) audioSeek.value = String(Math.round(cur / dur * 1000));
+  }
+
+  // 音源を解放する。曲を切り替える時に前の曲の音が鳴り続けないよう必ず呼ぶ。
+  function releaseAudio() {
+    try { audioEl.pause(); } catch (e) { /* 無視 */ }
+    audioEl.removeAttribute('src');
+    try { audioEl.load(); } catch (e) { /* 無視 */ }
+    if (audioObjectUrl) { URL.revokeObjectURL(audioObjectUrl); audioObjectUrl = null; }
+    audioLoopA = null; audioLoopB = null;
+    btnAudioPlay.textContent = '\u25B6';
+  }
+  function resetAudioPanelForSongSwitch() {
+    releaseAudio();
+    audioPanel.classList.add('hidden');
+  }
+
+  async function loadAudioForCurrentSong() {
+    releaseAudio();
+    const rec = currentSongUuid ? await audioGet(currentSongUuid) : null;
+    const has = !!(rec && rec.data);
+    audioEmptyState.classList.toggle('hidden', has);
+    audioPlayerBody.classList.toggle('hidden', !has);
+    if (!has) { renderAudioLoopUI(); return; }
+    audioObjectUrl = URL.createObjectURL(new Blob([rec.data], { type: rec.mimeType || 'audio/mpeg' }));
+    audioEl.src = audioObjectUrl;
+    audioEl.playbackRate = Number(audioRate.value) || 1;
+    audioFileName.textContent = rec.fileName || '音源';
+    renderAudioLoopUI();
+    renderAudioTime();
+  }
+
+  btnToggleAudio.addEventListener('click', async () => {
+    const opening = audioPanel.classList.contains('hidden');
+    audioPanel.classList.toggle('hidden');
+    if (opening) await loadAudioForCurrentSong();
+    else audioEl.pause();
+  });
+  btnAudioClose.addEventListener('click', () => {
+    audioPanel.classList.add('hidden');
+    audioEl.pause();
+  });
+
+  btnAudioPick.addEventListener('click', () => audioFileInput.click());
+  btnAudioReplace.addEventListener('click', () => audioFileInput.click());
+  audioFileInput.addEventListener('change', async () => {
+    const file = audioFileInput.files && audioFileInput.files[0];
+    audioFileInput.value = '';
+    if (!file) return;
+    if (!currentSongUuid) { alert('先に曲を開いてください。'); return; }
+    try {
+      const data = await file.arrayBuffer();
+      await audioPut({
+        songUuid: currentSongUuid, data, mimeType: file.type || 'audio/mpeg',
+        fileName: file.name, size: data.byteLength, updatedAt: Date.now(),
+      });
+      await loadAudioForCurrentSong();
+    } catch (err) {
+      console.error(err);
+      alert('音源の保存に失敗しました: ' + (err && err.message ? err.message : err));
+    }
+  });
+  btnAudioRemove.addEventListener('click', async () => {
+    if (!currentSongUuid) return;
+    if (!confirm('この曲の音源を削除しますか？(曲やメモは消えません)')) return;
+    releaseAudio();
+    await audioDelete(currentSongUuid);
+    await loadAudioForCurrentSong();
+  });
+
+  btnAudioPlay.addEventListener('click', () => {
+    if (audioEl.paused) audioEl.play().catch((e) => alert('再生できませんでした: ' + e.message));
+    else audioEl.pause();
+  });
+  audioEl.addEventListener('play', () => { btnAudioPlay.textContent = '\u23F8'; });
+  audioEl.addEventListener('pause', () => { btnAudioPlay.textContent = '\u25B6'; });
+  audioEl.addEventListener('loadedmetadata', renderAudioTime);
+  audioEl.addEventListener('timeupdate', () => {
+    renderAudioTime();
+    // A-Bリピート: B点を越えたらA点へ戻す(区間外へシークした場合も引き戻す)
+    if (audioLoopA != null && audioLoopB != null) {
+      const cur = audioEl.currentTime;
+      if (cur > audioLoopB || cur < audioLoopA - 1) audioEl.currentTime = audioLoopA;
+    }
+  });
+  btnAudioBack.addEventListener('click', () => {
+    audioEl.currentTime = Math.max(0, audioEl.currentTime - getRewindSec());
+  });
+  btnAudioFwd.addEventListener('click', () => {
+    audioEl.currentTime = Math.min(audioEl.duration || 0, audioEl.currentTime + getRewindSec());
+  });
+  audioRate.addEventListener('change', () => { audioEl.playbackRate = Number(audioRate.value) || 1; });
+
+  audioSeek.addEventListener('pointerdown', () => { audioSeekDragging = true; });
+  function endAudioSeek() {
+    if (!audioSeekDragging) return;
+    audioSeekDragging = false;
+    const dur = audioEl.duration || 0;
+    if (dur > 0) audioEl.currentTime = (Number(audioSeek.value) / 1000) * dur;
+  }
+  audioSeek.addEventListener('pointerup', endAudioSeek);
+  audioSeek.addEventListener('change', endAudioSeek);
+
+  btnAudioLoopA.addEventListener('click', () => {
+    audioLoopA = audioEl.currentTime;
+    if (audioLoopB != null && audioLoopB <= audioLoopA) audioLoopB = null;
+    renderAudioLoopUI();
+  });
+  btnAudioLoopB.addEventListener('click', () => {
+    const t = audioEl.currentTime;
+    if (audioLoopA != null && t <= audioLoopA) { alert('BはAより後の位置にしてください。'); return; }
+    audioLoopB = t;
+    renderAudioLoopUI();
+  });
+  btnAudioLoopClear.addEventListener('click', () => {
+    audioLoopA = null; audioLoopB = null; renderAudioLoopUI();
+  });
+
+  // パネルのドラッグ移動(動画パネルと同じ実装パターン)
+  audioPanelHeader.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    e.preventDefault();
+    audioPanelHeader.setPointerCapture(e.pointerId);
+    const rect = audioPanel.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const startLeft = rect.left, startTop = rect.top;
+    audioPanel.style.left = startLeft + 'px';
+    audioPanel.style.top = startTop + 'px';
+    const onMove = (ev) => {
+      const maxLeft = window.innerWidth - audioPanel.offsetWidth;
+      const maxTop = window.innerHeight - audioPanel.offsetHeight;
+      audioPanel.style.left = Math.min(Math.max(0, startLeft + ev.clientX - startX), Math.max(0, maxLeft)) + 'px';
+      audioPanel.style.top = Math.min(Math.max(0, startTop + ev.clientY - startY), Math.max(0, maxTop)) + 'px';
+    };
+    const onUp = () => {
+      audioPanelHeader.removeEventListener('pointermove', onMove);
+      audioPanelHeader.removeEventListener('pointerup', onUp);
+      audioPanelHeader.removeEventListener('pointercancel', onUp);
+    };
+    audioPanelHeader.addEventListener('pointermove', onMove);
+    audioPanelHeader.addEventListener('pointerup', onUp);
+    audioPanelHeader.addEventListener('pointercancel', onUp);
   });
 
   // ==================================================
@@ -8432,6 +8755,7 @@
     stopMetronome();
     stopMomentumScroll();
     resetYoutubePanelForSongSwitch();
+    resetAudioPanelForSongSwitch();
     currentSongId = song.id;
     currentSongUuid = song.uuid;
     currentSongName = song.name;
@@ -8480,6 +8804,7 @@
     stopMomentumScroll();
     stopMetronome();
     resetYoutubePanelForSongSwitch();
+    resetAudioPanelForSongSwitch();
     clearTiles();
     currentSourceKind = null;
     currentImageEl = null;
@@ -8583,6 +8908,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
