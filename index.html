@@ -616,6 +616,18 @@
     background: #333; color: #eee; cursor: pointer;
   }
   #youtubeRewindSecLabel { font-size: 12px; color: #ccc; min-width: 34px; text-align: center; }
+  /* A-Bリピート(2026-08-19)。難所を繰り返し聴くための区間指定。 */
+  #youtubeLoopControls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 0 8px 6px; background: #1c1c1c;
+  }
+  #youtubeLoopControls.hidden { display: none; }
+  #youtubeLoopControls button {
+    font-size: 12px; padding: 5px 9px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #youtubeLoopControls button.active { background: #6cf; color: #111; font-weight: bold; }
+  #youtubeLoopLabel { flex: 1; min-width: 0; font-size: 11px; color: #ccc; }
 
   /* --- 楽譜エディタ(簡易・単音メロディー用) --- */
   #scoreEditorOverlay {
@@ -1042,6 +1054,12 @@
         <span id="youtubeRewindSecLabel">5秒</span>
         <button id="btnYoutubeRewindSecPlus">+</button>
       </div>
+      <div id="youtubeLoopControls" class="hidden">
+        <button id="btnYoutubeLoopA" title="今の再生位置を繰り返しの開始点にする">A</button>
+        <button id="btnYoutubeLoopB" title="今の再生位置を繰り返しの終了点にする">B</button>
+        <span id="youtubeLoopLabel">A-B: 未設定</span>
+        <button id="btnYoutubeLoopClear" title="繰り返しを解除">&#10006;</button>
+      </div>
       <div id="youtubePanelResizeHandle" title="ドラッグして幅を変更">&#10530;</div>
     </div>
     <div id="toolbar">
@@ -1241,7 +1259,10 @@
   // 無い(=この仕組み導入より前に作って以来一度もリサイズしていない)古いメモだけ
   // scale=1として扱い、勝手にサイズを変えない(端末ごとに"正しい"基準幅を決め打ちで
   // 推測するのは不可能なため。手動で一度リサイズすれば以後は自動でスケールされる)。
-  const ZOOM_MIN = 1;
+  // 縮小を100%より下まで許す(2026-08-19〜)。それまでの下限は「横幅ぴったり」の
+  // 100%で、そこから「−」を押しても何も起きず「縮小が効かない」ように見えていた。
+  // 縮小すると1画面に入る行数が増えるので、全体の構成を見たい時に使える。
+  const ZOOM_MIN = 0.5;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
   const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
@@ -1451,6 +1472,11 @@
   const btnYoutubeRewindSecMinus = document.getElementById('btnYoutubeRewindSecMinus');
   const btnYoutubeRewindSecPlus = document.getElementById('btnYoutubeRewindSecPlus');
   const youtubeRewindSecLabel = document.getElementById('youtubeRewindSecLabel');
+  const youtubeLoopControls = document.getElementById('youtubeLoopControls');
+  const btnYoutubeLoopA = document.getElementById('btnYoutubeLoopA');
+  const btnYoutubeLoopB = document.getElementById('btnYoutubeLoopB');
+  const btnYoutubeLoopClear = document.getElementById('btnYoutubeLoopClear');
+  const youtubeLoopLabel = document.getElementById('youtubeLoopLabel');
   const youtubePanelResizeHandle = document.getElementById('youtubePanelResizeHandle');
 
   // ---- 状態 ----
@@ -1959,8 +1985,17 @@
   // ==================================================
   // スクロール再生
   // ==================================================
+  // 譜面の横方向の表示オフセット。拡大時は横スクロールぶん左へずらし、
+  // 100%未満に縮小して画面より狭くなった時は中央に寄せる(左に寄ったままだと
+  // 右側だけ余白が空いて不格好なため)。
+  // 画面座標→コンテンツ座標の変換もこの値を使うので、ズレが起きない。
+  function contentOffsetX() {
+    const cw = contentWidthCss(), vw = viewportWidthCss();
+    return cw < vw ? (vw - cw) / 2 : -scrollX;
+  }
+
   function applyTransform() {
-    const t = `translate3d(${-scrollX}px, ${-scrollY}px, 0)`;
+    const t = `translate3d(${contentOffsetX()}px, ${-scrollY}px, 0)`;
     tileContainer.style.transform = t;
     strokeLayerEl.style.transform = t;
     memoLayerEl.style.transform = t;
@@ -2615,7 +2650,7 @@
 
   function placeMemoAt(clientX, clientY, type) {
     const rect = scrollWrap.getBoundingClientRect();
-    const xCss = (clientX - rect.left) + scrollX; // ビューポート座標→コンテンツ座標に変換(ズーム時の横スクロール分も加算)
+    const xCss = (clientX - rect.left) - contentOffsetX(); // ビューポート座標→コンテンツ座標(横スクロール/中央寄せを打ち消す)
     const yCss = (clientY - rect.top) + scrollY;
     const cssWidth = contentWidthCss();
     const x = clamp(xCss / cssWidth, 0, 1);
@@ -5089,7 +5124,7 @@
     const rect = scrollWrap.getBoundingClientRect();
     const cssWidth = contentWidthCss();
     const toPoint = (ev) => ({
-      x: ((ev.clientX - rect.left) + scrollX) / cssWidth,
+      x: ((ev.clientX - rect.left) - contentOffsetX()) / cssWidth,
       y: contentHeight > 0 ? ((ev.clientY - rect.top) + scrollY) / contentHeight : 0,
     });
 
@@ -5183,8 +5218,13 @@
   //
   // 精度と速度のために、画像全体ではなく上部の帯だけを切り出し、2倍に拡大してから
   // 数字とBPMの文字だけに絞って読ませる。
-  const SCORE_BPM_OCR_TOP_RATIO = 0.16; // 画像の上から何割を見るか
-  const SCORE_BPM_OCR_SCALE = 2;        // 小さい文字を潰さないための拡大率
+  // 実際のChordWikiの画面には、ヘッダー・曲名・操作パネルがあってから「BPM=84」が
+  // 来るので、上から16%だけでは届かなかった(実機で読み取れない不具合として判明)。
+  // 上から順に帯を切って走査し、見つかった時点で止める方式にしている。
+  // 1枚まるごとOCRすると縦長の譜面では非常に遅くなるので、帯に切るのが要点。
+  const SCORE_BPM_OCR_BAND_RATIO = 0.12; // 1回に見る帯の高さ(画像全体に対する割合)
+  const SCORE_BPM_OCR_MAX_RATIO = 0.6;   // ここまで見て無ければ諦める(BPMは必ず前半にある)
+  const SCORE_BPM_OCR_TARGET_W = 1600;   // OCRに渡す帯の幅。小さすぎると潰れ、大きすぎると遅い
   let tesseractLoadPromise = null;
   function loadTesseract() {
     if (window.Tesseract) return Promise.resolve(window.Tesseract);
@@ -5199,30 +5239,35 @@
     return tesseractLoadPromise;
   }
 
-  // 今開いている曲の「上部の帯」をcanvasに描いて返す。画像とPDFの両方に対応する。
-  async function scoreBpmOcrSourceCanvas() {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+  // 今開いている曲の「指定した帯」をcanvasに描いて返す(画像・PDFの両方に対応)。
+  // bandIndex=0が一番上。見つからなければ次の帯へ、と呼び出し側が進めていく。
+  async function scoreBpmOcrBandCanvas(bandIndex) {
+    let src = null, sw = 0, sh = 0;
     if (currentSourceKind === 'image' && currentImageEl) {
-      const sw = currentImageEl.naturalWidth, sh = currentImageEl.naturalHeight;
-      const bandH = Math.max(1, Math.round(sh * SCORE_BPM_OCR_TOP_RATIO));
-      canvas.width = Math.round(sw * SCORE_BPM_OCR_SCALE);
-      canvas.height = Math.round(bandH * SCORE_BPM_OCR_SCALE);
-      ctx.drawImage(currentImageEl, 0, 0, sw, bandH, 0, 0, canvas.width, canvas.height);
-      return canvas;
-    }
-    if (currentSourceKind === 'pdf' && currentPdfDoc) {
+      src = currentImageEl; sw = currentImageEl.naturalWidth; sh = currentImageEl.naturalHeight;
+    } else if (currentSourceKind === 'pdf' && currentPdfDoc) {
       const page = await currentPdfDoc.getPage(1);
-      const vp = page.getViewport({ scale: SCORE_BPM_OCR_SCALE });
+      const vp = page.getViewport({ scale: 1 });
       const full = document.createElement('canvas');
       full.width = Math.round(vp.width); full.height = Math.round(vp.height);
       await page.render({ canvasContext: full.getContext('2d'), viewport: vp }).promise;
-      canvas.width = full.width;
-      canvas.height = Math.max(1, Math.round(full.height * SCORE_BPM_OCR_TOP_RATIO));
-      ctx.drawImage(full, 0, 0);
-      return canvas;
+      src = full; sw = full.width; sh = full.height;
     }
-    return null;
+    if (!src) return null;
+
+    const bandH = Math.max(1, Math.round(sh * SCORE_BPM_OCR_BAND_RATIO));
+    const sy = bandIndex * bandH;
+    if (sy >= sh || sy >= sh * SCORE_BPM_OCR_MAX_RATIO) return null; // 走査終わり
+    const h = Math.min(bandH, sh - sy);
+
+    // 小さい文字が潰れないように拡大するが、元から大きい画像は拡大しない
+    // (拡大しすぎると面積が増えてOCRが遅くなるだけのため)。
+    const scale = Math.max(1, Math.min(3, SCORE_BPM_OCR_TARGET_W / sw));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(sw * scale);
+    canvas.height = Math.round(h * scale);
+    canvas.getContext('2d').drawImage(src, 0, sy, sw, h, 0, 0, canvas.width, canvas.height);
+    return canvas;
   }
 
   // 読み取った文字列からBPMを拾う。ChordWikiは「BPM=84」だが、
@@ -5235,22 +5280,29 @@
     return (Number.isFinite(v) && v >= 20 && v <= 400) ? v : null;
   }
 
-  async function readBpmFromScore() {
-    const canvas = await scoreBpmOcrSourceCanvas();
-    if (!canvas) throw new Error('譜面の画像を取得できませんでした');
+  async function readBpmFromScore(onProgress) {
     const Tesseract = await loadTesseract();
     const worker = await Tesseract.createWorker('eng', 1, {
       workerPath: './vendor/tesseract/worker.min.js',
       corePath: './vendor/tesseract/',
       langPath: './vendor/tesseract/',
-      // 学習データは同梱の.gzをそのまま使う
       gzip: true,
     });
     try {
       // BPMの行だけが目当てなので、出てくる文字を絞って誤認識を減らす
       await worker.setParameters({ tessedit_char_whitelist: '0123456789BPM=:. ' });
-      const { data } = await worker.recognize(canvas);
-      return { bpm: extractBpmFromOcrText(data.text), raw: data.text };
+      const seen = [];
+      // 上から順に帯を見ていき、見つかった時点で打ち切る
+      for (let i = 0; ; i++) {
+        const canvas = await scoreBpmOcrBandCanvas(i);
+        if (!canvas) break;
+        if (onProgress) onProgress(i + 1);
+        const { data } = await worker.recognize(canvas);
+        seen.push(data.text);
+        const bpm = extractBpmFromOcrText(data.text);
+        if (bpm != null) return { bpm, raw: seen.join(' / '), bands: i + 1 };
+      }
+      return { bpm: null, raw: seen.join(' / '), bands: seen.length };
     } finally {
       await worker.terminate();
     }
@@ -5261,7 +5313,7 @@
     btnReadBpm.disabled = true;
     btnReadBpm.textContent = '読み取り中...';
     try {
-      const { bpm, raw } = await readBpmFromScore();
+      const { bpm, raw } = await readBpmFromScore((n) => { btnReadBpm.textContent = `読み取り中 ${n}`; });
       if (bpm == null) {
         alert('BPMを読み取れませんでした。譜面に「BPM=◯◯」の記載があるか確認してください。手動で入力する場合は「BPM」ボタンから設定できます。');
         console.log('[BPM OCR] 読み取れた文字:', raw);
@@ -5381,6 +5433,8 @@
   }
 
   function destroyYtPlayer() {
+    // 前の動画の区間指定が次の動画に残ると混乱するので必ず解除する
+    if (typeof clearYoutubeLoop === 'function') clearYoutubeLoop();
     if (ytPlayer) {
       try { ytPlayer.destroy(); } catch (e) { /* 無視 */ }
       ytPlayer = null;
@@ -5400,6 +5454,8 @@
     youtubeEmptyState.classList.toggle('hidden', hasUrl);
     youtubePlayerHost.classList.toggle('hidden', !hasUrl);
     youtubePanelControls.classList.toggle('hidden', !hasUrl);
+    youtubeLoopControls.classList.toggle('hidden', !hasUrl);
+    renderYoutubeLoopUI();
   }
 
   // 動画URL未設定の曲向け。曲名をそのまま検索語にしてYouTubeの検索結果ページを
@@ -5445,6 +5501,82 @@
       alert('動画の読み込みエラー: ' + (err && err.message ? err.message : err));
     }
   }
+
+  // ==================================================
+  // YouTubeのA-Bリピート(2026-08-19〜)
+  // ==================================================
+  // 難所だけを繰り返し聴くための区間指定。YouTubeのIFrame APIには区間ループの
+  // 機能が無いので、再生位置を定期的に見てB点を越えたらA点へ戻す方式にしている。
+  // 監視はループ設定中だけ動かし、解除・曲切替・パネルを閉じた時に必ず止める。
+  const YT_LOOP_WATCH_MS = 200; // これより粗いとB点を明らかに行き過ぎてから戻る
+  let ytLoopA = null, ytLoopB = null, ytLoopTimer = null;
+
+  function formatSec(sec) {
+    if (sec == null) return '--:--';
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+  function renderYoutubeLoopUI() {
+    btnYoutubeLoopA.classList.toggle('active', ytLoopA != null);
+    btnYoutubeLoopB.classList.toggle('active', ytLoopB != null);
+    if (ytLoopA == null && ytLoopB == null) {
+      youtubeLoopLabel.textContent = 'A-B: 未設定';
+    } else if (ytLoopA != null && ytLoopB != null) {
+      youtubeLoopLabel.textContent = `A-B: ${formatSec(ytLoopA)} 〜 ${formatSec(ytLoopB)}`;
+    } else {
+      youtubeLoopLabel.textContent = ytLoopA != null
+        ? `A: ${formatSec(ytLoopA)}(Bを押すと繰り返し開始)`
+        : `B: ${formatSec(ytLoopB)}(Aを押すと繰り返し開始)`;
+    }
+  }
+  function stopYoutubeLoopWatch() {
+    clearInterval(ytLoopTimer);
+    ytLoopTimer = null;
+  }
+  function startYoutubeLoopWatch() {
+    stopYoutubeLoopWatch();
+    if (ytLoopA == null || ytLoopB == null) return;
+    ytLoopTimer = setInterval(() => {
+      if (!ytPlayer || ytLoopA == null || ytLoopB == null) return;
+      let cur;
+      try { cur = ytPlayer.getCurrentTime(); } catch (e) { return; }
+      // B点を越えた時だけでなく、A点より手前に居る場合も引き戻す
+      // (ユーザーがシークバーで区間外へ飛んだ時に区間へ戻すため)。
+      if (cur > ytLoopB || cur < ytLoopA - 1) {
+        try { ytPlayer.seekTo(ytLoopA, true); } catch (e) { /* 無視 */ }
+      }
+    }, YT_LOOP_WATCH_MS);
+  }
+  function clearYoutubeLoop() {
+    ytLoopA = null; ytLoopB = null;
+    stopYoutubeLoopWatch();
+    renderYoutubeLoopUI();
+  }
+  function currentYtTime() {
+    if (!ytPlayer) return null;
+    try { return ytPlayer.getCurrentTime(); } catch (e) { return null; }
+  }
+  btnYoutubeLoopA.addEventListener('click', () => {
+    const t = currentYtTime();
+    if (t == null) { alert('先に動画を再生してください。'); return; }
+    ytLoopA = t;
+    // A点がB点より後ろになったらBは無効(区間として成立しないため)
+    if (ytLoopB != null && ytLoopB <= ytLoopA) ytLoopB = null;
+    renderYoutubeLoopUI();
+    startYoutubeLoopWatch();
+  });
+  btnYoutubeLoopB.addEventListener('click', () => {
+    const t = currentYtTime();
+    if (t == null) { alert('先に動画を再生してください。'); return; }
+    if (ytLoopA != null && t <= ytLoopA) {
+      alert('BはAより後の位置にしてください。');
+      return;
+    }
+    ytLoopB = t;
+    renderYoutubeLoopUI();
+    startYoutubeLoopWatch();
+  });
+  btnYoutubeLoopClear.addEventListener('click', clearYoutubeLoop);
 
   async function saveCurrentYoutubeUrl() {
     if (currentSongId == null) return;
@@ -7247,7 +7379,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260819-1941';
+  const APP_BUILD = '20260819-1954';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -8239,6 +8371,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
