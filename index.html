@@ -1075,6 +1075,9 @@
         <label>拍子 <select id="scoreTimeSigSelect"></select></label>
         <label>調号 <select id="scoreKeySelect"></select></label>
         <label>音部 <select id="scoreClefSelect"></select></label>
+        <label title="曲が1拍目から始まらない時に、1小節目だけ短くする">弱起 <select id="scorePickupSelect"></select></label>
+        <label title="選択中の音符に強弱記号を付ける">強弱 <select id="scoreDynamicSelect"></select></label>
+        <label title="選択中の音符に奏法記号を付ける">奏法 <select id="scoreArticulationSelect"></select></label>
       </div>
       <div class="scoreEditorGroup">
         <button id="btnScoreChordMode">&#9834; 単音</button>
@@ -1317,6 +1320,9 @@
   const scoreTimeSigSelect = document.getElementById('scoreTimeSigSelect');
   const scoreKeySelect = document.getElementById('scoreKeySelect');
   const scoreClefSelect = document.getElementById('scoreClefSelect');
+  const scorePickupSelect = document.getElementById('scorePickupSelect');
+  const scoreDynamicSelect = document.getElementById('scoreDynamicSelect');
+  const scoreArticulationSelect = document.getElementById('scoreArticulationSelect');
   const btnScoreUndo = document.getElementById('btnScoreUndo');
   const btnScoreClearAll = document.getElementById('btnScoreClearAll');
   const btnScoreMidi = document.getElementById('btnScoreMidi');
@@ -2596,6 +2602,13 @@
   const SCORE_TOP_MARGIN = 20;
   const SCORE_SYSTEM_GAP = 40; // 段と段の間隔(音符が飛び出す余白込み)
   const SCORE_BOTTOM_MARGIN = 20;
+  // 強弱記号は五線の下に描かれるため、通常の下余白だけではキャンバス下端で
+  // 見切れてしまう(実測で確認)。強弱記号が1つでもある譜面の時だけ余白を足す
+  // (常に足すと、強弱を使わない普通の譜面まで無駄に縦長になるため)。
+  function scoreExtraBottomRoom() {
+    return scoreElements.some((el) => el.type === 'note' && el.dynamic)
+      ? SCORE_STAVE_LINE_SPACING * 2.5 : 0;
+  }
   // 拍子ごとの音価計算(全音符=1単位)。1小節の容量は beats/unit。
   const SCORE_DURATION_UNITS = {
     whole: 1, half: 0.5, quarter: 0.25, eighth: 0.125, sixteenth: 0.0625,
@@ -2852,10 +2865,12 @@
   // 分割で生まれた断片には tieToNext/tiedFromPrev を付け、臨時記号・コード名・
   // 3連符ラベルは最初の断片にだけ残す(タイの続きに再表示しない)。
   function buildScoreRenderQueue() {
-    const capacity = scoreMeasureCapacity();
     const EPS = 1e-6;
     const queue = [];
-    let remaining = capacity;
+    // 弱起があると1小節目だけ容量が違うので、小節番号を数えながら容量を引き直す。
+    let measureIdx = 0;
+    let remaining = scoreCapacityForMeasure(measureIdx);
+    const nextMeasure = () => { measureIdx += 1; return scoreCapacityForMeasure(measureIdx); };
     for (let srcIndex = 0; srcIndex < scoreElements.length; srcIndex++) {
       const el = scoreElements[srcIndex];
       const units = scoreElementDurationUnits(el);
@@ -2870,10 +2885,10 @@
           scoreDecomposeToNotatable(chunk).forEach((p) => frags.push(p));
           left -= chunk;
           remaining -= chunk;
-          if (remaining <= EPS) remaining = capacity;
+          if (remaining <= EPS) remaining = nextMeasure();
         }
       }
-      if (remaining <= EPS) remaining = capacity;
+      if (remaining <= EPS) remaining = nextMeasure();
       frags.forEach((frag, fi) => {
         queue.push({
           srcIndex, type: el.type,
@@ -2883,7 +2898,11 @@
             ? el.pitches.map((p) => ({ step: p.step, accidental: fi === 0 ? p.accidental : null }))
             : null,
           duration: frag.duration, dotted: frag.dotted,
+          // コード名と同じく、タイで分割された時は最初の断片にだけ付ける
+          // (伸びている先にもう一度出ると二重表示になる)。
           chord: fi === 0 ? el.chord : null,
+          dynamic: fi === 0 ? (el.dynamic || null) : null,
+          articulation: fi === 0 ? (el.articulation || null) : null,
           triplet: el.triplet, tripletGroup: el.tripletGroup,
           tripletFirst: fi === 0 ? el.tripletFirst : false,
           // tieToNext/tiedFromPrevは2つの由来がある: ①小節に収まらず自動分割された
@@ -2900,6 +2919,24 @@
     return queue;
   }
   function scoreCurrentTimeSig() { return SCORE_TIME_SIGS[scoreTimeSigIdx]; }
+  // 弱起(アウフタクト、2026-08-19〜)。実際の曲は1拍目から始まらないものが多いが、
+  // それまでは常に1小節目から満杯で数えていたため小節線が実際の曲とずれていた。
+  // 「1小節目だけ容量を減らす」という形で表現する(全音符=1単位)。
+  const SCORE_PICKUP_OPTIONS = [
+    { units: 0, label: 'なし' },
+    { units: 0.125, label: '8分1つ' },
+    { units: 0.25, label: '4分1つ' },
+    { units: 0.375, label: '付点4分' },
+    { units: 0.5, label: '2分(4分2つ)' },
+    { units: 0.75, label: '4分3つ' },
+  ];
+  // 指定した小節の容量。弱起がある時は0小節目だけ短くなる。
+  // 拍子より長い弱起を指定してしまった場合は通常の小節として扱う(不正な譜面を作らない)。
+  function scoreCapacityForMeasure(measureIndex) {
+    const full = scoreMeasureCapacity();
+    if (measureIndex === 0 && scorePickupUnits > 0 && scorePickupUnits < full) return scorePickupUnits;
+    return full;
+  }
   function scoreMeasureCapacity() {
     const ts = scoreCurrentTimeSig();
     return ts.beats / ts.unit;
@@ -2957,6 +2994,7 @@
   let scoreTimeSigIdx = 0;
   let scoreKeyFifths = 0;
   let scoreClef = 'treble';
+  let scorePickupUnits = 0; // 弱起の長さ(全音符=1単位)。0なら弱起なし
   let scoreSystemWidth = 640; // 段の幅(openScoreEditorでコンテナ幅に合わせて決め直す)
   let scoreSelectedIndex = null; // 編集用に選択中の音符・休符(scoreElementsのインデックス)。nullなら非選択
   // 和音入力モード(2026-08-17〜)。単音モードは「選択中に別の音をタップ=上書き」だが、
@@ -3034,6 +3072,65 @@
     opt.textContent = c.label;
     scoreClefSelect.appendChild(opt);
   });
+  SCORE_PICKUP_OPTIONS.forEach((pk) => {
+    const opt = document.createElement('option');
+    opt.value = String(pk.units);
+    opt.textContent = pk.label;
+    scorePickupSelect.appendChild(opt);
+  });
+  scorePickupSelect.addEventListener('change', () => {
+    scorePickupUnits = Number(scorePickupSelect.value);
+    renderScoreCanvas(); // 小節の区切り位置が変わるだけで、音符データは変わらない
+  });
+
+  // 強弱記号・奏法記号(2026-08-19〜)。
+  // コード名のような「次の音符に付く保留値」は持たせず、**選択中の音符にだけ**効く
+  // 単純な仕組みにしている(コード名で保留値と表示値を分けた時に取り違えの不具合を
+  // 出した経緯があり、これらは普通メロディーを書いた後から付けるものなので、
+  // 保留の仕組みを持つ必要が薄いため)。
+  //
+  // 強弱記号はBravuraのSMuFLグリフで描く(ただの英字だと楽譜の見た目にならない)。
+  // 強弱記号として選べる値。
+  // 描画はBravuraのSMuFLグリフ(U+E520〜)ではなく、太字イタリックのセリフ体にしている。
+  // Bravuraは@font-faceで宣言してあるがdocument.fonts.check()がfalseを返す状態で、
+  // canvasの文字描画からは確実には使えない(VexFlowは音符グリフを独自経路で描くので
+  // 譜面自体は正しく出るが、Annotationの文字描画はcanvasのフォント解決に乗るため)。
+  // 実測でグリフが出ないことを確認したので、常に出る表現に倒した。
+  // 太字イタリックのセリフ体は強弱記号の慣用的な代替表現で、可読性も問題ない。
+  const SCORE_DYNAMICS = ['pp', 'p', 'mp', 'mf', 'f', 'ff', 'sf', 'fp'];
+  // VexFlowのArticulationコード。上下の配置はVexFlowが符幹に応じて決める。
+  const SCORE_ARTICULATIONS = [
+    { code: 'a.', label: 'スタッカート' },
+    { code: 'a>', label: 'アクセント' },
+    { code: 'a-', label: 'テヌート' },
+    { code: 'a^', label: 'マルカート' },
+  ];
+  {
+    const noneOpt = (sel, label) => {
+      const o = document.createElement('option');
+      o.value = ''; o.textContent = label; sel.appendChild(o);
+    };
+    noneOpt(scoreDynamicSelect, 'なし');
+    SCORE_DYNAMICS.forEach((d) => {
+      const o = document.createElement('option');
+      o.value = d; o.textContent = d; scoreDynamicSelect.appendChild(o);
+    });
+    noneOpt(scoreArticulationSelect, 'なし');
+    SCORE_ARTICULATIONS.forEach((a) => {
+      const o = document.createElement('option');
+      o.value = a.code; o.textContent = a.label; scoreArticulationSelect.appendChild(o);
+    });
+  }
+  function scoreApplyToSelected(field, value) {
+    if (scoreSelectedIndex === null) return;
+    const el = scoreElements[scoreSelectedIndex];
+    if (el.type !== 'note') return; // 休符には付けない
+    pushScoreUndoSnapshot();
+    el[field] = value || null;
+    renderScoreCanvas();
+  }
+  scoreDynamicSelect.addEventListener('change', () => scoreApplyToSelected('dynamic', scoreDynamicSelect.value));
+  scoreArticulationSelect.addEventListener('change', () => scoreApplyToSelected('articulation', scoreArticulationSelect.value));
   scoreTimeSigSelect.addEventListener('change', () => {
     scoreTimeSigIdx = Number(scoreTimeSigSelect.value);
     renderScoreCanvas();
@@ -3100,9 +3197,11 @@
     scoreKeyFifths = Number.isFinite(src.keyFifths) ? src.keyFifths : 0;
     // 古いフレーズにはclefが無いので、その場合はト音記号として扱う
     scoreClef = src.clef === 'bass' ? 'bass' : 'treble';
+    scorePickupUnits = Number.isFinite(src.pickupUnits) ? src.pickupUnits : 0;
     scoreTimeSigSelect.value = String(scoreTimeSigIdx);
     scoreKeySelect.value = String(scoreKeyFifths);
     scoreClefSelect.value = scoreClef;
+    scorePickupSelect.value = String(scorePickupUnits);
     scoreApplyPianoRangeForClef();
     scorePianoKeysBuilt = false;      // 音域が変わっている可能性があるので作り直す
     scorePianoKeyboardEl.innerHTML = '';
@@ -3154,6 +3253,13 @@
     // sel.chordを表示するために書き換えた値を、非選択に戻った後もscorePendingChordに
     // 引き継がせないことで、コード名が意図せず後続の音符に伝播するのを防ぐ。
     scoreChordInput.value = sel ? (sel.chord || '') : (scorePendingChord || '');
+    // 強弱・奏法は「選択中の音符にだけ効く」ので、選択中の値をそのまま映す。
+    // 未選択や休符では選べないことが分かるように無効化する。
+    const canAnnotate = !!(sel && sel.type === 'note');
+    scoreDynamicSelect.disabled = !canAnnotate;
+    scoreArticulationSelect.disabled = !canAnnotate;
+    scoreDynamicSelect.value = canAnnotate ? (sel.dynamic || '') : '';
+    scoreArticulationSelect.value = canAnnotate ? (sel.articulation || '') : '';
     renderScorePianoKeyboard();
   }
 
@@ -3370,9 +3476,11 @@
     scoreTimeSigIdx = Number.isFinite(p.timeSigIdx) ? p.timeSigIdx : 0;
     scoreKeyFifths = Number.isFinite(p.keyFifths) ? p.keyFifths : 0;
     scoreClef = p.clef === 'bass' ? 'bass' : 'treble';
+    scorePickupUnits = Number.isFinite(p.pickupUnits) ? p.pickupUnits : 0;
     scoreTimeSigSelect.value = String(scoreTimeSigIdx);
     scoreKeySelect.value = String(scoreKeyFifths);
     scoreClefSelect.value = scoreClef;
+    scorePickupSelect.value = String(scorePickupUnits);
     scoreSelectedIndex = null;
     scoreRebuildPianoKeyboardForClef(); // 音域が変わるので鍵盤を作り直す
     updateScoreToolbarUI();
@@ -4330,18 +4438,24 @@
   // レジャー線・小節線・3連符ブラケットはVexFlowが自動で正しく処理するので、
   // ここでは「VexFlowに渡すデータの組み立て」だけを行う。
   function computeScoreLayout() {
-    const capacity = scoreMeasureCapacity();
     const EPS = 1e-6;
     const queue = buildScoreRenderQueue();
 
+    // 各小節の容量も一緒に覚えておく(弱起で1小節目だけ短くなるため、
+    // 後段の「1小節まるごと休み」判定でも小節ごとの容量が要る)。
     const measures = [];
-    { let cur = [], curDur = 0;
+    const measureCapacities = [];
+    { let cur = [], curDur = 0, mi = 0;
+      let cap = scoreCapacityForMeasure(0);
       for (let i = 0; i < queue.length; i++) {
         cur.push(i);
         curDur += scoreElementDurationUnits(queue[i]);
-        if (curDur >= capacity - EPS) { measures.push(cur); cur = []; curDur = 0; }
+        if (curDur >= cap - EPS) {
+          measures.push(cur); measureCapacities.push(cap);
+          cur = []; curDur = 0; mi += 1; cap = scoreCapacityForMeasure(mi);
+        }
       }
-      if (cur.length) measures.push(cur);
+      if (cur.length) { measures.push(cur); measureCapacities.push(cap); }
     }
 
     // 実効臨時記号: 明示指定はその小節内でその段位置(letter+octave)に効き続ける。
@@ -4388,10 +4502,11 @@
     // 1小節まるごと1つの休符で埋まっている場合、選ばれた音価に関わらず全休符の
     // 記号で描く(拍子に関わらない実際の記譜法の慣習)。
     const fullMeasureRest = new Set();
-    measures.forEach((measure) => {
+    measures.forEach((measure, mi) => {
       if (measure.length === 1 && queue[measure[0]].type === 'rest') {
         const units = scoreElementDurationUnits(queue[measure[0]]);
-        if (Math.abs(units - capacity) < EPS) fullMeasureRest.add(measure[0]);
+        // 容量は小節ごとに見る(弱起の小節を全休符扱いしてしまわないように)
+        if (Math.abs(units - measureCapacities[mi]) < EPS) fullMeasureRest.add(measure[0]);
       }
     });
 
@@ -4418,6 +4533,17 @@
         note = new VF.StaveNote({ keys, duration: SCORE_DURATION_TO_VEX[el.duration] });
         if (el.chord) {
           note.addModifier(scoreBuildChordSymbol(VF, el.chord));
+        }
+        // 強弱記号は五線の下に描く
+        if (el.dynamic) {
+          const ann = new VF.Annotation(el.dynamic);
+          ann.setFont('serif', SCORE_STAVE_LINE_SPACING * 1.5, 'bold', 'italic');
+          ann.setVerticalJustification(VF.Annotation.VerticalJustify.BOTTOM);
+          note.addModifier(ann);
+        }
+        // 奏法記号(スタッカート等)は上下の配置をVexFlowが符幹に応じて決める
+        if (el.articulation) {
+          note.addModifier(new VF.Articulation(el.articulation));
         }
       }
       if (el.dotted) VF.Dot.buildAndAttach([note], { all: true });
@@ -4570,7 +4696,7 @@
       tie.setContext(ctx).draw();
     });
 
-    return y - SCORE_SYSTEM_GAP + SCORE_BOTTOM_MARGIN; // 実際に使った高さ
+    return y - SCORE_SYSTEM_GAP + SCORE_BOTTOM_MARGIN + scoreExtraBottomRoom(); // 実際に使った高さ
   }
 
   async function renderScoreCanvas() {
@@ -4578,7 +4704,7 @@
     const layout = scoreComputeSystems(VF);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const systemCount = layout.systems.length;
-    const cssHeight = SCORE_TOP_MARGIN + systemCount * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP) + SCORE_BOTTOM_MARGIN;
+    const cssHeight = SCORE_TOP_MARGIN + systemCount * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP) + SCORE_BOTTOM_MARGIN + scoreExtraBottomRoom();
     scoreEditorCanvas.width = Math.round(scoreSystemWidth * dpr);
     scoreEditorCanvas.height = Math.round(cssHeight * dpr);
     scoreEditorCanvas.style.width = scoreSystemWidth + 'px';
@@ -5650,6 +5776,7 @@
       Object.assign(existing, {
         elements: cloneScoreElements(scoreElements),
         timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths, clef: scoreClef,
+        pickupUnits: scorePickupUnits,
         preview, updatedAt: Date.now(),
       });
     } else {
@@ -5657,6 +5784,7 @@
         id: crypto.randomUUID(), name, tags,
         elements: cloneScoreElements(scoreElements),
         timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths, clef: scoreClef,
+        pickupUnits: scorePickupUnits,
         preview, createdAt: Date.now(), updatedAt: Date.now(),
       });
     }
@@ -7665,6 +7793,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
