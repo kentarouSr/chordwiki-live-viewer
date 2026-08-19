@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS memo_stamps (
   updated_at INTEGER NOT NULL DEFAULT 0
 );
 
+-- 音楽関連サイトのリンク集(2026-08-19)。practice_todosと同じ持ち方。
+CREATE TABLE IF NOT EXISTS music_links (
+  sync_key TEXT PRIMARY KEY,
+  items_json TEXT NOT NULL DEFAULT '[]',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+
 -- 使用を許可する同期キーの一覧。POST /api/invite で、既に有効なキーを
 -- 持っている人なら誰でも新しいキーをここに追加できる(2026-08-16)。
 CREATE TABLE IF NOT EXISTS allowed_keys (

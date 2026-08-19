@@ -39,11 +39,11 @@
   }
   #songListHeader h1 { font-size: 18px; margin: 0; margin-right: auto; }
   #songListHeader { gap: 8px; }
-  #btnGoSetlists, #btnAppMode, #btnGoTodos {
+  #btnGoSetlists, #btnAppMode, #btnGoTodos, #btnGoLinks {
     font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer;
   }
-  #btnGoSetlists:active, #btnAppMode:active, #btnGoTodos:active { background: #444; }
+  #btnGoSetlists:active, #btnAppMode:active, #btnGoTodos:active, #btnGoLinks:active { background: #444; }
   #btnAppMode.mode-perform { background: #6cf; color: #111; font-weight: bold; }
   #btnAddSong {
     font-size: 15px; padding: 10px 16px; border-radius: 8px; border: none;
@@ -192,6 +192,61 @@
     font-size: 14px; padding: 10px 16px; border-radius: 8px; border: none;
     background: #6cf; color: #111; font-weight: bold; cursor: pointer; flex-shrink: 0;
   }
+  /* --- 音楽リンク集(2026-08-19)。ToDo画面と同じ構造・見た目に揃えている --- */
+  #linkListScreen {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    padding: 20px; padding-top: max(20px, env(safe-area-inset-top));
+    overflow-y: auto; scrollbar-gutter: stable;
+  }
+  #linkListScreen.hidden { display: none; }
+  #linkListHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  #linkListHeader h1 { font-size: 18px; margin: 0; flex: 1; min-width: 0; }
+  #linkListHeader button {
+    font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  /* 名前とURLの2入力なので、スマホ幅では折り返して縦に積む */
+  #linkAddRow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  #linkNewName { flex: 1 1 140px; min-width: 0; }
+  #linkNewUrl { flex: 2 1 220px; min-width: 0; }
+  #linkNewName, #linkNewUrl {
+    font-size: 15px; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid #333; background: #1c1c1c; color: #eee;
+  }
+  #btnLinkAdd {
+    font-size: 14px; padding: 10px 16px; border-radius: 8px; border: none;
+    background: #6cf; color: #111; font-weight: bold; cursor: pointer; flex-shrink: 0;
+  }
+  #linkList { display: flex; flex-direction: column; gap: 10px; }
+  #linkList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
+  .linkItem {
+    background: #1c1c1c; border-radius: 10px; padding: 12px 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  /* リンク本体は<a>。長いURLで押し出されないよう省略表示する */
+  .linkItemMain {
+    flex: 1 1 auto; min-width: 0; color: #6cf; text-decoration: none;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .linkItemName {
+    font-size: 15px; font-weight: bold;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .linkItemUrl {
+    font-size: 12px; color: #888;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .linkItem button {
+    font-size: 12px; padding: 6px 9px; border-radius: 6px; border: none;
+    background: #333; color: #eee; cursor: pointer; flex-shrink: 0;
+  }
+  @media (max-width: 500px) {
+    #linkListScreen { padding: 14px; }
+    .linkItem { padding: 10px 12px; gap: 6px; }
+    .linkItemName { font-size: 14px; }
+    .linkItem button { font-size: 11px; padding: 5px 7px; }
+  }
+
   #todoList { display: flex; flex-direction: column; gap: 10px; position: relative; }
   #todoList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
   .todoItem { background: #1c1c1c; border-radius: 10px; padding: 12px 14px; }
@@ -628,7 +683,7 @@
     #btnBack { font-size: 12px; }
 
     /* 曲一覧・セットリスト等: 曲が出てくるまでのヘッダ部分を圧縮する */
-    #songListScreen, #setlistListScreen, #setlistEditScreen, #songPickerScreen, #todoListScreen {
+    #songListScreen, #setlistListScreen, #setlistEditScreen, #songPickerScreen, #todoListScreen, #linkListScreen {
       padding: 12px; padding-top: max(12px, env(safe-area-inset-top));
     }
     /* タイトルを1行占有させ、ボタン群をその下にまとめて並べる(中途半端に
@@ -636,7 +691,7 @@
        折り返した行のボタンが左右に引き離されて隙間だらけになるので詰める。 */
     #songListHeader { justify-content: flex-start; }
     #songListHeader h1 { font-size: 16px; flex-basis: 100%; margin-right: 0; }
-    #btnGoSetlists, #btnAppMode, #btnGoTodos { font-size: 12px; padding: 7px 10px; }
+    #btnGoSetlists, #btnAppMode, #btnGoTodos, #btnGoLinks { font-size: 12px; padding: 7px 10px; }
     #btnAddSong { font-size: 13px; padding: 8px 12px; }
     #backupBar { gap: 6px; margin-bottom: 10px; }
     #backupBar button, #backupBar a { font-size: 11px; padding: 5px 8px; }
@@ -686,6 +741,7 @@
       <button id="btnAppMode">&#9998; 編集モード</button>
       <button id="btnGoSetlists">&#128203; セットリスト</button>
       <button id="btnGoTodos">&#9989; 練習ToDo</button>
+      <button id="btnGoLinks">&#128279; リンク集</button>
       <button id="btnAddSong">＋ 曲を追加</button>
     </div>
     <button id="btnToggleSettings" aria-expanded="false">&#9881; 設定・バックアップ &#9662;</button>
@@ -738,6 +794,19 @@
       <button id="btnTodoAdd">＋ 追加</button>
     </div>
     <div id="todoList"></div>
+  </div>
+
+  <div id="linkListScreen" class="hidden">
+    <div id="linkListHeader">
+      <button id="btnLinkBack">&larr; 曲一覧</button>
+      <h1>音楽リンク集</h1>
+    </div>
+    <div id="linkAddRow">
+      <input id="linkNewName" type="text" placeholder="名前(例: ChordWiki)">
+      <input id="linkNewUrl" type="url" placeholder="https://...">
+      <button id="btnLinkAdd">＋ 追加</button>
+    </div>
+    <div id="linkList"></div>
   </div>
 
   <div id="setlistListScreen" class="hidden">
@@ -1016,6 +1085,13 @@
   const todoListScreen = document.getElementById('todoListScreen');
   const todoListEl = document.getElementById('todoList');
   const btnGoTodos = document.getElementById('btnGoTodos');
+  const btnGoLinks = document.getElementById('btnGoLinks');
+  const linkListScreen = document.getElementById('linkListScreen');
+  const btnLinkBack = document.getElementById('btnLinkBack');
+  const linkNewName = document.getElementById('linkNewName');
+  const linkNewUrl = document.getElementById('linkNewUrl');
+  const btnLinkAdd = document.getElementById('btnLinkAdd');
+  const linkListEl = document.getElementById('linkList');
   const btnTodoBack = document.getElementById('btnTodoBack');
   const todoNewInput = document.getElementById('todoNewInput');
   const btnTodoAdd = document.getElementById('btnTodoAdd');
@@ -1166,7 +1242,7 @@
   let viewerReturnScreen = null; // ビューアの「戻る」で戻る先の画面
 
   // ---- 画面切り替え ----
-  const allScreens = [songListScreen, todoListScreen, setlistListScreen, setlistEditScreen, songPickerScreen, viewer];
+  const allScreens = [songListScreen, todoListScreen, linkListScreen, setlistListScreen, setlistEditScreen, songPickerScreen, viewer];
   function showScreen(screen) {
     for (const s of allScreens) s.classList.toggle('hidden', s !== screen);
     // 画面消灯防止(Wake Lock)は自動スクロール中だけでなく、ビューア画面にいる間は
@@ -1197,12 +1273,13 @@
   // IndexedDB(曲の保存: 画像/PDF・曲名・速度・BPM)
   // ==================================================
   const DB_NAME = 'chordwiki-live-viewer';
-  const DB_VERSION = 5;
+  const DB_VERSION = 6;
   const STORE = 'songs';
   const SETLIST_STORE = 'setlists';
   const TODO_STORE = 'practiceTodos'; // アプリ全体で1レコードのみ(id: 'global')固定で使う
   const STAMP_STORE = 'memoStamps';   // アプリ全体で1レコードのみ(id: 'global')固定で使う
   const BACKUP_STORE = 'localBackup'; // 自動ローカルバックアップ用。アプリ全体で1レコードのみ(id: 'local')、常に上書き(v5で追加)
+  const LINK_STORE = 'musicLinks';    // 音楽関連サイトのリンク集。アプリ全体で1レコードのみ(id: 'global')固定(v6で追加)
   let dbPromise = null;
 
   function openDb() {
@@ -1225,6 +1302,9 @@
         }
         if (!db.objectStoreNames.contains(BACKUP_STORE)) {
           db.createObjectStore(BACKUP_STORE, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(LINK_STORE)) {
+          db.createObjectStore(LINK_STORE, { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -1359,6 +1439,26 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(TODO_STORE, 'readwrite');
       const req = tx.objectStore(TODO_STORE).put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // 音楽関連サイトのリンク集(アプリ全体で1レコードのみ、id: 'global'固定)
+  async function linkGet() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(LINK_STORE, 'readonly');
+      const req = tx.objectStore(LINK_STORE).get('global');
+      req.onsuccess = () => resolve(req.result || { id: 'global', items: [], updatedAt: 0 });
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function linkPut(record) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(LINK_STORE, 'readwrite');
+      const req = tx.objectStore(LINK_STORE).put(record);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -4570,6 +4670,136 @@
   });
 
   // ==================================================
+  // 音楽リンク集(2026-08-19。ChordWiki・U-FRETなど練習中に開きたい音楽系サイトを
+  // 名前付きで貯めておく。アプリ全体で1つのリストで、練習ToDo・スタンプと同じ
+  // 「1レコードまるごとJSON、新しい方が勝つ」方式で同期する)
+  // ==================================================
+  let musicLinks = { id: 'global', items: [], updatedAt: 0 };
+
+  // 入力されたURLを検証する。javascript:や data: のような、タップした瞬間に
+  // このアプリの文脈でスクリプトが動きうるスキームは弾く(リンク集は同期を通じて
+  // 他の端末にも配られるため、自分で入れたつもりのない値が来る余地を残さない)。
+  function normalizeLinkUrl(raw) {
+    const trimmed = (raw || '').trim();
+    if (!trimmed) return null;
+    // スキーム省略で "chordwiki.jp" のように打たれた場合はhttps://を補う
+    const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed) ? trimmed : `https://${trimmed}`;
+    let parsed;
+    try {
+      parsed = new URL(withScheme);
+    } catch (e) {
+      return null;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.href;
+  }
+
+  async function saveMusicLinks() {
+    musicLinks.updatedAt = Date.now();
+    await linkPut(musicLinks);
+  }
+
+  function renderLinkList() {
+    linkListEl.innerHTML = '';
+    if (musicLinks.items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'まだリンクがありません。上の欄から追加してください。';
+      linkListEl.appendChild(empty);
+      return;
+    }
+    for (const item of musicLinks.items) {
+      const row = document.createElement('div');
+      row.className = 'linkItem';
+
+      const a = document.createElement('a');
+      a.className = 'linkItemMain';
+      a.href = item.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'linkItemName';
+      nameEl.textContent = item.name;
+      const urlEl = document.createElement('span');
+      urlEl.className = 'linkItemUrl';
+      urlEl.textContent = item.url;
+      a.appendChild(nameEl);
+      a.appendChild(urlEl);
+      row.appendChild(a);
+
+      const btnEdit = document.createElement('button');
+      btnEdit.textContent = '✎';
+      btnEdit.title = '名前とURLを編集';
+      btnEdit.addEventListener('click', async () => {
+        const newName = prompt('名前', item.name);
+        if (newName === null) return;
+        const newUrlRaw = prompt('URL', item.url);
+        if (newUrlRaw === null) return;
+        const newUrl = normalizeLinkUrl(newUrlRaw);
+        if (!newUrl) {
+          alert('URLが正しくありません(http:// または https:// のURLを入れてください)。');
+          return;
+        }
+        item.name = newName.trim() || item.name;
+        item.url = newUrl;
+        await saveMusicLinks();
+        renderLinkList();
+      });
+      row.appendChild(btnEdit);
+
+      const btnDel = document.createElement('button');
+      btnDel.textContent = '🗑';
+      btnDel.title = '削除';
+      btnDel.addEventListener('click', async () => {
+        if (!confirm(`「${item.name}」を削除しますか？`)) return;
+        musicLinks.items = musicLinks.items.filter((it) => it.id !== item.id);
+        await saveMusicLinks();
+        renderLinkList();
+      });
+      row.appendChild(btnDel);
+
+      linkListEl.appendChild(row);
+    }
+  }
+
+  async function addMusicLink() {
+    const name = linkNewName.value.trim();
+    const url = normalizeLinkUrl(linkNewUrl.value);
+    if (!url) {
+      alert('URLが正しくありません(http:// または https:// のURLを入れてください)。');
+      return;
+    }
+    musicLinks.items.push({
+      id: crypto.randomUUID(),
+      name: name || url, // 名前を省略した場合はURLをそのまま名前にする
+      url,
+    });
+    await saveMusicLinks();
+    linkNewName.value = '';
+    linkNewUrl.value = '';
+    renderLinkList();
+  }
+
+  btnLinkAdd.addEventListener('click', addMusicLink);
+  // 名前欄・URL欄のどちらでEnterを押しても追加できるようにする(URL欄まで
+  // タブ移動してからボタンを押す、という往復を省くため)。
+  for (const input of [linkNewName, linkNewUrl]) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addMusicLink(); }
+    });
+  }
+
+  btnGoLinks.addEventListener('click', async () => {
+    musicLinks = await linkGet();
+    renderLinkList();
+    showScreen(linkListScreen);
+  });
+  btnLinkBack.addEventListener('click', () => {
+    showScreen(songListScreen);
+    renderSongList();
+  });
+
+  // ==================================================
   // 練習ToDo(アプリ全体で1つ。曲/セットリストに紐付かない練習用チェックリスト。
   // サブタスクは1段階のみ。チェックした項目は自動では消さず、手動で外すまで残す)
   // ==================================================
@@ -5626,7 +5856,20 @@
       uuid: sl.uuid, name: sl.name, items: sl.items || [],
       createdAt: sl.createdAt, updatedAt: sl.updatedAt,
     }));
-    const manifest = { songs: songManifest, setlists: setlistManifest };
+    // 練習ToDo・スタンプ・リンク集も入れる(2026-08-19〜)。それまでは曲と
+    // セットリストしか入っておらず、これらは端末を初期化すると失われていた
+    // (クラウド同期でしか保護されていなかった)。どれもアプリ全体で1レコードの
+    // {items, updatedAt}なので、そのまま素直に埋め込む。
+    const todos = await todoGet();
+    const stamps = await stampGet();
+    const links = await linkGet();
+    const manifest = {
+      songs: songManifest,
+      setlists: setlistManifest,
+      todos: { items: todos.items || [], updatedAt: todos.updatedAt || 0 },
+      stamps: { items: stamps.items || [], updatedAt: stamps.updatedAt || 0 },
+      links: { items: links.items || [], updatedAt: links.updatedAt || 0 },
+    };
     const entries = [
       { name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) },
     ];
@@ -5727,6 +5970,26 @@
         });
         added++;
       }
+    }
+
+    // 練習ToDo・スタンプ・リンク集(2026-08-19〜。古いバックアップにはこれらの
+    // キーが無いので、その場合は何もしない=既存のデータを消さない)。曲と同じく
+    // 「バックアップの方が新しければ差し替える」というupdatedAt比較にする。
+    const restoreGlobalList = async (meta, getFn, putFn) => {
+      if (!meta || !Array.isArray(meta.items)) return false;
+      const current = await getFn();
+      if ((meta.updatedAt || 0) <= (current.updatedAt || 0)) return false;
+      await putFn({ id: 'global', items: meta.items, updatedAt: meta.updatedAt || Date.now() });
+      return true;
+    };
+    const parsedObj = Array.isArray(parsed) ? {} : parsed;
+    if (await restoreGlobalList(parsedObj.todos, todoGet, todoPut)) updated++;
+    if (await restoreGlobalList(parsedObj.stamps, stampGet, stampPut)) updated++;
+    if (await restoreGlobalList(parsedObj.links, linkGet, linkPut)) {
+      updated++;
+      // 復元した内容を画面にも反映する(リンク集を開いたまま復元した場合のため)。
+      musicLinks = await linkGet();
+      if (!linkListScreen.classList.contains('hidden')) renderLinkList();
     }
 
     alert(`復元完了: 追加${added}件 / 更新${updated}件 / スキップ${skipped}件`);
@@ -6117,6 +6380,25 @@
       await syncFetch(`${SYNC_API_URL}/api/stamps`, {
         method: 'PUT', headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: localStamps.items, updatedAt: localStamps.updatedAt }),
+      });
+      uploaded++;
+    }
+
+    // 音楽リンク集(同じくアプリ全体で1つのJSONまるごとを、新しい方が勝つ方式で同期)
+    const localLinks = await linkGet();
+    const linkRes = await syncFetch(`${SYNC_API_URL}/api/links`, { headers: { 'X-Sync-Key': key } });
+    if (!linkRes.ok) throw new Error(`サーバーエラー(リンク集) (${linkRes.status})`);
+    const remoteLinks = await linkRes.json();
+    if (remoteLinks.updatedAt > localLinks.updatedAt) {
+      await linkPut({ id: 'global', items: remoteLinks.items, updatedAt: remoteLinks.updatedAt });
+      // 画面を開いたまま同期した場合に、古い内容が残らないよう反映する。
+      musicLinks = { id: 'global', items: remoteLinks.items, updatedAt: remoteLinks.updatedAt };
+      if (!linkListScreen.classList.contains('hidden')) renderLinkList();
+      downloaded++;
+    } else if (localLinks.updatedAt > remoteLinks.updatedAt) {
+      await syncFetch(`${SYNC_API_URL}/api/links`, {
+        method: 'PUT', headers: { 'X-Sync-Key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: localLinks.items, updatedAt: localLinks.updatedAt }),
       });
       uploaded++;
     }
