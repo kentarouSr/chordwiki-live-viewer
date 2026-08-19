@@ -717,6 +717,9 @@
   /* ツールバーを畳んだ状態(2026-08-19)。スマホだとボタン群が画面の大半を占めて
      譜面がほとんど見えないため、まるごと隠せるようにした。 */
   #scoreEditorToolbar.collapsed { display: none; }
+  /* L/Rは両手のリズムパターン用なので、リズム譜の時だけ出す */
+  .scoreRhythmOnly { display: none; }
+  #scoreEditorToolbar.rhythm .scoreRhythmOnly { display: inline-flex; }
   .scoreEditorGroup label { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 4px; }
   .scoreEditorGroup select {
     font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid #333;
@@ -1153,6 +1156,7 @@
         <label>調号 <select id="scoreKeySelect"></select></label>
         <label>音部 <select id="scoreClefSelect"></select></label>
         <button id="btnScoreClefKey" title="各段の頭の音部記号と調号を表示するか">&#119070; 冒頭記号</button>
+        <label title="音程を持たないリズムだけの譜面に切り替える">譜表 <select id="scoreStaffTypeSelect"><option value="standard">通常</option><option value="rhythm">リズム</option></select></label>
         <label title="曲が1拍目から始まらない時に、1小節目だけ短くする">弱起 <select id="scorePickupSelect"></select></label>
         <label title="選択中の音符に強弱記号を付ける">強弱 <select id="scoreDynamicSelect"></select></label>
         <label title="選択中の音符に奏法記号を付ける">奏法 <select id="scoreArticulationSelect"></select></label>
@@ -1189,6 +1193,8 @@
         <button id="btnScoreRepeatStart" title="選択中の音符が入っている小節から反復を始める">&#124;: 反復開始</button>
         <button id="btnScoreRepeatEnd" title="選択中の音符が入っている小節で反復を終える">:&#124; 反復終了</button>
         <button id="btnScoreLineBreak" title="選択中の音符が入っている小節の後ろで段を変える">&#8629; 改行</button>
+        <button id="btnScoreHandL" class="scoreRhythmOnly" title="選択中の音符に L(左手)を振る">L</button>
+        <button id="btnScoreHandR" class="scoreRhythmOnly" title="選択中の音符に R(右手)を振る">R</button>
         <button id="btnScoreSharp">&#9839;</button>
         <button id="btnScoreFlat">&#9837;</button>
         <button id="btnScoreNatural">&#9838;</button>
@@ -1420,6 +1426,9 @@
   const scoreKeySelect = document.getElementById('scoreKeySelect');
   const scoreClefSelect = document.getElementById('scoreClefSelect');
   const scorePickupSelect = document.getElementById('scorePickupSelect');
+  const scoreStaffTypeSelect = document.getElementById('scoreStaffTypeSelect');
+  const btnScoreHandL = document.getElementById('btnScoreHandL');
+  const btnScoreHandR = document.getElementById('btnScoreHandR');
   const scoreDynamicSelect = document.getElementById('scoreDynamicSelect');
   const scoreArticulationSelect = document.getElementById('scoreArticulationSelect');
   const btnScoreUndo = document.getElementById('btnScoreUndo');
@@ -2723,7 +2732,7 @@
     return {
       elements: cloneScoreElements(scoreElements),
       timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths,
-      clef: scoreClef, pickupUnits: scorePickupUnits,
+      clef: scoreClef, pickupUnits: scorePickupUnits, staffType: scoreStaffType,
     };
   }
 
@@ -3123,6 +3132,7 @@
           // (伸びている先にもう一度出ると二重表示になる)。
           chord: fi === 0 ? el.chord : null,
           dynamic: fi === 0 ? (el.dynamic || null) : null,
+          hand: fi === 0 ? (el.hand || null) : null,
           articulation: fi === 0 ? (el.articulation || null) : null,
           triplet: el.triplet, tripletGroup: el.tripletGroup,
           tripletFirst: fi === 0 ? el.tripletFirst : false,
@@ -3222,6 +3232,12 @@
   let scoreKeyFifths = 0;
   let scoreClef = 'treble';
   let scorePickupUnits = 0; // 弱起の長さ(全音符=1単位)。0なら弱起なし
+  // 譜表の種類(2026-08-19〜)。'standard'は普通の5線譜、'rhythm'は音程を持たない
+  // 1本線のリズム譜。リズムパターンだけ書きたい時のために追加した。
+  // リズム譜では音程・調号・音部記号は意味を持たないので描かない(データとしての
+  // 音程はそのまま保持するので、通常譜に戻せば元の音が出る)。
+  let scoreStaffType = 'standard';
+  const SCORE_RHYTHM_KEY = 'b/4'; // 1本線の上に置く固定位置(5線譜の第3線に当たる)
   // 冒頭記号(音部記号+調号)を描くか(2026-08-19〜)。
   // このエディタで作る譜面はコード譜に貼る「断片」なので、毎段の頭に音部記号と
   // 調号が出ると場所を食ううえ情報としても冗長なことが多い。消せるようにした。
@@ -3455,6 +3471,7 @@
     // 古いフレーズにはclefが無いので、その場合はト音記号として扱う
     scoreClef = src.clef === 'bass' ? 'bass' : 'treble';
     scorePickupUnits = Number.isFinite(src.pickupUnits) ? src.pickupUnits : 0;
+    scoreStaffType = src.staffType === 'rhythm' ? 'rhythm' : 'standard';
     scoreTimeSigSelect.value = String(scoreTimeSigIdx);
     scoreKeySelect.value = String(scoreKeyFifths);
     scoreClefSelect.value = scoreClef;
@@ -3504,6 +3521,8 @@
     btnScoreRepeatStart.classList.toggle('active', !!(sel && sel.repeatStart));
     btnScoreRepeatEnd.classList.toggle('active', !!(sel && sel.repeatEnd));
     btnScoreLineBreak.classList.toggle('active', !!(sel && sel.lineBreak));
+    btnScoreHandL.classList.toggle('active', !!(sel && sel.hand === 'L'));
+    btnScoreHandR.classList.toggle('active', !!(sel && sel.hand === 'R'));
     const acc = sel ? elFirstAccidental(sel) : scorePendingAccidental;
     btnScoreSharp.classList.toggle('active', acc === 'sharp');
     btnScoreFlat.classList.toggle('active', acc === 'flat');
@@ -3598,6 +3617,29 @@
     updateScoreToolbarUI();
     renderScoreCanvas();
   }
+  // 譜表の種類。音符データ(音程)はそのまま保持するので、通常譜に戻せば元の音が出る。
+  function applyScoreStaffType() {
+    scoreEditorToolbar.classList.toggle('rhythm', scoreStaffType === 'rhythm');
+    scoreStaffTypeSelect.value = scoreStaffType;
+  }
+  scoreStaffTypeSelect.addEventListener('change', () => {
+    scoreStaffType = scoreStaffTypeSelect.value === 'rhythm' ? 'rhythm' : 'standard';
+    applyScoreStaffType();
+    renderScoreCanvas();
+  });
+  // 選択中の音符に左手/右手の印を振る。同じものをもう一度押すと外れる。
+  function scoreSetHand(hand) {
+    if (scoreSelectedIndex === null) return;
+    const el = scoreElements[scoreSelectedIndex];
+    if (el.type !== 'note') return;
+    pushScoreUndoSnapshot();
+    el.hand = el.hand === hand ? null : hand;
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+  btnScoreHandL.addEventListener('click', () => scoreSetHand('L'));
+  btnScoreHandR.addEventListener('click', () => scoreSetHand('R'));
+
   btnScoreRepeatStart.addEventListener('click', () => scoreToggleRepeat('repeatStart'));
   btnScoreRepeatEnd.addEventListener('click', () => scoreToggleRepeat('repeatEnd'));
   // 改行も反復記号と同じ「選択中の音符が入っている小節」への指定。
@@ -3802,6 +3844,8 @@
     scoreKeyFifths = Number.isFinite(p.keyFifths) ? p.keyFifths : 0;
     scoreClef = p.clef === 'bass' ? 'bass' : 'treble';
     scorePickupUnits = Number.isFinite(p.pickupUnits) ? p.pickupUnits : 0;
+    scoreStaffType = p.staffType === 'rhythm' ? 'rhythm' : 'standard';
+    applyScoreStaffType();
     scoreTimeSigSelect.value = String(scoreTimeSigIdx);
     scoreKeySelect.value = String(scoreKeyFifths);
     scoreClefSelect.value = scoreClef;
@@ -4956,8 +5000,19 @@
         // 保証されているので、ここではそのままkeysに変換するだけでよい
         // (VexFlowは2度音程が隣接する時のノートヘッド左右オフセットをkeys配列の
         // 並び順で決めるため未整列だと見た目が崩れるが、その心配は不要)。
-        const keys = el.pitches.map((p, pi) => scoreStepToVexKey(p.step, effectiveAccidental[idx][pi]));
+        // リズム譜は音程を持たないので、全部を1本線の上に固定で置く。
+        // 符頭はスラッシュにして「音程ではなくリズムを示す」ことを見た目でも伝える。
+        const keys = scoreStaffType === 'rhythm'
+          ? [SCORE_RHYTHM_KEY + '/s']
+          : el.pitches.map((p, pi) => scoreStepToVexKey(p.step, effectiveAccidental[idx][pi]));
         note = new VF.StaveNote({ keys, duration: SCORE_DURATION_TO_VEX[el.duration] });
+        // 両手のリズムパターン用に、音符の上へL/Rを振れる
+        if (scoreStaffType === 'rhythm' && el.hand) {
+          const ann = new VF.Annotation(el.hand);
+          ann.setFont('sans-serif', SCORE_STAVE_LINE_SPACING * 1.1, 'bold');
+          ann.setVerticalJustification(VF.Annotation.VerticalJustify.TOP);
+          note.addModifier(ann);
+        }
         if (el.chord) {
           note.addModifier(scoreBuildChordSymbol(VF, el.chord));
         }
@@ -5019,7 +5074,7 @@
     // (実際の記譜法どおり)。Staveはcanvasに描かなくても幅を計算できる。
     function headerWidth(withTimeSig) {
       const probe = new VF.Stave(0, 0, 400);
-      if (scoreShowClefKey) {
+      if (scoreStaffType !== 'rhythm' && scoreShowClefKey) {
         probe.addClef(scoreClef);
         if (keyName !== 'C') probe.addKeySignature(keyName);
       }
@@ -5072,7 +5127,8 @@
         const blankStave = new VF.Stave(x, y, Math.max(150, scoreSystemWidth - SCORE_LEFT_MARGIN - SCORE_RIGHT_MARGIN), {
           spacing_between_lines_px: SCORE_STAVE_LINE_SPACING,
         });
-        if (scoreShowClefKey) {
+        if (scoreStaffType === 'rhythm') blankStave.setNumLines(1);
+        else if (scoreShowClefKey) {
           blankStave.addClef(scoreClef);
           if (keyName !== 'C') blankStave.addKeySignature(keyName);
         }
@@ -5086,8 +5142,10 @@
         const isFirstOfSystem = mi === 0;
         const header = isFirstOfSystem ? (isFirstSystem ? headerFirst : headerRest) : 0;
         const stave = new VF.Stave(x, y, width + header, { spacing_between_lines_px: SCORE_STAVE_LINE_SPACING });
+        if (scoreStaffType === 'rhythm') stave.setNumLines(1);
         if (isFirstOfSystem) {
-          if (scoreShowClefKey) {
+          // リズム譜に音部記号・調号は意味が無いので出さない
+          if (scoreStaffType !== 'rhythm' && scoreShowClefKey) {
             stave.addClef(scoreClef);
             if (keyName !== 'C') stave.addKeySignature(keyName);
           }
@@ -6492,7 +6550,7 @@
       Object.assign(existing, {
         elements: cloneScoreElements(scoreElements),
         timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths, clef: scoreClef,
-        pickupUnits: scorePickupUnits,
+        pickupUnits: scorePickupUnits, staffType: scoreStaffType,
         preview, updatedAt: Date.now(),
       });
     } else {
@@ -6500,7 +6558,7 @@
         id: crypto.randomUUID(), name, tags,
         elements: cloneScoreElements(scoreElements),
         timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths, clef: scoreClef,
-        pickupUnits: scorePickupUnits,
+        pickupUnits: scorePickupUnits, staffType: scoreStaffType,
         preview, createdAt: Date.now(), updatedAt: Date.now(),
       });
     }
@@ -8525,6 +8583,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
