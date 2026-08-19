@@ -1070,6 +1070,7 @@
       </div>
       <div class="toolbarGroup">
         <button id="btnEditBpm" class="memoEditOnly">&#127932; BPM: --</button>
+        <button id="btnReadBpm" class="memoEditOnly" title="譜面の「BPM=◯◯」の記載を読み取ります(初回は文字認識エンジンの読み込みに時間がかかります)">&#128269; BPM読取</button>
         <button id="btnMetronome">&#129345; クリック</button>
       </div>
       <div class="toolbarGroup">
@@ -1420,6 +1421,7 @@
   const btnImagePickerChoose = document.getElementById('btnImagePickerChoose');
   const btnImagePickerCancel = document.getElementById('btnImagePickerCancel');
   const btnEditBpm = document.getElementById('btnEditBpm');
+  const btnReadBpm = document.getElementById('btnReadBpm');
   const btnMetronome = document.getElementById('btnMetronome');
   const btnSpeedUp = document.getElementById('btnSpeedUp');
   const btnSpeedDown = document.getElementById('btnSpeedDown');
@@ -2047,7 +2049,40 @@
     momentumRafId = requestAnimationFrame(step);
   }
 
+  // ==================================================
+  // 2本指でのピンチズーム(2026-08-19〜)
+  // ==================================================
+  // ビューアは touch-action:none でネイティブのピンチを止めてある(ツールバーごと
+  // 拡大されるのを避けるため)。そのぶん2本指のイベントは全部こちらに来るので、
+  // 自前でピンチを実装できる。
+  //
+  // 「右上のボタンでモードに入る」案もあったが、1本指=スクロール・2本指=ズームで
+  // 操作が競合しないため、モードを挟まず直接ピンチできるようにした(タップ数が減る)。
+  // 演奏モードでは従来どおりズーム自体が禁止なので、誤操作で倍率が変わる心配もない。
+  //
+  // 拡大のたびに再タイル化(rebuildCurrentSource)が走ると重いので、既存の+/-ボタンと
+  // 同じ0.25刻みに丸め、段が変わった時だけ実際のズームを走らせる。
+  const pinchPointers = new Map();
+  let pinching = false, pinchStartDist = 0, pinchStartZoom = 1;
+  function pinchDistance() {
+    const pts = Array.from(pinchPointers.values());
+    if (pts.length < 2) return 0;
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+  function zoomAllowed() { return !viewer.classList.contains('app-mode-perform'); }
+
   scrollWrap.addEventListener('pointerdown', (e) => {
+    pinchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinchPointers.size === 2 && zoomAllowed()) {
+      // 2本目が触れた時点でスクロールのドラッグは打ち切り、ピンチに切り替える
+      pinching = true;
+      dragging = false;
+      pinchStartDist = pinchDistance();
+      pinchStartZoom = zoomLevel;
+      stopMomentumScroll();
+      return;
+    }
+    if (pinchPointers.size > 1) return; // 3本目以降は無視
     stopMomentumScroll();
     dragging = true;
     dragStartX = e.clientX;
@@ -2061,6 +2096,17 @@
     scrollWrap.setPointerCapture(e.pointerId);
   });
   scrollWrap.addEventListener('pointermove', (e) => {
+    if (pinchPointers.has(e.pointerId)) pinchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinching) {
+      const d = pinchDistance();
+      if (pinchStartDist > 0 && d > 0) {
+        // 指の間隔の比をそのまま倍率に掛け、0.25刻みに丸める
+        const raw = pinchStartZoom * (d / pinchStartDist);
+        const stepped = Math.round(raw / ZOOM_STEP) * ZOOM_STEP;
+        if (stepped !== zoomLevel) setZoomLevel(stepped);
+      }
+      return;
+    }
     if (!dragging) return;
     const deltaX = e.clientX - dragStartX;
     const deltaY = e.clientY - dragStartY;
@@ -2074,6 +2120,13 @@
   scrollWrap.addEventListener('pointerup', endDrag);
   scrollWrap.addEventListener('pointercancel', endDrag);
   function endDrag(e) {
+    if (e) pinchPointers.delete(e.pointerId);
+    if (pinching) {
+      // 指が1本でも離れたらピンチ終了。残った指でそのままスクロールが始まると
+      // 譜面が飛ぶので、次に触り直すまでドラッグは開始しない。
+      if (pinchPointers.size < 2) { pinching = false; dragging = false; }
+      return;
+    }
     if (!dragging) return;
     dragging = false;
     const moved = e ? Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY) : 999;
@@ -5114,6 +5167,116 @@
   });
 
   // ==================================================
+  // 譜面からのBPM読み取り(OCR、2026-08-19〜)
+  // ==================================================
+  // ChordWikiの譜面には先頭に「BPM=84」と書かれているので、そこだけ読む。
+  //
+  // 読み取りにはTesseract.js(Apache-2.0、vendor/tesseract/)を使うが、本体+WASM+
+  // 学習データで約9.6MBある。曲の登録のたびに読ませるには重すぎるので、
+  // **このボタンを押した人だけが初回に読み込む**遅延読み込みにしている
+  // (Service Workerのオフライン対象にも入れていないので、普段のアプリの重さや
+  // オフライン用データの容量には一切影響しない)。
+  //
+  // 精度と速度のために、画像全体ではなく上部の帯だけを切り出し、2倍に拡大してから
+  // 数字とBPMの文字だけに絞って読ませる。
+  const SCORE_BPM_OCR_TOP_RATIO = 0.16; // 画像の上から何割を見るか
+  const SCORE_BPM_OCR_SCALE = 2;        // 小さい文字を潰さないための拡大率
+  let tesseractLoadPromise = null;
+  function loadTesseract() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (tesseractLoadPromise) return tesseractLoadPromise;
+    tesseractLoadPromise = new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = './vendor/tesseract/tesseract.min.js';
+      sc.onload = () => resolve(window.Tesseract);
+      sc.onerror = () => reject(new Error('文字認識エンジンの読み込みに失敗しました(通信環境を確認してください)'));
+      document.head.appendChild(sc);
+    });
+    return tesseractLoadPromise;
+  }
+
+  // 今開いている曲の「上部の帯」をcanvasに描いて返す。画像とPDFの両方に対応する。
+  async function scoreBpmOcrSourceCanvas() {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (currentSourceKind === 'image' && currentImageEl) {
+      const sw = currentImageEl.naturalWidth, sh = currentImageEl.naturalHeight;
+      const bandH = Math.max(1, Math.round(sh * SCORE_BPM_OCR_TOP_RATIO));
+      canvas.width = Math.round(sw * SCORE_BPM_OCR_SCALE);
+      canvas.height = Math.round(bandH * SCORE_BPM_OCR_SCALE);
+      ctx.drawImage(currentImageEl, 0, 0, sw, bandH, 0, 0, canvas.width, canvas.height);
+      return canvas;
+    }
+    if (currentSourceKind === 'pdf' && currentPdfDoc) {
+      const page = await currentPdfDoc.getPage(1);
+      const vp = page.getViewport({ scale: SCORE_BPM_OCR_SCALE });
+      const full = document.createElement('canvas');
+      full.width = Math.round(vp.width); full.height = Math.round(vp.height);
+      await page.render({ canvasContext: full.getContext('2d'), viewport: vp }).promise;
+      canvas.width = full.width;
+      canvas.height = Math.max(1, Math.round(full.height * SCORE_BPM_OCR_TOP_RATIO));
+      ctx.drawImage(full, 0, 0);
+      return canvas;
+    }
+    return null;
+  }
+
+  // 読み取った文字列からBPMを拾う。ChordWikiは「BPM=84」だが、
+  // 「BPM 84」「BPM:84」やOCRが=を取りこぼした場合も拾えるようにしておく。
+  // 20〜400の範囲外は誤認識とみなす(現実の曲のテンポの範囲)。
+  function extractBpmFromOcrText(text) {
+    const m = String(text || '').replace(/\s+/g, ' ').match(/BPM\s*[=＝:：]?\s*(\d{2,3})/i);
+    if (!m) return null;
+    const v = parseInt(m[1], 10);
+    return (Number.isFinite(v) && v >= 20 && v <= 400) ? v : null;
+  }
+
+  async function readBpmFromScore() {
+    const canvas = await scoreBpmOcrSourceCanvas();
+    if (!canvas) throw new Error('譜面の画像を取得できませんでした');
+    const Tesseract = await loadTesseract();
+    const worker = await Tesseract.createWorker('eng', 1, {
+      workerPath: './vendor/tesseract/worker.min.js',
+      corePath: './vendor/tesseract/',
+      langPath: './vendor/tesseract/',
+      // 学習データは同梱の.gzをそのまま使う
+      gzip: true,
+    });
+    try {
+      // BPMの行だけが目当てなので、出てくる文字を絞って誤認識を減らす
+      await worker.setParameters({ tessedit_char_whitelist: '0123456789BPM=:. ' });
+      const { data } = await worker.recognize(canvas);
+      return { bpm: extractBpmFromOcrText(data.text), raw: data.text };
+    } finally {
+      await worker.terminate();
+    }
+  }
+
+  btnReadBpm.addEventListener('click', async () => {
+    const label = btnReadBpm.textContent;
+    btnReadBpm.disabled = true;
+    btnReadBpm.textContent = '読み取り中...';
+    try {
+      const { bpm, raw } = await readBpmFromScore();
+      if (bpm == null) {
+        alert('BPMを読み取れませんでした。譜面に「BPM=◯◯」の記載があるか確認してください。手動で入力する場合は「BPM」ボタンから設定できます。');
+        console.log('[BPM OCR] 読み取れた文字:', raw);
+        return;
+      }
+      currentBpm = bpm;
+      updateBpmLabel();
+      await saveCurrentBpm();
+      alert(`BPM ${bpm} を読み取りました。`);
+    } catch (err) {
+      console.error(err);
+      alert('読み取りエラー: ' + (err && err.message ? err.message : err));
+    } finally {
+      btnReadBpm.disabled = false;
+      btnReadBpm.textContent = label;
+    }
+  });
+
+  // ==================================================
   // メトロノーム(Web Audio)
   // rAFやsetTimeoutだけで刻むと時間ズレが蓄積するため、AudioContextの時刻を基準に
   // 少し先まで予約するルックアヘッド方式にする(定番の実装パターン)。
@@ -8016,6 +8179,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
