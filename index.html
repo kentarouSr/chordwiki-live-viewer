@@ -7029,14 +7029,10 @@
   // ---- オフラインキャッシュ更新 ----
   // Service Workerのキャッシュ(cwlv-shell-v1)を、ボタン操作で明示的に最新化する。
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
-  const OFFLINE_CACHE_NAME = 'cwlv-shell-v3'; // v3: 楽譜エディタをVexFlowに移行、Bravuraフォント単体は廃止(sw.jsのCACHE_NAMEと同じ値を保つ)
-  const OFFLINE_ASSET_LIST = [
-    './', './index.html', './manual.html', './manifest.json',
-    './vendor/pdfjs/pdf.min.js', './vendor/pdfjs/pdf.worker.min.js',
-    './vendor/vexflow/vexflow.js',
-    './vendor/vexflow/fonts/bravura.woff2', './vendor/vexflow/fonts/academico.woff2', './vendor/vexflow/fonts/academico-bold.woff2',
-    './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
-  ];
+  // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
+  // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
+  // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
+  // ボタンが無反応だった(2026-08-19に二重管理をやめた)。
 
   function renderOfflineCacheInfo() {
     const ts = parseInt(localStorage.getItem(OFFLINE_CACHE_UPDATED_KEY), 10);
@@ -7045,16 +7041,29 @@
       : 'オフライン用データ: 未更新';
   }
 
+  // Service Workerにキャッシュの作り直しを依頼し、終わったらページを読み込み直す。
+  // 読み込み直しまでやらないと、更新したのは保存済みファイルだけで画面は古いまま
+  // なので「押しても何も変わらない」という体験になる(実際そう報告された)。
   async function updateOfflineCache() {
-    if (!('caches' in window)) throw new Error('このブラウザはオフラインキャッシュに対応していません');
-    const cache = await caches.open(OFFLINE_CACHE_NAME);
-    for (const url of OFFLINE_ASSET_LIST) {
-      const res = await fetch(url, { cache: 'reload' });
-      if (!res.ok) throw new Error(`${url} の取得に失敗しました`);
-      await cache.put(url, res);
-    }
+    if (!('serviceWorker' in navigator)) throw new Error('このブラウザはオフライン保存に対応していません');
+    const reg = await navigator.serviceWorker.getRegistration();
+    // sw.js自体が新しくなっている場合はここで差し替わる(controllerchangeで自動リロード)
+    if (reg) { try { await reg.update(); } catch (e) { /* 失敗しても下の更新は試みる */ } }
+    const sw = navigator.serviceWorker.controller || (reg && (reg.active || reg.waiting));
+    if (!sw) throw new Error('オフライン保存の準備がまだ終わっていません(少し待ってからもう一度お試しください)');
+
+    const result = await new Promise((resolve, reject) => {
+      const ch = new MessageChannel();
+      const timer = setTimeout(() => reject(new Error('更新が時間内に終わりませんでした(電波状況を確認してください)')), 30000);
+      ch.port1.onmessage = (e) => { clearTimeout(timer); resolve(e.data); };
+      sw.postMessage({ type: 'REFRESH_CACHE' }, [ch.port2]);
+    });
+    if (!result || !result.ok) throw new Error(result && result.error ? result.error : '更新に失敗しました');
+
     localStorage.setItem(OFFLINE_CACHE_UPDATED_KEY, String(Date.now()));
     renderOfflineCacheInfo();
+    alert(`最新版に更新しました(${result.count}件)。画面を読み込み直します。`);
+    location.reload();
   }
 
   // ZIPバックアップの中身(manifest.json+曲の実体+画像メモ実体)を組み立てる。

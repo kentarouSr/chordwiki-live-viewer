@@ -5,7 +5,7 @@
 // オンライン時は常にネットワークを優先し(タイムアウト付き)、取得できたら
 // キャッシュも更新する。オフライン時やネットワークが遅い時だけキャッシュに
 // フォールバックすることで、機内モードでの起動性は維持する。
-const CACHE_NAME = 'cwlv-shell-v4'; // v4: 招待された友達向けのstart.htmlを追加
+const CACHE_NAME = 'cwlv-shell-v5'; // v5: 「データを更新」をSW側に一本化(ページ側との名前の食い違いを解消)
 const NETWORK_TIMEOUT_MS = 3000;
 
 const ASSET_LIST = [
@@ -34,6 +34,38 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
+});
+
+// 「データを更新」ボタンからの依頼でキャッシュを作り直す(2026-08-19〜)。
+//
+// 以前はページ側(index.html)がキャッシュ名とファイル一覧を自前で持って直接
+// 書き換えていたが、sw.jsをv3→v4に上げた時にページ側がv3のままだったため、
+// **Service Workerが読まないキャッシュに書き込む**状態になり、ボタンを押しても
+// 何も起きなかった。二重管理をやめ、キャッシュ名とファイル一覧を知っている
+// Service Worker側にまとめる。
+self.addEventListener('message', (event) => {
+  if (!event.data || event.data.type !== 'REFRESH_CACHE') return;
+  const reply = (payload) => {
+    if (event.ports && event.ports[0]) event.ports[0].postMessage(payload);
+  };
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      // cache:'reload'でブラウザのHTTPキャッシュも迂回し、必ずサーバーから取り直す
+      for (const url of ASSET_LIST) {
+        const res = await fetch(new Request(url, { cache: 'reload' }));
+        if (!res || !res.ok) throw new Error(url + ' の取得に失敗しました');
+        await cache.put(url, res);
+      }
+      // 古い世代のキャッシュ(cwlv-shell-v3など)が残っていると容量を食うだけなので消す
+      const names = await caches.keys();
+      await Promise.all(names.filter((n) => n.startsWith('cwlv-shell-') && n !== CACHE_NAME)
+        .map((n) => caches.delete(n)));
+      reply({ ok: true, cacheName: CACHE_NAME, count: ASSET_LIST.length });
+    } catch (err) {
+      reply({ ok: false, error: String(err && err.message ? err.message : err) });
+    }
+  })());
 });
 
 self.addEventListener('fetch', (event) => {
