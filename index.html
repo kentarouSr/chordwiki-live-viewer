@@ -986,63 +986,64 @@
     </div>
     <input id="memoImageInput" type="file" accept="image/*">
 
-    <div id="scoreEditorOverlay" class="hidden">
-      <div id="scoreEditorHeader">
-        <button id="btnScoreCancel">キャンセル</button>
-        <h1>楽譜作成</h1>
-        <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067;</a>
-        <button id="btnScoreDone">完了</button>
-      </div>
-      <div id="scoreEditorCanvasWrap">
-        <canvas id="scoreEditorCanvas"></canvas>
-      </div>
-      <div id="scoreEditorToolbar">
-        <div class="scoreEditorGroup">
-          <label>拍子 <select id="scoreTimeSigSelect"></select></label>
-          <label>調号 <select id="scoreKeySelect"></select></label>
-        </div>
-        <div class="scoreEditorGroup">
-          <button id="btnScoreChordMode">&#9834; 単音</button>
-        </div>
-        <div class="scoreEditorGroup">
-          <span class="scoreGroupLabel">転調</span>
-          <button id="btnScoreTransposeDown" title="半音下げる(音符・コード名・調号をまとめて)">&minus;1</button>
-          <button id="btnScoreTransposeUp" title="半音上げる(音符・コード名・調号をまとめて)">+1</button>
-          <button id="btnScoreTransposeDownOct" title="1オクターブ下げる">&minus;12</button>
-          <button id="btnScoreTransposeUpOct" title="1オクターブ上げる">+12</button>
-        </div>
-        <div class="scoreEditorGroup">
-          <button class="scoreDurationBtn" data-duration="whole">全</button>
-          <button class="scoreDurationBtn" data-duration="half">2分</button>
-          <button class="scoreDurationBtn active" data-duration="quarter">4分</button>
-          <button class="scoreDurationBtn" data-duration="eighth">8分</button>
-          <button class="scoreDurationBtn" data-duration="sixteenth">16分</button>
-          <button class="scoreDurationBtn" data-duration="thirtysecond">32分</button>
-          <button class="scoreDurationBtn" data-duration="sixtyfourth">64分</button>
-        </div>
-        <div class="scoreEditorGroup">
-          <button id="btnScoreDot">付点</button>
-          <button id="btnScoreTriplet">3連</button>
-          <button id="btnScoreTie">&#8899; タイ</button>
-          <button id="btnScoreSharp">&#9839;</button>
-          <button id="btnScoreFlat">&#9837;</button>
-          <button id="btnScoreNatural">&#9838;</button>
-          <button id="btnScoreEnharmonic">&#9837;&harr;&#9839; 異名同音</button>
-          <button id="btnScoreRest">休符</button>
-        </div>
-        <div class="scoreEditorGroup">
-          <input id="scoreChordInput" type="text" placeholder="コード名(次の音符に付く)">
-          <button id="btnScoreLoadPhrase" title="保存したフレーズを読み込む">&#127925; フレーズ読込</button>
-          <button id="btnScoreChordShortcut" title="ChordWikiエディタと同じキー割り当てでコード名を入力する">&#9889; コード略記</button>
-          <button id="btnScoreSound">&#128266; 音あり</button>
-          <button id="btnScoreUndo">&#10006; 直前を削除</button>
-          <button id="btnScoreClearAll">全消去</button>
-          <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
-        </div>
-      </div>
-      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。「⋃ タイ」で選択中の音符と直後の同じ高さの音符をつなげます。PCでは<strong>キーボード入力</strong>(A〜G:新規音符 / 1〜7:音価 / .:付点 / -,=,0:♭♯♮ / ←→:音符移動 / ↑↓:半音移動 / Delete:削除 / Ctrl+Z:取り消し。詳しい一覧は❓から)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。<strong>入力した音は実際に鳴ります</strong>(←→↑↓で音符をたどる時も鳴るので、音を確かめながら打ち込めます。静かな場所では「🔊 音あり」ボタンでオフにできます)。コード名は<strong>「⚡ コード略記」</strong>をオンにすると、ChordWikiのコード譜エディタと同じキー割り当て(Shift不要)で入力できます。<strong>「転調」の&minus;1/+1で半音ずつ、&minus;12/+12でオクターブ単位で移調できます</strong>(音符・コード名・調号がまとめて動きます)。<strong>「🎵 フレーズ読込」</strong>で、フレーズ集に保存した譜面を読み込んで貼れます。</p>
-      <div id="scorePianoKeyboard"></div>
+  </div>
+
+  <div id="scoreEditorOverlay" class="hidden">
+    <div id="scoreEditorHeader">
+      <button id="btnScoreCancel">キャンセル</button>
+      <h1>楽譜作成</h1>
+      <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067;</a>
+      <button id="btnScoreDone">完了</button>
     </div>
+    <div id="scoreEditorCanvasWrap">
+      <canvas id="scoreEditorCanvas"></canvas>
+    </div>
+    <div id="scoreEditorToolbar">
+      <div class="scoreEditorGroup">
+        <label>拍子 <select id="scoreTimeSigSelect"></select></label>
+        <label>調号 <select id="scoreKeySelect"></select></label>
+      </div>
+      <div class="scoreEditorGroup">
+        <button id="btnScoreChordMode">&#9834; 単音</button>
+      </div>
+      <div class="scoreEditorGroup">
+        <span class="scoreGroupLabel">転調</span>
+        <button id="btnScoreTransposeDown" title="半音下げる(音符・コード名・調号をまとめて)">&minus;1</button>
+        <button id="btnScoreTransposeUp" title="半音上げる(音符・コード名・調号をまとめて)">+1</button>
+        <button id="btnScoreTransposeDownOct" title="1オクターブ下げる">&minus;12</button>
+        <button id="btnScoreTransposeUpOct" title="1オクターブ上げる">+12</button>
+      </div>
+      <div class="scoreEditorGroup">
+        <button class="scoreDurationBtn" data-duration="whole">全</button>
+        <button class="scoreDurationBtn" data-duration="half">2分</button>
+        <button class="scoreDurationBtn active" data-duration="quarter">4分</button>
+        <button class="scoreDurationBtn" data-duration="eighth">8分</button>
+        <button class="scoreDurationBtn" data-duration="sixteenth">16分</button>
+        <button class="scoreDurationBtn" data-duration="thirtysecond">32分</button>
+        <button class="scoreDurationBtn" data-duration="sixtyfourth">64分</button>
+      </div>
+      <div class="scoreEditorGroup">
+        <button id="btnScoreDot">付点</button>
+        <button id="btnScoreTriplet">3連</button>
+        <button id="btnScoreTie">&#8899; タイ</button>
+        <button id="btnScoreSharp">&#9839;</button>
+        <button id="btnScoreFlat">&#9837;</button>
+        <button id="btnScoreNatural">&#9838;</button>
+        <button id="btnScoreEnharmonic">&#9837;&harr;&#9839; 異名同音</button>
+        <button id="btnScoreRest">休符</button>
+      </div>
+      <div class="scoreEditorGroup">
+        <input id="scoreChordInput" type="text" placeholder="コード名(次の音符に付く)">
+        <button id="btnScoreLoadPhrase" title="保存したフレーズを読み込む">&#127925; フレーズ読込</button>
+        <button id="btnScoreChordShortcut" title="ChordWikiエディタと同じキー割り当てでコード名を入力する">&#9889; コード略記</button>
+        <button id="btnScoreSound">&#128266; 音あり</button>
+        <button id="btnScoreUndo">&#10006; 直前を削除</button>
+        <button id="btnScoreClearAll">全消去</button>
+        <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
+      </div>
+    </div>
+    <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。「⋃ タイ」で選択中の音符と直後の同じ高さの音符をつなげます。PCでは<strong>キーボード入力</strong>(A〜G:新規音符 / 1〜7:音価 / .:付点 / -,=,0:♭♯♮ / ←→:音符移動 / ↑↓:半音移動 / Delete:削除 / Ctrl+Z:取り消し。詳しい一覧は❓から)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。<strong>入力した音は実際に鳴ります</strong>(←→↑↓で音符をたどる時も鳴るので、音を確かめながら打ち込めます。静かな場所では「🔊 音あり」ボタンでオフにできます)。コード名は<strong>「⚡ コード略記」</strong>をオンにすると、ChordWikiのコード譜エディタと同じキー割り当て(Shift不要)で入力できます。<strong>「転調」の&minus;1/+1で半音ずつ、&minus;12/+12でオクターブ単位で移調できます</strong>(音符・コード名・調号がまとめて動きます)。<strong>「🎵 フレーズ読込」</strong>で、フレーズ集に保存した譜面を読み込んで貼れます。</p>
+    <div id="scorePianoKeyboard"></div>
   </div>
 
 </div>
