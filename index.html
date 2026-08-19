@@ -2626,6 +2626,31 @@
   function scoreKeyOption() { return SCORE_KEY_OPTIONS.find((k) => k.fifths === scoreKeyFifths); }
 
   // ==================================================
+  // 異名同音の綴りをモード理論で決める共通ルール(2026-08-19〜)
+  // ==================================================
+  // アイオニアン(メジャースケール)から見た各モードの変化音は
+  // ♭2(フリジアン)・♭3(ドリアン等)・♯4(リディアン)・♭6(エオリアン等)・
+  // ♭7(ミクソリディアン等)であり、**♯が付くのはリディアンの♯4だけ**で残りは全て♭。
+  // 主音からの半音差で言うと 1・3・8・10 が♭、6(トライトーン)だけが♯になる。
+  // 例: ハ長調なら Db Eb F# Ab Bb。
+  // ♯4(リディアン)と♭5(ロクリアン)は同じ音だが、ここは♯4を採る。
+  //
+  // 鍵盤タップ(scoreBlackKeyAccidental)・転調時の音符・転調時のコード名の
+  // 3箇所で同じ規則を使うため、ここに1つだけ置いて共有している
+  // (別々の規則にすると「Gbのコードの下にF#の音符」のような食い違いが起きる)。
+  const SCORE_LYDIAN_TRITONE_OFFSET = 6;              // 主音からの半音差: ♯4
+  const SCORE_FLATTED_DEGREE_OFFSETS = [1, 3, 8, 10]; // ♭2・♭3・♭6・♭7
+  function scorePreferFlatForPitchClass(pitchClass, keyFifths) {
+    const tonic = SCORE_SEMITONE_BY_FIFTHS[String(keyFifths)] ?? 0;
+    const offset = ((pitchClass - tonic) % 12 + 12) % 12;
+    if (offset === SCORE_LYDIAN_TRITONE_OFFSET) return false; // ♯4だけが♯
+    if (SCORE_FLATTED_DEGREE_OFFSETS.includes(offset)) return true;
+    // ここに来るのはその調の音階内の音(ト長調のF#、変ホ長調のEb等)。
+    // 変化音ではないので調号どおりの表記にする。
+    return keyFifths < 0;
+  }
+
+  // ==================================================
   // 転調(2026-08-19〜)。音符の高さだけでなく、音符に振ってあるコード名と
   // 調号もまとめて動かす。
   // ==================================================
@@ -2639,7 +2664,10 @@
 
   // 1つのコード表記(スラッシュで区切る前の単位)のルートを移調する。
   // ルートとして解釈できない文字列(空文字や "N.C." など)はそのまま返す。
-  function scoreTransposeChordToken(token, semitoneDelta, preferFlat) {
+  // 綴りは移調先の調(newFifths)を基準に、音符と同じモード規則で音ごとに決める
+  // (調全体で♯か♭に倒すのではないので、例えばハ長調では bVII が A# ではなく
+  //  Bb、#IV が Gb ではなく F# になる)。
+  function scoreTransposeChordToken(token, semitoneDelta, newFifths) {
     const m = token.match(/^([A-G])((?:##|bb|[#b♯♭])*)(.*)$/);
     if (!m) return token;
     const [, letter, accidentalsRaw, suffix] = m;
@@ -2650,6 +2678,7 @@
       else if (ch === 'b' || ch === '♭') alter -= 1;
     }
     const semitone = (((SCORE_CHORD_ROOT_SEMITONE[letter] + alter + semitoneDelta) % 12) + 12) % 12;
+    const preferFlat = scorePreferFlatForPitchClass(semitone, newFifths);
     const name = (preferFlat ? SCORE_PITCH_NAME_FLAT : SCORE_PITCH_NAME_SHARP)[semitone];
     // 元の表記が全角の♯♭だったら、移調後もそちらに揃える(見た目の一貫性のため)。
     const usesUnicode = /[♯♭]/.test(accidentalsRaw);
@@ -2658,24 +2687,27 @@
   }
 
   // コード名まるごと(分数コードのベース音も含む)を移調する。
-  function scoreTransposeChordName(chord, semitoneDelta, preferFlat) {
+  function scoreTransposeChordName(chord, semitoneDelta, newFifths) {
     if (!chord) return chord;
-    // "C/G" のようなオンコードは、ルートとベースを別々に移調する。
-    return chord.split('/').map((part, i) => {
+    // "C/G" のようなオンコードは、ルートとベースを別々に移調する
+    // (ベース音も同じ規則で綴りが決まる)。
+    return chord.split('/').map((part) => {
       const trimmed = part.trim();
       if (!trimmed) return part;
-      return scoreTransposeChordToken(trimmed, semitoneDelta, preferFlat);
+      return scoreTransposeChordToken(trimmed, semitoneDelta, newFifths);
     }).join('/');
   }
 
   // 転調時の音符の解決。既存のscoreResolveFromSemitoneは「次に置く音符用の
   // 保留中♯♭」や選択状態を見てしまうので、転調では使わずに専用の解決を使う
   // (一括変換なので、保留中の指定に引きずられてはいけない)。
-  function scoreResolvePitchForTranspose(absSemitone, preferFlat) {
+  // 綴りはコード名と同じ規則(scorePreferFlatForPitchClass)で音ごとに決める。
+  function scoreResolvePitchForTranspose(absSemitone, newFifths) {
     const octave = Math.floor(absSemitone / 12);
     const idx = ((absSemitone % 12) + 12) % 12;
     const def = SCORE_PIANO_OCTAVE[idx];
     if (def.white) return { step: scoreLetterOctaveToStep(def.white, octave), accidental: null };
+    const preferFlat = scorePreferFlatForPitchClass(idx, newFifths);
     const letter = preferFlat ? def.black[1] : def.black[0];
     return { step: scoreLetterOctaveToStep(letter, octave), accidental: preferFlat ? 'flat' : 'sharp' };
   }
@@ -2683,14 +2715,13 @@
   // 譜面全体を半音単位で転調する。音符の高さ・コード名・調号を一度に動かす。
   function scoreTransposeAll(semitoneDelta) {
     if (!semitoneDelta) return;
-    // 移調先の調号を先に決める。これで♯系/♭系のどちらで書くかが決まり、
-    // 音符もコード名も同じ基準で表記が揃う。
+    // 移調先の調号を先に決める。音符もコード名も、この調を基準にした
+    // 同じモード規則(scorePreferFlatForPitchClass)で綴りを決めるので表記が揃う。
     const curTonic = SCORE_SEMITONE_BY_FIFTHS[String(scoreKeyFifths)] ?? 0;
     const newTonic = (((curTonic + semitoneDelta) % 12) + 12) % 12;
     let newFifths = SCORE_FIFTHS_BY_SEMITONE[newTonic];
     // 半音6つ(F#/Gb)は♯系・♭系が同数なので、元の調の性格を引き継ぐ。
     if (newFifths === null) newFifths = scoreKeyFifths >= 0 ? 6 : -6;
-    const preferFlat = newFifths < 0;
 
     pushScoreUndoSnapshot();
     scoreKeyFifths = newFifths;
@@ -2699,11 +2730,11 @@
       if (el.type === 'note') {
         el.pitches = el.pitches.map((p) => {
           const abs = scoreAbsoluteSemitone(p.step, p.accidental);
-          return scoreResolvePitchForTranspose(abs + semitoneDelta, preferFlat);
+          return scoreResolvePitchForTranspose(abs + semitoneDelta, newFifths);
         });
         el.pitches.sort((a, b) => a.step - b.step);
       }
-      if (el.chord) el.chord = scoreTransposeChordName(el.chord, semitoneDelta, preferFlat);
+      if (el.chord) el.chord = scoreTransposeChordName(el.chord, semitoneDelta, newFifths);
     }
     // 転調後は表記の基準が変わるので、手動で♯/♭に固定していた場合は
     // 調号追従('auto')に戻す(そうしないと調号と音符の表記が食い違って見える)。
@@ -3587,32 +3618,14 @@
     return scoreKeyFifths < 0 ? 'flat' : 'sharp';
   }
 
-  // 黒鍵を「主音から見た何度か」で♯/♭のどちらで書くかを決める(2026-08-19〜)。
-  //
-  // 従来は調号の♯系/♭系だけを見て、その調の黒鍵を全部♯か全部♭に倒していたが、
-  // 実際の記譜はモードごとの変化音に従う。アイオニアン(メジャー)から見た各モードの
-  // 変化音は ♭2(フリジアン)・♭3(ドリアン等)・♯4(リディアン)・♭6(エオリアン等)・
-  // ♭7(ミクソリディアン等)であり、**♯になるのはリディアンの♯4だけ**で残りは全て♭。
-  // 例: Cキーなら Db・Eb・F#・Ab・Bb(F だけが♯)。
-  //
-  // ♯4と♭5(ロクリアン)は同じ音だが、ここは要望どおり♯4(リディアン)を採る。
-  const SCORE_LYDIAN_TRITONE_OFFSET = 6;              // 主音からの半音差: ♯4
-  const SCORE_FLATTED_DEGREE_OFFSETS = [1, 3, 8, 10]; // ♭2・♭3・♭6・♭7
+  // 黒鍵をタップした時に♯/♭のどちらで書くかを決める(2026-08-19〜)。
+  // 判定そのものは転調時の音符・コード名と共通の
+  // scorePreferFlatForPitchClass()(モード理論の規則)に任せる。
   function scoreBlackKeyAccidental(blackDef) {
     // 手動で♯/♭に固定している時はそちらを優先する(従来どおり)。
     if (scoreEnharmonicMode !== 'auto') return scoreEnharmonicMode;
-    const tonic = SCORE_SEMITONE_BY_FIFTHS[String(scoreKeyFifths)] ?? 0;
     const pitchClass = (SCORE_PIANO_WHITE_SEMITONE[blackDef.lower] + 1) % 12;
-    const offset = ((pitchClass - tonic) % 12 + 12) % 12;
-    if (offset === SCORE_LYDIAN_TRITONE_OFFSET) return 'sharp';
-    if (SCORE_FLATTED_DEGREE_OFFSETS.includes(offset)) return 'flat';
-    // ここに来るのは、その黒鍵がその調の音階内の音(調号で♯/♭が付く音)である場合。
-    // 例: ト長調のF#、変ホ長調のEb。調号どおりの表記にするのが正しいので、
-    // 調号マップを引いて、2つの候補文字のうち変化記号が付く方を採る。
-    const keySig = scoreKeySigAlterationMap(scoreKeyFifths);
-    if (keySig[blackDef.lower] === 'sharp') return 'sharp';
-    if (keySig[blackDef.upper] === 'flat') return 'flat';
-    return scoreEffectiveEnharmonic(); // 理屈上ここには来ないが保険
+    return scorePreferFlatForPitchClass(pitchClass, scoreKeyFifths) ? 'flat' : 'sharp';
   }
   btnScoreEnharmonic.addEventListener('click', () => {
     scoreEnharmonicMode = scoreEnharmonicMode === 'auto' ? 'sharp' : scoreEnharmonicMode === 'sharp' ? 'flat' : 'auto';
