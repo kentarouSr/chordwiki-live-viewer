@@ -546,7 +546,11 @@
      編集モード限定なのは従来どおり(演奏中に誤って倍率が変わらないように)。
      動画パネル(z-index:6)より下に置き、重なった時は動画側を前に出す。 */
   #zoomFloat {
-    position: absolute; top: 16px; right: 16px; z-index: 5;
+    position: absolute; z-index: 5;
+    /* iOSのステータスバー/ノッチの下に潜るとタップがOS側に取られて反応しないため、
+       セーフエリアを必ず避ける(実機で「拡大縮小が効かない」不具合になっていた)。 */
+    top: max(16px, calc(env(safe-area-inset-top) + 8px));
+    right: max(16px, calc(env(safe-area-inset-right) + 8px));
     display: flex; align-items: center; gap: 4px;
     background: rgba(17,17,17,0.82); border: 1px solid #333; border-radius: 999px;
     padding: 4px 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.35);
@@ -561,7 +565,10 @@
 
   /* --- YouTube子画面(譜面を見ながら参考動画を再生するための浮遊パネル) --- */
   #youtubePanel {
-    position: absolute; top: 16px; right: 16px; width: 240px; min-width: 200px; max-width: 90vw; z-index: 6;
+    position: absolute; width: 240px; min-width: 200px; max-width: 90vw; z-index: 6;
+    /* ズームと同じ理由でセーフエリアを避ける。既定位置が被らないよう少し下げる。 */
+    top: max(60px, calc(env(safe-area-inset-top) + 52px));
+    right: max(16px, calc(env(safe-area-inset-right) + 8px));
     background: rgba(17,17,17,0.92); border: 1px solid #333; border-radius: 10px;
     overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   }
@@ -1209,10 +1216,11 @@
   const MEMO_TEXT_DEFAULT_FONT_SIZE = 13;
   // 最小文字サイズ。これを下回るクランプが起きると「箱は縮んだのに文字は元のまま」に
   // なり、上のwidthScaleで箱を広げて比率を保つ必要が出る=メモが相対的に大きくなる。
-  // 10pxだとスマホ(スケール約0.38)で2倍もクランプされて影響が大きかったので7pxに
-  // 下げた(2026-08-19)。小さすぎて読めない時は、ビューアのズーム(100〜300%)で
+  // 10pxだとスマホ(スケール約0.38)で2倍もクランプされて影響が大きかった。5pxまで下げると
+  // タブレット→スマホ(13*0.38≒4.95px)ではほぼクランプが起きず、タブレットでの見え方と
+  // ほぼ同じ比率になる(2026-08-19)。小さすぎて読めない時は、ビューアのズーム(100〜300%)で
   // 拡大すればメモも一緒に拡大される(memoScaleはズーム後のcontentWidthCss基準のため)。
-  const MEMO_TEXT_MIN_FONT_SIZE = 7;
+  const MEMO_TEXT_MIN_FONT_SIZE = 5;
   const MEMO_TEXT_MAX_FONT_SIZE = 48;
   // テキストメモの最小幅。これより狭いと「✅ ToDo追加」「✕ 削除」ボタン(左上/右上の
   // 角にそれぞれ22px幅で絶対配置)が物理的に重なりタップし分けられなくなる境目が
@@ -7988,6 +7996,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
