@@ -540,6 +540,25 @@
   }
   #progressFill { height: 100%; width: 0%; background: #6cf; }
 
+  /* --- 拡大縮小(2026-08-19) ---
+     元はツールバーの中にあったが、ツールバーは再生中に自動で隠れるうえ
+     ボタン数も多く、ズームだけ使いたい時に遠かった。譜面の右上に浮かせている。
+     編集モード限定なのは従来どおり(演奏中に誤って倍率が変わらないように)。
+     動画パネル(z-index:6)より下に置き、重なった時は動画側を前に出す。 */
+  #zoomFloat {
+    position: absolute; top: 16px; right: 16px; z-index: 5;
+    display: flex; align-items: center; gap: 4px;
+    background: rgba(17,17,17,0.82); border: 1px solid #333; border-radius: 999px;
+    padding: 4px 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  }
+  #zoomFloat button {
+    font-size: 15px; width: 30px; height: 30px; border-radius: 50%; border: none;
+    background: #333; color: #eee; cursor: pointer; line-height: 1;
+  }
+  #zoomFloat button:active { background: #555; }
+  #zoomLabel { font-size: 12px; color: #ccc; min-width: 38px; text-align: center; }
+  /* 演奏モードでは .appModeEditOnly が消えるので、この指定だけで両立する */
+
   /* --- YouTube子画面(譜面を見ながら参考動画を再生するための浮遊パネル) --- */
   #youtubePanel {
     position: absolute; top: 16px; right: 16px; width: 240px; min-width: 200px; max-width: 90vw; z-index: 6;
@@ -831,6 +850,16 @@
        チェックボックスの横位置に合わせて、サブタスクのインデントも詰める。 */
     .todoSubtasks, .todoAddSubtaskRow { margin-left: 31px; }
 
+    /* メモの編集ボタン(✅ ToDo追加 / ✕ 削除)は22px固定だったため、狭い画面で
+       相対的に縮んだメモの上では巨大に見えて重なり合っていた(2026-08-19)。
+       タップ target として成立する範囲で少し詰める。表示は編集モード中だけなので、
+       演奏中の見た目には影響しない。 */
+    .memo-delete, .memo-add-todo {
+      width: 18px; height: 18px; top: -8px; font-size: 11px;
+    }
+    .memo-delete { right: -8px; }
+    .memo-add-todo { left: -8px; }
+
     /* 楽譜エディタ: ピアノ鍵盤は全端末共通(横スクロールで対応)だが、狭い画面では
        鍵盤・ツールバーの寸法を詰めて、五線譜の可視面積をできるだけ確保する。 */
     /* ヘッダーのボタンが増えて「楽譜作成」が縦に潰れるようになったので、
@@ -980,6 +1009,11 @@
     </div>
     <div id="setlistMemoView"><p id="setlistMemoText"></p></div>
     <div id="progressBar"><div id="progressFill"></div></div>
+    <div id="zoomFloat" class="appModeEditOnly">
+      <button id="btnZoomOut" title="縮小">&minus;</button>
+      <span id="zoomLabel">100%</span>
+      <button id="btnZoomIn" title="拡大">+</button>
+    </div>
     <div id="youtubePanel" class="hidden">
       <div id="youtubePanelHeader">
         <span id="youtubePanelTitle">&#10021; ここをドラッグで移動</span>
@@ -1028,11 +1062,6 @@
       <div class="toolbarGroup">
         <button id="btnEditBpm" class="memoEditOnly">&#127932; BPM: --</button>
         <button id="btnMetronome">&#129345; クリック</button>
-      </div>
-      <div class="toolbarGroup appModeEditOnly">
-        <button id="btnZoomOut">&minus;</button>
-        <span id="zoomLabel">100%</span>
-        <button id="btnZoomIn">+</button>
       </div>
       <div class="toolbarGroup">
         <button id="btnSpeedDown5">&minus;5</button>
@@ -1178,7 +1207,12 @@
   // テキストメモをリサイズハンドルで拡大/縮小した時、文字サイズも幅に比例させるための基準値
   const MEMO_TEXT_DEFAULT_WIDTH = 220;
   const MEMO_TEXT_DEFAULT_FONT_SIZE = 13;
-  const MEMO_TEXT_MIN_FONT_SIZE = 10;
+  // 最小文字サイズ。これを下回るクランプが起きると「箱は縮んだのに文字は元のまま」に
+  // なり、上のwidthScaleで箱を広げて比率を保つ必要が出る=メモが相対的に大きくなる。
+  // 10pxだとスマホ(スケール約0.38)で2倍もクランプされて影響が大きかったので7pxに
+  // 下げた(2026-08-19)。小さすぎて読めない時は、ビューアのズーム(100〜300%)で
+  // 拡大すればメモも一緒に拡大される(memoScaleはズーム後のcontentWidthCss基準のため)。
+  const MEMO_TEXT_MIN_FONT_SIZE = 7;
   const MEMO_TEXT_MAX_FONT_SIZE = 48;
   // テキストメモの最小幅。これより狭いと「✅ ToDo追加」「✕ 削除」ボタン(左上/右上の
   // 角にそれぞれ22px幅で絶対配置)が物理的に重なりタップし分けられなくなる境目が
@@ -2118,15 +2152,21 @@
         // fontSizeは常にscale込みで明示指定する(CSS既定の13px固定に頼ると、
         // 画面が狭い端末ほどコンテンツに対して相対的に巨大な文字になってしまう)。
         // MIN/MAX_FONT_SIZEでクランプし、狭い端末で読めない小ささになるのを防ぐ。
-        el.style.fontSize = Math.round(clamp(
-          (memo.fontSize || MEMO_TEXT_DEFAULT_FONT_SIZE) * memoScale,
-          MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE
-        )) + 'px';
+        //
+        // ただしクランプすると「箱は縮んだのに文字だけ元の大きさ」という状態になり、
+        // 1行に入る文字数が減って行数が倍増し、箱が縦に伸びてメモ同士が重なる
+        // (タブレットで作った譜面をスマホで開くと実際にそうなっていた、2026-08-19)。
+        // クランプで文字が何倍になったかを求め、その分だけ箱の幅も広げることで
+        // 「文字と箱の比率」を保つ。これで意図しない折り返しが起きなくなる。
+        const desiredFont = (memo.fontSize || MEMO_TEXT_DEFAULT_FONT_SIZE) * memoScale;
+        const actualFont = clamp(desiredFont, MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE);
+        const widthScale = memoScale * (desiredFont > 0 ? actualFont / desiredFont : 1);
+        el.style.fontSize = Math.round(actualFont) + 'px';
         if (memo.width) {
           // 未設定なら内容に応じた自動幅のまま。MEMO_TEXT_MIN_WIDTH/600はリサイズハンドルの可動域と揃えてある。
-          el.style.width = Math.round(clamp(memo.width * memoScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
+          el.style.width = Math.round(clamp(memo.width * widthScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
         } else {
-          el.style.maxWidth = Math.round(clamp(600 * memoScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
+          el.style.maxWidth = Math.round(clamp(600 * widthScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
         }
         el.appendChild(makeResizeHandle(memo, el, MEMO_TEXT_MIN_WIDTH, 600, MEMO_TEXT_DEFAULT_FONT_SIZE, cssWidth));
       } else {
@@ -2440,11 +2480,13 @@
     ta.value = memo ? memo.text : '';
     ta.style.left = Math.round(x * cssWidth) + 'px';
     ta.style.top = Math.round(y * contentHeight) + 'px';
-    ta.style.width = Math.round(clamp(((memo && memo.width) || MEMO_TEXT_DEFAULT_WIDTH) * memoScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
-    ta.style.fontSize = Math.round(clamp(
-      ((memo && memo.fontSize) || MEMO_TEXT_DEFAULT_FONT_SIZE) * memoScale,
-      MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE
-    )) + 'px';
+    // 表示側(renderMemos)と同じく、文字サイズがクランプされた分だけ箱も広げて
+    // 比率を保つ。ここを揃えないと「編集中と確定後で折り返し位置が変わる」ことになる。
+    const taDesiredFont = ((memo && memo.fontSize) || MEMO_TEXT_DEFAULT_FONT_SIZE) * memoScale;
+    const taActualFont = clamp(taDesiredFont, MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE);
+    const taWidthScale = memoScale * (taDesiredFont > 0 ? taActualFont / taDesiredFont : 1);
+    ta.style.width = Math.round(clamp(((memo && memo.width) || MEMO_TEXT_DEFAULT_WIDTH) * taWidthScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
+    ta.style.fontSize = Math.round(taActualFont) + 'px';
     memoLayerEl.appendChild(ta);
 
     const autoGrow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
@@ -7946,6 +7988,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
