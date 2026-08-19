@@ -3580,9 +3580,39 @@
 
   // 調号のfifthsから、黒鍵のデフォルト表記(♯系/♭系)を決める。
   // fifths===0(ハ長調)は多くの記譜ソフトの慣習に合わせて♯をデフォルトにする。
+  // ※ 黒鍵タップ時の表記は、これではなくモード理論に基づくscoreBlackKeyAccidental()で
+  //    決める(2026-08-19〜)。この関数は手動で♯/♭に固定した時の値を返す役割が主。
   function scoreEffectiveEnharmonic() {
     if (scoreEnharmonicMode !== 'auto') return scoreEnharmonicMode;
     return scoreKeyFifths < 0 ? 'flat' : 'sharp';
+  }
+
+  // 黒鍵を「主音から見た何度か」で♯/♭のどちらで書くかを決める(2026-08-19〜)。
+  //
+  // 従来は調号の♯系/♭系だけを見て、その調の黒鍵を全部♯か全部♭に倒していたが、
+  // 実際の記譜はモードごとの変化音に従う。アイオニアン(メジャー)から見た各モードの
+  // 変化音は ♭2(フリジアン)・♭3(ドリアン等)・♯4(リディアン)・♭6(エオリアン等)・
+  // ♭7(ミクソリディアン等)であり、**♯になるのはリディアンの♯4だけ**で残りは全て♭。
+  // 例: Cキーなら Db・Eb・F#・Ab・Bb(F だけが♯)。
+  //
+  // ♯4と♭5(ロクリアン)は同じ音だが、ここは要望どおり♯4(リディアン)を採る。
+  const SCORE_LYDIAN_TRITONE_OFFSET = 6;              // 主音からの半音差: ♯4
+  const SCORE_FLATTED_DEGREE_OFFSETS = [1, 3, 8, 10]; // ♭2・♭3・♭6・♭7
+  function scoreBlackKeyAccidental(blackDef) {
+    // 手動で♯/♭に固定している時はそちらを優先する(従来どおり)。
+    if (scoreEnharmonicMode !== 'auto') return scoreEnharmonicMode;
+    const tonic = SCORE_SEMITONE_BY_FIFTHS[String(scoreKeyFifths)] ?? 0;
+    const pitchClass = (SCORE_PIANO_WHITE_SEMITONE[blackDef.lower] + 1) % 12;
+    const offset = ((pitchClass - tonic) % 12 + 12) % 12;
+    if (offset === SCORE_LYDIAN_TRITONE_OFFSET) return 'sharp';
+    if (SCORE_FLATTED_DEGREE_OFFSETS.includes(offset)) return 'flat';
+    // ここに来るのは、その黒鍵がその調の音階内の音(調号で♯/♭が付く音)である場合。
+    // 例: ト長調のF#、変ホ長調のEb。調号どおりの表記にするのが正しいので、
+    // 調号マップを引いて、2つの候補文字のうち変化記号が付く方を採る。
+    const keySig = scoreKeySigAlterationMap(scoreKeyFifths);
+    if (keySig[blackDef.lower] === 'sharp') return 'sharp';
+    if (keySig[blackDef.upper] === 'flat') return 'flat';
+    return scoreEffectiveEnharmonic(); // 理屈上ここには来ないが保険
   }
   btnScoreEnharmonic.addEventListener('click', () => {
     scoreEnharmonicMode = scoreEnharmonicMode === 'auto' ? 'sharp' : scoreEnharmonicMode === 'sharp' ? 'flat' : 'auto';
@@ -3599,10 +3629,11 @@
   }
   // 黒鍵タップ時の{step, accidental}。方向は理論どおり固定: ♯なら下の文字を上げる、
   // ♭なら上の文字を下げる(「近い方」のような曖昧な判定はしない)。
+  // ♯/♭のどちらで書くかは黒鍵ごとにscoreBlackKeyAccidental()が決める。
   function scoreResolveBlackKey(blackDef, octave) {
     const usePending = scoreSelectedIndex === null;
     const pending = usePending ? scorePendingAccidental : null;
-    const mode = pending === 'sharp' ? 'sharp' : pending === 'flat' ? 'flat' : scoreEffectiveEnharmonic();
+    const mode = pending === 'sharp' ? 'sharp' : pending === 'flat' ? 'flat' : scoreBlackKeyAccidental(blackDef);
     if (mode === 'sharp') return { step: scoreLetterOctaveToStep(blackDef.lower, octave), accidental: 'sharp' };
     return { step: scoreLetterOctaveToStep(blackDef.upper, octave), accidental: 'flat' };
   }
