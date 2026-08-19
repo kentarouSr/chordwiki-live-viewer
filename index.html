@@ -1052,14 +1052,16 @@
         <button id="btnNextSong" class="setlistOnly">次 &#9197;</button>
       </div>
       <div class="toolbarGroup">
+        <!-- テキストメモとペンは使用頻度が段違いに高いので、メモ編集モードに
+             入らなくても直接押せるようここに出す(押すと自動でモードに入る)。 -->
+        <button id="btnAddTextMemo" class="appModeEditOnly">+ テキスト</button>
+        <button id="btnDrawPen" class="appModeEditOnly">&#9998; ペン</button>
         <button id="btnMemoEdit" class="appModeEditOnly">&#128221; メモ</button>
         <button id="btnToggleYoutube" class="appModeEditOnly">&#127909; 動画</button>
       </div>
       <div class="toolbarGroup">
-        <button id="btnAddTextMemo" class="memoEditOnly">+ テキスト</button>
         <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
         <button id="btnAddScoreMemo" class="memoEditOnly">+ 楽譜</button>
-        <button id="btnDrawPen" class="memoEditOnly">&#9998; ペン</button>
         <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
         <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
         <input type="range" id="drawWidthInput" class="drawOnly" min="1" max="40" value="4">
@@ -4954,8 +4956,13 @@
   // もう一度押すと配置待ちをキャンセルできる(トグル)。alert()での案内をやめた分、
   // ボタン自体のハイライト(.pending)が「配置待ち中」の目印になる。
   btnAddTextMemo.addEventListener('click', () => {
+    // メモ編集モードに入っていなくても直接使えるようにする(2026-08-19。使用頻度が
+    // 高く、毎回「📝 メモ」を挟むのが煩わしいため)。setMemoEditMode()は保留状態を
+    // クリアするので、モードに入るのを先、種別の指定を後にする順番が重要。
+    const wasPending = pendingMemoType === 'text';
+    if (!memoEditMode) setMemoEditMode(true);
     setDrawMode(false);
-    setPendingMemoType(pendingMemoType === 'text' ? null : 'text');
+    setPendingMemoType(wasPending ? null : 'text');
   });
   btnAddImageMemo.addEventListener('click', () => {
     setDrawMode(false);
@@ -4999,7 +5006,11 @@
   }
 
   btnDrawPen.addEventListener('click', () => {
-    setDrawMode(!(drawMode && currentDrawTool === 'pen'), 'pen');
+    // テキストメモと同じく、モードに入っていなければ自動で入る。
+    // setMemoEditMode()はsetDrawMode(false)を呼ぶので、こちらを先に済ませる。
+    const wantOn = !(drawMode && currentDrawTool === 'pen');
+    if (wantOn && !memoEditMode) setMemoEditMode(true);
+    setDrawMode(wantOn, 'pen');
   });
   btnDrawHighlighter.addEventListener('click', () => {
     setDrawMode(!(drawMode && currentDrawTool === 'highlighter'), 'highlighter');
@@ -7996,6 +8007,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
