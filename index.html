@@ -889,12 +889,14 @@
         </div>
         <div class="scoreEditorGroup">
           <input id="scoreChordInput" type="text" placeholder="コード名(次の音符に付く)">
+          <button id="btnScoreChordShortcut" title="ChordWikiエディタと同じキー割り当てでコード名を入力する">&#9889; コード略記</button>
+          <button id="btnScoreSound">&#128266; 音あり</button>
           <button id="btnScoreUndo">&#10006; 直前を削除</button>
           <button id="btnScoreClearAll">全消去</button>
           <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
         </div>
       </div>
-      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。「⋃ タイ」で選択中の音符と直後の同じ高さの音符をつなげます。PCでは<strong>キーボード入力</strong>(A〜G:新規音符 / 1〜7:音価 / .:付点 / -,=,0:♭♯♮ / ←→:音符移動 / ↑↓:半音移動 / Delete:削除 / Ctrl+Z:取り消し。詳しい一覧は❓から)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。</p>
+      <p id="scoreEditorHint">下のピアノ鍵盤をタップして音符を入力してください(<strong>白鍵/黒鍵をそのままタップ</strong>すればOK。♯♭ボタンで押してから鍵盤を押す方法もあります)。<strong>置いた音符は上下にドラッグすると音の高さを直せます</strong>(タップで選ぶと音価や♯♭も直せます)。拍子・調号は曲の途中でも変更できますが、譜面全体に適用されます(1曲=1拍子・1調のシンプルな運用)。「⋃ タイ」で選択中の音符と直後の同じ高さの音符をつなげます。PCでは<strong>キーボード入力</strong>(A〜G:新規音符 / 1〜7:音価 / .:付点 / -,=,0:♭♯♮ / ←→:音符移動 / ↑↓:半音移動 / Delete:削除 / Ctrl+Z:取り消し。詳しい一覧は❓から)や<strong>MIDIキーボード</strong>(対応ブラウザのみ、上のボタンでオン)も使えます。<strong>「🎶 和音」ボタンで和音入力に切り替えられます</strong>(選択中の音符にタップした音を追加、既に入っている音をもう一度タップすると削除。上書きではなく足し引きなので、単音モードとは挙動が違います。次の和音に移る時は→キーやEscapeで選択を外してください)。<strong>入力した音は実際に鳴ります</strong>(←→↑↓で音符をたどる時も鳴るので、音を確かめながら打ち込めます。静かな場所では「🔊 音あり」ボタンでオフにできます)。コード名は<strong>「⚡ コード略記」</strong>をオンにすると、ChordWikiのコード譜エディタと同じキー割り当て(Shift不要)で入力できます。</p>
       <div id="scorePianoKeyboard"></div>
     </div>
   </div>
@@ -1078,6 +1080,8 @@
   const btnScoreClearAll = document.getElementById('btnScoreClearAll');
   const btnScoreMidi = document.getElementById('btnScoreMidi');
   const btnScoreChordMode = document.getElementById('btnScoreChordMode');
+  const btnScoreChordShortcut = document.getElementById('btnScoreChordShortcut');
+  const btnScoreSound = document.getElementById('btnScoreSound');
   const btnDrawPen = document.getElementById('btnDrawPen');
   const btnDrawHighlighter = document.getElementById('btnDrawHighlighter');
   const drawColorInput = document.getElementById('drawColorInput');
@@ -2502,6 +2506,12 @@
   // というトグル方式にしている(選択中の1つの音符の中で「直す」と「足す」を両立できない
   // ため、和音モードは常に足し引きに統一した、という設計判断)。
   let scoreChordMode = false;
+  // 音符を入力した時に実際の音を鳴らすか(2026-08-19〜)。「何の音か確認できないと
+  // 不便」という要望への対応。オフにできるようにしているのは、静かにすべき場所
+  // (電車内・楽屋・本番直前のステージ袖など)でも譜面の打ち込みはしたいため。
+  // 端末ごとの好みなのでlocalStorageに保存する(曲データには入れない)。
+  const SCORE_SOUND_KEY = 'cwlv_score_sound';
+  let scoreSoundOn = localStorage.getItem(SCORE_SOUND_KEY) !== '0';
 
   // Ctrl+Z/Ctrl+Y用の本物のundo/redo履歴(2026-08-17〜)。btnScoreUndoは元々
   // 「直前/選択中を削除」する単発の操作であり本物のundo履歴ではない(名前が
@@ -2577,6 +2587,11 @@
     scoreChordMode = false;
     btnScoreChordMode.classList.remove('active');
     btnScoreChordMode.innerHTML = '&#9834; 単音';
+    scoreChordShortcutOn = false;
+    btnScoreChordShortcut.classList.remove('active');
+    // 音のオン/オフは端末ごとの設定なので、開くたびにリセットせず記憶した値を反映する。
+    btnScoreSound.textContent = scoreSoundOn ? '\u{1F50A} 音あり' : '\u{1F507} 音なし';
+    btnScoreSound.classList.toggle('active', scoreSoundOn);
     scoreChordInput.value = '';
     scoreTimeSigIdx = 0;
     scoreKeyFifths = 0;
@@ -2731,6 +2746,70 @@
   scoreChordInput.addEventListener('blur', () => {
     scoreChordSnapshotTaken = false;
   });
+  // ---- コード名のショートカット入力(2026-08-19〜) ----
+  // ChordWikiのコード譜エディタ(chordlistener.com/editor/)と同じキー割り当て。
+  // 「Shiftキーを押さずにコード名を打てる」のが狙いで、例えば "gvlj" と打つと
+  // "GbbaugM7" になる。ライブ前の慌ただしい場面で記号キーを探さずに済む。
+  //
+  // 位置によって解釈が変わるのがこの方式の肝: コードの先頭(と "/" の直後)だけは
+  // A〜Gを音名として扱い、それ以外の位置では修飾子として扱う
+  // (例 "df" は D + b = "Db"、先頭でないfは♭になる)。
+  const SCORE_CHORD_SHORTCUT_MODS = {
+    w: '#', f: 'b', x: '##', v: 'bb', l: 'aug', h: 'dim', j: 'M7',
+    r: 'm7', k: 'm7-5', z: 'sus', y: 'add', q: 'omit', p: '+',
+  };
+  let scoreChordShortcutOn = false;
+
+  // カーソル位置が「音名を期待する位置」か判定する。直前の非空白文字が無い(先頭)か
+  // "/"(分数コードのベース音)なら音名の位置。
+  function scoreChordExpectsNoteName(text, caret) {
+    const before = text.slice(0, caret).replace(/\s+$/, '');
+    if (before === '') return true;
+    return before.endsWith('/');
+  }
+
+  function scoreChordShortcutTransform(ch, text, caret) {
+    const lower = ch.toLowerCase();
+    if (/^[a-g]$/.test(lower) && scoreChordExpectsNoteName(text, caret)) {
+      return lower.toUpperCase();
+    }
+    if (SCORE_CHORD_SHORTCUT_MODS[lower] !== undefined) return SCORE_CHORD_SHORTCUT_MODS[lower];
+    if (ch === '[') return '(';
+    if (ch === ']') return ')';
+    if (ch === '\\') return '/';
+    return null; // 割り当てが無い文字(数字・記号・m など)はそのまま入力させる
+  }
+
+  scoreChordInput.addEventListener('keydown', (e) => {
+    if (!scoreChordShortcutOn) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key.length !== 1) return; // Backspace/矢印などの制御キーは素通し
+    const start = scoreChordInput.selectionStart;
+    const end = scoreChordInput.selectionEnd;
+    const replacement = scoreChordShortcutTransform(e.key, scoreChordInput.value, start);
+    if (replacement === null) return;
+    e.preventDefault();
+    const v = scoreChordInput.value;
+    scoreChordInput.value = v.slice(0, start) + replacement + v.slice(end);
+    const caret = start + replacement.length;
+    scoreChordInput.setSelectionRange(caret, caret);
+    // preventDefaultしたぶん'input'イベントが飛ばないので、保存処理を自前で呼ぶ。
+    scoreChordInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  btnScoreChordShortcut.addEventListener('click', () => {
+    scoreChordShortcutOn = !scoreChordShortcutOn;
+    btnScoreChordShortcut.classList.toggle('active', scoreChordShortcutOn);
+    scoreChordInput.focus();
+  });
+
+  btnScoreSound.addEventListener('click', () => {
+    scoreSoundOn = !scoreSoundOn;
+    localStorage.setItem(SCORE_SOUND_KEY, scoreSoundOn ? '1' : '0');
+    btnScoreSound.textContent = scoreSoundOn ? '\u{1F50A} 音あり' : '\u{1F507} 音なし';
+    btnScoreSound.classList.toggle('active', scoreSoundOn);
+  });
+
   scoreChordInput.addEventListener('input', () => {
     if (scoreSelectedIndex === null) {
       scorePendingChord = scoreChordInput.value.trim() || null;
@@ -3065,6 +3144,49 @@
   // 昇順を保証しておくことで、描画側(buildScoreRenderQueue/scoreBuildMeasureNotes)は
   // pitchesを並び替えずそのまま使える(VexFlowは2度音程が隣接する時のノートヘッドの
   // 左右オフセットをkeys配列の並び順で決めるため、未整列だと見た目が崩れる)。
+  // 入力した音符を実際に鳴らす(2026-08-19〜)。メトロノームと同じAudioContextを
+  // 使い回す。絶対半音(scoreAbsoluteSemitone)からの周波数変換は、A4=440Hzを
+  // 基準にする標準的な式。scoreAbsoluteSemitoneのA4はoctave4*12+9=57になるので
+  // 57を基準点に取ればMIDIノート番号への変換を経由せずそのまま計算できる。
+  // 倍音を1つ足した簡素な音色。実楽器の音を使わないのは、サンプル音源を同梱すると
+  // 数MB単位でアプリが重くなり、オフライン起動用のキャッシュも膨らむため
+  // (音程が確認できれば十分、という用途に対して割に合わない)。
+  const SCORE_NOTE_SOUND_SEC = 0.6;
+  function scorePlayPitches(pitches) {
+    if (!scoreSoundOn || !pitches || pitches.length === 0) return;
+    let ctx;
+    try {
+      ctx = ensureAudioCtx();
+    } catch (e) {
+      return; // 音が出せない環境でも打ち込み自体は続けられるようにする
+    }
+    // iOSはユーザー操作を伴わない再生を止めるためAudioContextがsuspendedで始まる。
+    // 音符入力は必ずタップ/キー操作を伴うので、ここでresumeして構わない。
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const now = ctx.currentTime;
+    // 和音は同時に鳴らすぶん音量が重なるので、声部数で割って音割れを防ぐ。
+    const perVoice = 0.22 / Math.max(1, pitches.length);
+    for (const p of pitches) {
+      const freq = 440 * Math.pow(2, (scoreAbsoluteSemitone(p.step, p.accidental) - 57) / 12);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(perVoice, now + 0.01); // 立ち上がりを0にしないとプツッとノイズが出る
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + SCORE_NOTE_SOUND_SEC);
+      gain.connect(ctx.destination);
+      for (const [ratio, level] of [[1, 1], [2, 0.3]]) {
+        const osc = ctx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.value = freq * ratio;
+        const oscGain = ctx.createGain();
+        oscGain.gain.value = level;
+        osc.connect(oscGain);
+        oscGain.connect(gain);
+        osc.start(now);
+        osc.stop(now + SCORE_NOTE_SOUND_SEC);
+      }
+    }
+  }
+
   function scoreToggleChordPitch(el, step, accidental) {
     const idx = el.pitches.findIndex((p) => p.step === step);
     if (idx !== -1) {
@@ -3086,7 +3208,11 @@
       // (「直す」のか「声部を足す」のか区別が付かないため)。常に足し引きの
       // トグル方式に統一している(#scoreEditorHintに明記)。
       if (scoreSelectedIndex !== null) {
-        scoreToggleChordPitch(scoreElements[scoreSelectedIndex], step, accidental);
+        const chordEl = scoreElements[scoreSelectedIndex];
+        scoreToggleChordPitch(chordEl, step, accidental);
+        // 足し引きの結果できあがった和音全体を鳴らす(今どう鳴るかを確認したいため、
+        // 今押した1音だけではなく和音として鳴らす)。
+        scorePlayPitches(chordEl.pitches);
         updateScoreToolbarUI();
         renderScoreCanvas();
         return;
@@ -3100,6 +3226,7 @@
       // 和音モードは入力元(ピアノ鍵盤/文字キー/MIDI)を問わず常に自動選択する。
       // そうしないと次の入力が「声部を追加」ではなく「新しい音符」になってしまう。
       scoreSelectedIndex = scoreElements.length - 1;
+      scorePlayPitches([{ step, accidental }]);
       updateScoreToolbarUI();
       renderScoreCanvas();
       return;
@@ -3111,6 +3238,7 @@
     // 上書きする、この変更の対象外)。
     if (scoreSelectedIndex !== null && !(opts && opts.forceAppend)) {
       scoreElements[scoreSelectedIndex].pitches[0] = { step, accidental };
+      scorePlayPitches([{ step, accidental }]);
       updateScoreToolbarUI();
       renderScoreCanvas();
       return;
@@ -3121,6 +3249,7 @@
       dotted: mods.dotted, triplet: mods.triplet, tripletGroup: mods.tripletGroup,
       tripletFirst: mods.tripletFirst, chord: mods.chord,
     });
+    scorePlayPitches([{ step, accidental }]);
     if (opts && opts.selectAfterAdd) {
       scoreSelectedIndex = scoreElements.length - 1;
       updateScoreToolbarUI();
@@ -3183,6 +3312,7 @@
     // 移調自体は理論上、声部間の相対順序も重複も変えないはずだが念のため
     // step昇順を保証しておく(pitchesの並び順=VexFlowへ渡すkeysの並び順のため)。
     el.pitches.sort((a, b) => a.step - b.step);
+    scorePlayPitches(el.pitches); // 動かした先の音を確認できるように鳴らす
     updateScoreToolbarUI();
     renderScoreCanvas();
   }
@@ -3212,6 +3342,9 @@
         scoreSelectedIndex = idxs[nextPos];
       }
     }
+    // 選択が移った先の音を鳴らす(←→で音符をたどりながら音を確認できるように)。
+    // 端で選択解除された場合(scoreSelectedIndex===null)は何も鳴らさない。
+    if (scoreSelectedIndex !== null) scorePlayPitches(scoreElements[scoreSelectedIndex].pitches);
     updateScoreToolbarUI();
     renderScoreCanvas();
   }
@@ -3219,6 +3352,7 @@
     const idxs = scoreNoteIndices();
     if (idxs.length === 0) return;
     scoreSelectedIndex = first ? idxs[0] : idxs[idxs.length - 1];
+    scorePlayPitches(scoreElements[scoreSelectedIndex].pitches);
     updateScoreToolbarUI();
     renderScoreCanvas();
   }
