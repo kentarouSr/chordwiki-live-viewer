@@ -509,34 +509,81 @@
   #btnImagePickerChoose { background: #6cf; color: #111; font-weight: bold; }
   #btnImagePickerCancel { background: #333; color: #eee; }
 
+  /* --- ツールバーの「⋯ その他」(2026-08-20) ---
+     スマホだとツールバーがビューアで画面の34%、楽譜エディタでは55%を占めていて、
+     肝心の譜面がほとんど見えなかった。よく使うものだけ出して残りはここに畳む。
+     どれを出すかはユーザーが選べる(既定はこちらで決めた組み合わせ)。 */
+  #toolbarMorePanel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+    max-height: 70vh; overflow-y: auto;
+    background: rgba(24,24,26,0.98); backdrop-filter: blur(6px);
+    border-top: 1px solid #3a3a3c;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  #toolbarMorePanel.hidden { display: none; }
+  #toolbarMoreHead {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+    position: sticky; top: 0; background: inherit; border-bottom: 1px solid #333;
+  }
+  #toolbarMoreTitle { flex: 1; font-size: 13px; color: #ddd; font-weight: bold; }
+  #btnToolbarMoreCustomize, #btnToolbarMoreClose {
+    flex-shrink: 0; border: none; border-radius: 8px; background: #3a3a3c; color: #eee;
+    font-size: 13px; padding: 7px 11px; cursor: pointer;
+  }
+  #btnToolbarMoreClose { width: 34px; padding: 7px 0; font-size: 16px; }
+  #btnToolbarMoreCustomize.active { background: #6cf; color: #111; font-weight: bold; }
+  #toolbarMoreBody { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+  #toolbarMoreBody .scoreEditorGroup { margin: 0; }
+  #toolbarMoreCustom { padding: 4px 12px 12px; }
+  #toolbarMoreCustom.hidden { display: none; }
+  .tbCustomNote { font-size: 11px; color: #999; margin: 2px 0 8px; line-height: 1.5; }
+  .tbCustomList { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tbCustomList button {
+    border: 1px solid #444; border-radius: 999px; background: #2c2c2e; color: #bbb;
+    font-size: 12px; padding: 6px 12px; cursor: pointer;
+  }
+  .tbCustomList button.on { background: #6cf; border-color: #6cf; color: #111; font-weight: bold; }
+  #btnViewerMore, #btnScoreMore {
+    background: #48484a; color: #fff; font-weight: bold;
+  }
+  #scoreMoreBar { display: flex; justify-content: flex-end; padding: 0 14px 6px; }
+  #scoreEditorOverlay.roll-mode #scoreMoreBar { display: none; }
   /* --- 画像スタンプのパレット(2026-08-20) ---
      画面上部に固定。スタンプは白い譜面の上に置くものなので、パレットの中でも
      実物と同じ白地の升目に並べて、貼った時の見た目とズレないようにしている。 */
+  /* 分類タブ + 横1列。全分類を縦に並べていた頃は画面の半分近くを覆ってしまい、
+     肝心の譜面が数行しか見えず「どこに貼るか分からない」状態だった(2026-08-20)。 */
   #stampPalette {
     position: fixed; top: 0; left: 0; right: 0; z-index: 21;
-    max-height: 46vh; overflow-y: auto;
     background: rgba(17,17,17,0.96); backdrop-filter: blur(4px);
-    padding-top: max(6px, env(safe-area-inset-top));
+    padding-top: max(4px, env(safe-area-inset-top));
     border-bottom: 1px solid #333;
   }
   #stampPalette.hidden { display: none; }
   #stampPaletteHead {
-    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
-    position: sticky; top: 0; background: inherit;
+    display: flex; align-items: center; gap: 8px; padding: 4px 12px;
   }
   #stampPaletteHint { flex: 1; font-size: 12px; color: #bbb; }
   #btnStampPaletteClose {
     flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
     border: none; background: #333; color: #eee; font-size: 15px; cursor: pointer;
   }
-  #stampPaletteBody { padding: 0 12px 12px; }
-  .stampGroup { margin-top: 8px; }
-  .stampGroupName {
-    font-size: 10px; color: #8a8; font-weight: bold; letter-spacing: 0.5px;
-    padding-bottom: 3px; border-bottom: 1px solid #383838; margin-bottom: 6px;
+  /* タブも中身も横スクロール。縦に伸ばさないのが肝 */
+  #stampPaletteTabs {
+    display: flex; gap: 5px; padding: 0 12px 5px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
   }
-  .stampGroupItems { display: flex; flex-wrap: wrap; gap: 6px; }
+  #stampPaletteTabs button {
+    flex-shrink: 0; font-size: 12px; padding: 5px 11px; border-radius: 13px;
+    border: 1px solid #444; background: #262626; color: #ccc; cursor: pointer;
+  }
+  #stampPaletteTabs button.active { background: #6cf; color: #111; border-color: #6cf; font-weight: bold; }
+  #stampPaletteBody {
+    display: flex; gap: 6px; padding: 0 12px 8px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
   .stampChoice {
+    flex-shrink: 0;
     background: #fff; border: 1px solid #ccc; border-radius: 8px;
     padding: 5px 7px; cursor: pointer; line-height: 0;
     display: flex; align-items: center; justify-content: center;
@@ -827,6 +874,13 @@
     font-size: 12px; color: #bbb;
   }
   #scoreRollBar.hidden { display: none; }
+  /* ピアノロール表示中は、下half分の道具をたたんで譜面(ロール)に高さを全部渡す。
+     スマホだとツールバー8段+鍵盤で画面がほぼ埋まり、ロールが60pxしか残らず
+     まったく使えなかった(2026-08-20)。ロールでは音符を直接置くので、
+     音価ボタンもオンスクリーン鍵盤もそもそも要らない。
+     ツールバーだけは「ツール」ボタンで開き直せるようにしてある。 */
+  #scoreEditorOverlay.roll-mode #scoreOctaveBar,
+  #scoreEditorOverlay.roll-mode #scorePianoKeyboard { display: none; }
   #scoreRollHint { color: #888; }
   #btnScoreRollMode.active { background: #6cf; color: #111; font-weight: bold; }
   /* 段の切れ目に出す「＋」「−」(2026-08-20)。譜面の右端に沿えて置く。
@@ -1203,11 +1257,21 @@
       <button id="btnImagePickerChoose" type="button">📷 ファイルを選ぶ</button>
       <button id="btnImagePickerCancel" type="button">✕</button>
     </div>
+    <div id="toolbarMorePanel" class="hidden">
+      <div id="toolbarMoreHead">
+        <span id="toolbarMoreTitle">しまってあるボタン</span>
+        <button id="btnToolbarMoreCustomize" type="button">&#9881; 表示を選ぶ</button>
+        <button id="btnToolbarMoreClose" type="button">&times;</button>
+      </div>
+      <div id="toolbarMoreBody"></div>
+      <div id="toolbarMoreCustom" class="hidden"></div>
+    </div>
     <div id="stampPalette" class="hidden">
       <div id="stampPaletteHead">
-        <span id="stampPaletteHint">スタンプを選んでから、譜面の置きたい場所をタップ</span>
+        <span id="stampPaletteHint">スタンプを選んで、譜面をタップ</span>
         <button id="btnStampPaletteClose" type="button">✕</button>
       </div>
+      <div id="stampPaletteTabs"></div>
       <div id="stampPaletteBody"></div>
     </div>
     <div id="scrollWrap">
@@ -1298,35 +1362,36 @@
       <div class="toolbarGroup">
         <!-- テキストメモとペンは使用頻度が段違いに高いので、メモ編集モードに
              入らなくても直接押せるようここに出す(押すと自動でモードに入る)。 -->
-        <button id="btnAddTextMemo" class="appModeEditOnly">+ テキスト</button>
-        <button id="btnAddStampMemo" class="appModeEditOnly">+ スタンプ</button>
-        <button id="btnDrawPen" class="appModeEditOnly">&#9998; ペン</button>
-        <button id="btnMemoEdit" class="appModeEditOnly">&#128221; メモ</button>
-        <button id="btnToggleYoutube" class="appModeEditOnly">&#127909; 動画</button>
-        <button id="btnToggleAudio" class="appModeEditOnly" title="この曲の音源ファイルを再生する(端末内に保存されます)">&#127925; 音源</button>
+        <button id="btnAddTextMemo" data-tbu="v:text" class="appModeEditOnly">+ テキスト</button>
+        <button id="btnAddStampMemo" data-tbu="v:stamp" class="appModeEditOnly">+ スタンプ</button>
+        <button id="btnDrawPen" data-tbu="v:pen" class="appModeEditOnly">&#9998; ペン</button>
+        <button id="btnMemoEdit" data-tbu="v:memo" class="appModeEditOnly">&#128221; メモ</button>
+        <button id="btnToggleYoutube" data-tbu="v:video" class="appModeEditOnly">&#127909; 動画</button>
+        <button id="btnToggleAudio" data-tbu="v:audio" class="appModeEditOnly" title="この曲の音源ファイルを再生する(端末内に保存されます)">&#127925; 音源</button>
       </div>
       <div class="toolbarGroup">
-        <button id="btnAddImageMemo" class="memoEditOnly">+ 画像</button>
-        <button id="btnAddScoreMemo" class="memoEditOnly">+ 楽譜</button>
-        <button id="btnDrawHighlighter" class="memoEditOnly">&#128309; 蛍光ペン</button>
+        <button id="btnAddImageMemo" data-tbu="v:image" class="memoEditOnly">+ 画像</button>
+        <button id="btnAddScoreMemo" data-tbu="v:score" class="memoEditOnly">+ 楽譜</button>
+        <button id="btnDrawHighlighter" data-tbu="v:marker" class="memoEditOnly">&#128309; 蛍光ペン</button>
         <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
         <input type="range" id="drawWidthInput" class="drawOnly" min="1" max="40" value="4">
         <span id="drawWidthLabel" class="drawOnly">4px</span>
         <button id="btnUndoStroke" class="drawOnly">&#8617; 元に戻す</button>
       </div>
       <div class="toolbarGroup">
-        <button id="btnEditBpm" class="memoEditOnly">&#127932; BPM: --</button>
-        <button id="btnReadBpm" class="memoEditOnly" title="譜面の「BPM=◯◯」の記載を読み取ります(初回は文字認識エンジンの読み込みに時間がかかります)">&#128269; BPM読取</button>
-        <button id="btnMetronome">&#129345; クリック</button>
+        <button id="btnEditBpm" data-tbu="v:bpm" class="memoEditOnly">&#127932; BPM: --</button>
+        <button id="btnReadBpm" data-tbu="v:bpm" class="memoEditOnly" title="譜面の「BPM=◯◯」の記載を読み取ります(初回は文字認識エンジンの読み込みに時間がかかります)">&#128269; BPM読取</button>
+        <button id="btnMetronome" data-tbu="v:click">&#129345; クリック</button>
       </div>
       <div class="toolbarGroup">
-        <button id="btnSpeedDown5">&minus;5</button>
-        <button id="btnSpeedDown">&minus;</button>
-        <span id="speedLabel">速度 20</span>
-        <button id="btnSpeedUp">+</button>
-        <button id="btnSpeedUp5">+5</button>
-        <button id="btnCalcSpeed" class="appModeEditOnly" title="曲の演奏時間から、最後までちょうど流れる速度を計算します">&#9201; 速度計算</button>
-        <button id="btnPlay">&#9654; 再生</button>
+        <button id="btnSpeedDown5" data-tbu="v:speed5">&minus;5</button>
+        <button id="btnSpeedDown" data-tbu="v:speed">&minus;</button>
+        <span id="speedLabel" data-tbu="v:speed">速度 20</span>
+        <button id="btnSpeedUp" data-tbu="v:speed">+</button>
+        <button id="btnSpeedUp5" data-tbu="v:speed5">+5</button>
+        <button id="btnCalcSpeed" data-tbu="v:speedcalc" class="appModeEditOnly" title="曲の演奏時間から、最後までちょうど流れる速度を計算します">&#9201; 速度計算</button>
+        <button id="btnPlay" data-tbu="v:play">&#9654; 再生</button>
+        <button id="btnViewerMore" title="しまってあるボタンを開く">&ctdot;</button>
       </div>
     </div>
     <input id="memoImageInput" type="file" accept="image/*">
@@ -1337,7 +1402,7 @@
     <div id="scoreEditorHeader">
       <button id="btnScoreCancel">キャンセル</button>
       <h1>楽譜作成</h1>
-      <button id="btnScoreRollMode" title="ピアノロールに切り替える(五線譜と同じデータを別の形で編集します)">&#9638; ロール</button>
+      <button id="btnScoreRollMode" title="ピアノロールに切り替える(五線譜と同じデータを別の形で編集します)">&#127929; ピアノロール</button>
       <button id="btnScoreRecord" class="hidden" title="クリックに合わせてMIDIキーボードで弾くと、そのまま楽譜になります">&#9210; 録音</button>
       <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067; 使い方</a>
       <button id="btnScoreToolsToggle" title="ツールバーを開閉する(譜面を広く見たい時に)">&#9662; ツール</button>
@@ -1424,66 +1489,67 @@
       </label>
       <span id="scoreRollHint">空きをタップ/右へ引いて音符 ・ 音符をタップで削除 ・ ドラッグで移動 ・ 右端を引いて長さ変更</span>
     </div>
+    <div id="scoreMoreBar"><button id="btnScoreMore" title="しまってあるボタンを開く">&ctdot; その他</button></div>
     <div id="scoreEditorToolbar">
       <div class="scoreEditorGroup">
-        <label>拍子 <select id="scoreTimeSigSelect"></select></label>
-        <label>調号 <select id="scoreKeySelect"></select></label>
-        <label>音部 <select id="scoreClefSelect"></select></label>
-        <button id="btnScoreClefKey" title="各段の頭の音部記号と調号を表示するか">&#119070; 冒頭記号</button>
-        <label title="音程を持たないリズムだけの譜面に切り替える">譜表 <select id="scoreStaffTypeSelect"><option value="standard">通常</option><option value="rhythm">リズム</option></select></label>
-        <label title="曲が1拍目から始まらない時に、1小節目だけ短くする">弱起 <select id="scorePickupSelect"></select></label>
-        <label title="選択中の音符に強弱記号を付ける">強弱 <select id="scoreDynamicSelect"></select></label>
-        <label title="選択中の音符に奏法記号を付ける">奏法 <select id="scoreArticulationSelect"></select></label>
+        <label data-tbu="s:timesig">拍子 <select id="scoreTimeSigSelect"></select></label>
+        <label data-tbu="s:keysig">調号 <select id="scoreKeySelect"></select></label>
+        <label data-tbu="s:clef">音部 <select id="scoreClefSelect"></select></label>
+        <button id="btnScoreClefKey" data-tbu="s:clefkey" title="各段の頭の音部記号と調号を表示するか">&#119070; 冒頭記号</button>
+        <label data-tbu="s:stafftype" title="音程を持たないリズムだけの譜面に切り替える">譜表 <select id="scoreStaffTypeSelect"><option value="standard">通常</option><option value="rhythm">リズム</option></select></label>
+        <label data-tbu="s:pickup" title="曲が1拍目から始まらない時に、1小節目だけ短くする">弱起 <select id="scorePickupSelect"></select></label>
+        <label data-tbu="s:dynamic" title="選択中の音符に強弱記号を付ける">強弱 <select id="scoreDynamicSelect"></select></label>
+        <label data-tbu="s:articulation" title="選択中の音符に奏法記号を付ける">奏法 <select id="scoreArticulationSelect"></select></label>
       </div>
       <div class="scoreEditorGroup">
-        <button id="btnScoreChordMode">&#9834; 単音</button>
-        <button id="btnScoreInsertMode" title="選択中の音符の直前に挿し込む(オフだと末尾に追加)">&#8677; 挿入</button>
+        <button id="btnScoreChordMode" data-tbu="s:chordmode">&#9834; 単音</button>
+        <button id="btnScoreInsertMode" data-tbu="s:insert" title="選択中の音符の直前に挿し込む(オフだと末尾に追加)">&#8677; 挿入</button>
       </div>
       <div class="scoreEditorGroup">
-        <button id="btnScoreHistUndo" title="操作を取り消す (Ctrl+Z)">&#8630; 取消</button>
-        <button id="btnScoreHistRedo" title="やり直す (Ctrl+Y)">&#8631; やり直し</button>
+        <button id="btnScoreHistUndo" data-tbu="s:undo" title="操作を取り消す (Ctrl+Z)">&#8630; 取消</button>
+        <button id="btnScoreHistRedo" data-tbu="s:undo" title="やり直す (Ctrl+Y)">&#8631; やり直し</button>
       </div>
       <div class="scoreEditorGroup">
-        <span class="scoreGroupLabel">転調</span>
-        <button id="btnScoreTransposeDown" title="半音下げる(音符・コード名・調号をまとめて)">&minus;1</button>
-        <button id="btnScoreTransposeUp" title="半音上げる(音符・コード名・調号をまとめて)">+1</button>
-        <button id="btnScoreTransposeDownOct" title="1オクターブ下げる">&minus;12</button>
-        <button id="btnScoreTransposeUpOct" title="1オクターブ上げる">+12</button>
+        <span class="scoreGroupLabel" data-tbu="s:transpose">転調</span>
+        <button id="btnScoreTransposeDown" data-tbu="s:transpose" title="半音下げる(音符・コード名・調号をまとめて)">&minus;1</button>
+        <button id="btnScoreTransposeUp" data-tbu="s:transpose" title="半音上げる(音符・コード名・調号をまとめて)">+1</button>
+        <button id="btnScoreTransposeDownOct" data-tbu="s:transpose" title="1オクターブ下げる">&minus;12</button>
+        <button id="btnScoreTransposeUpOct" data-tbu="s:transpose" title="1オクターブ上げる">+12</button>
       </div>
       <div class="scoreEditorGroup">
-        <button class="scoreDurationBtn" data-duration="whole">全</button>
-        <button class="scoreDurationBtn" data-duration="half">2分</button>
-        <button class="scoreDurationBtn active" data-duration="quarter">4分</button>
-        <button class="scoreDurationBtn" data-duration="eighth">8分</button>
-        <button class="scoreDurationBtn" data-duration="sixteenth">16分</button>
-        <button class="scoreDurationBtn" data-duration="thirtysecond">32分</button>
-        <button class="scoreDurationBtn" data-duration="sixtyfourth">64分</button>
+        <button class="scoreDurationBtn" data-tbu="s:dur" data-duration="whole">全</button>
+        <button class="scoreDurationBtn" data-tbu="s:dur" data-duration="half">2分</button>
+        <button class="scoreDurationBtn active" data-tbu="s:dur" data-duration="quarter">4分</button>
+        <button class="scoreDurationBtn" data-tbu="s:dur" data-duration="eighth">8分</button>
+        <button class="scoreDurationBtn" data-tbu="s:dur" data-duration="sixteenth">16分</button>
+        <button class="scoreDurationBtn" data-tbu="s:dur" data-duration="thirtysecond">32分</button>
+        <button class="scoreDurationBtn" data-tbu="s:dur" data-duration="sixtyfourth">64分</button>
       </div>
       <div class="scoreEditorGroup">
-        <button id="btnScoreDot">付点</button>
-        <button id="btnScoreTriplet">3連</button>
-        <button id="btnScoreTie">&#8899; タイ</button>
-        <button id="btnScoreSlur" title="選択中の音符と次の音符をスラーで結ぶ">&#8995; スラー</button>
-        <button id="btnScore8va" title="選択中の範囲をオクターブ記号で書く(押すたび 8va→8vb→解除)">8va</button>
-        <button id="btnScoreRepeatStart" title="選択中の音符が入っている小節から反復を始める">&#124;: 反復開始</button>
-        <button id="btnScoreRepeatEnd" title="選択中の音符が入っている小節で反復を終える">:&#124; 反復終了</button>
-        <button id="btnScoreLineBreak" title="選択中の音符が入っている小節の後ろで段を変える">&#8629; 改行</button>
-        <button id="btnScoreHandL" class="scoreRhythmOnly" title="選択中の音符に L(左手)を振る">L</button>
-        <button id="btnScoreHandR" class="scoreRhythmOnly" title="選択中の音符に R(右手)を振る">R</button>
-        <button id="btnScoreSharp">&#9839;</button>
-        <button id="btnScoreFlat">&#9837;</button>
-        <button id="btnScoreNatural">&#9838;</button>
-        <button id="btnScoreEnharmonic">&#9837;&harr;&#9839; 異名同音</button>
-        <button id="btnScoreRest">休符</button>
+        <button id="btnScoreDot" data-tbu="s:dot">付点</button>
+        <button id="btnScoreTriplet" data-tbu="s:dot">3連</button>
+        <button id="btnScoreTie" data-tbu="s:tie">&#8899; タイ</button>
+        <button id="btnScoreSlur" data-tbu="s:tie" title="選択中の音符と次の音符をスラーで結ぶ">&#8995; スラー</button>
+        <button id="btnScore8va" data-tbu="s:tie" title="選択中の範囲をオクターブ記号で書く(押すたび 8va→8vb→解除)">8va</button>
+        <button id="btnScoreRepeatStart" data-tbu="s:repeat" title="選択中の音符が入っている小節から反復を始める">&#124;: 反復開始</button>
+        <button id="btnScoreRepeatEnd" data-tbu="s:repeat" title="選択中の音符が入っている小節で反復を終える">:&#124; 反復終了</button>
+        <button id="btnScoreLineBreak" data-tbu="s:linebreak" title="選択中の音符が入っている小節の後ろで段を変える">&#8629; 改行</button>
+        <button id="btnScoreHandL" data-tbu="s:hand" class="scoreRhythmOnly" title="選択中の音符に L(左手)を振る">L</button>
+        <button id="btnScoreHandR" data-tbu="s:hand" class="scoreRhythmOnly" title="選択中の音符に R(右手)を振る">R</button>
+        <button id="btnScoreSharp" data-tbu="s:acc">&#9839;</button>
+        <button id="btnScoreFlat" data-tbu="s:acc">&#9837;</button>
+        <button id="btnScoreNatural" data-tbu="s:acc">&#9838;</button>
+        <button id="btnScoreEnharmonic" data-tbu="s:acc">&#9837;&harr;&#9839; 異名同音</button>
+        <button id="btnScoreRest" data-tbu="s:rest">休符</button>
       </div>
       <div class="scoreEditorGroup">
-        <input id="scoreChordInput" type="text" placeholder="コード名(次の音符に付く)">
-        <button id="btnScoreLoadPhrase" title="保存したフレーズを読み込む">&#127925; フレーズ読込</button>
-        <button id="btnScoreChordShortcut" title="ChordWikiエディタと同じキー割り当てでコード名を入力する">&#9889; コード略記</button>
-        <button id="btnScoreSound">&#128266; 音あり</button>
-        <button id="btnScoreUndo">&#10006; 直前を削除</button>
-        <button id="btnScoreClearAll">全消去</button>
-        <button id="btnScoreMidi" class="hidden">&#127929; MIDI入力: オフ</button>
+        <input id="scoreChordInput" data-tbu="s:chord" type="text" placeholder="コード名(次の音符に付く)">
+        <button id="btnScoreLoadPhrase" data-tbu="s:chord" title="保存したフレーズを読み込む">&#127925; フレーズ読込</button>
+        <button id="btnScoreChordShortcut" data-tbu="s:chord" title="ChordWikiエディタと同じキー割り当てでコード名を入力する">&#9889; コード略記</button>
+        <button id="btnScoreSound" data-tbu="s:sound">&#128266; 音あり</button>
+        <button id="btnScoreUndo" data-tbu="s:del">&#10006; 直前を削除</button>
+        <button id="btnScoreClearAll" data-tbu="s:clear">全消去</button>
+        <button id="btnScoreMidi" data-tbu="s:midi" class="hidden">&#127929; MIDI入力: オフ</button>
       </div>
     </div>
     <div id="scoreOctaveBar">
@@ -1694,9 +1760,10 @@
     // おらず、「サビ」のような日本語ラベルが1文字ぶんに潰れて読めなくなっていた。
     // 代わりに文字種ごとに幅を見積もり、その結果から札の大きさを決める。
     // 見積もりが多少ズレても、余白が数px増減するだけで字は歪まない。
-    const txt = (x, y, size, fill, family, style, s) =>
+    const txt = (x, y, size, fill, family, style, s, tracking) =>
       `<text x="${x}" y="${y}" font-family="${family}" font-size="${size}" font-weight="bold"`
       + ` font-style="${style}" fill="${fill}" text-anchor="middle" dy=".34em"`
+      + (tracking ? ` letter-spacing="${tracking}"` : '')
       + `>${esc(s)}</text>`;
     let W; let body;
     if (def.kind === 'ink') {
@@ -1738,21 +1805,26 @@
         + `<circle cx="33" cy="30" r="3" fill="${STAMP_INK}"/>`
         + `<circle cx="8" cy="15" r="3" fill="${STAMP_INK}"/>`;
     } else if (def.kind === 'badge') {
-      W = Math.max(46, Math.round(stampTextWidth(def.label, 21)) + 26);
-      body = `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="10" fill="${def.color}"/>`
-        + txt(W / 2, H / 2, 21, '#fff', 'sans-serif', 'normal', def.label);
+      // 判子風(2026-08-20〜)。塗りつぶし+丸め10pxの札は、5系統の色が並ぶと
+      // 賑やかすぎて既製のボタンのように見えた。白地に色の輪郭・角を控えめ・
+      // 字間を広げると、紙に判子を押したような佇まいになって譜面に馴染む。
+      W = Math.max(48, Math.round(stampTextWidth(def.label, 19) * 1.16) + 28);
+      body = `<rect x="2" y="2" width="${W - 4}" height="${H - 4}" rx="5" fill="#fff"`
+        + ` stroke="${def.color}" stroke-width="2.5"/>`
+        + txt(W / 2, H / 2, 19, def.color, 'sans-serif', 'normal', def.label, 1.4);
     } else {
-      // stack / stackOutline: 小さい語(sub)の下に大きい語(label)を積む
+      // stack / stackOutline: 小さい語(sub)の下に大きい語(label)を積む。
+      // only は塗り、in は白地のままにして「抜ける/加わる」の重みの差を残す。
       const outline = def.kind === 'stackOutline';
-      const bigW = stampTextWidth(def.label, 21);
-      const subW = stampTextWidth(def.sub, 11);
-      W = Math.max(46, Math.round(Math.max(bigW, subW)) + 22);
+      const bigW = stampTextWidth(def.label, 19) * 1.16;
+      const subW = stampTextWidth(def.sub, 10);
+      W = Math.max(48, Math.round(Math.max(bigW, subW)) + 26);
       const fg = outline ? def.color : '#fff';
       body = outline
-        ? `<rect x="2" y="2" width="${W - 4}" height="${H - 4}" rx="10" fill="#fff" stroke="${def.color}" stroke-width="3"/>`
-        : `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="10" fill="${def.color}"/>`;
-      body += txt(W / 2, 14, 11, fg, 'sans-serif', 'normal', def.sub);
-      body += txt(W / 2, 31, 21, fg, 'sans-serif', 'normal', def.label);
+        ? `<rect x="2" y="2" width="${W - 4}" height="${H - 4}" rx="5" fill="#fff" stroke="${def.color}" stroke-width="2.5"/>`
+        : `<rect x="1.5" y="1.5" width="${W - 3}" height="${H - 3}" rx="5" fill="${def.color}" stroke="${def.color}" stroke-width="2.5"/>`;
+      body += txt(W / 2, 14, 10, fg, 'sans-serif', 'normal', def.sub, 1.2);
+      body += txt(W / 2, 31, 19, fg, 'sans-serif', 'normal', def.label, 1);
     }
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${body}</svg>`;
   }
@@ -1869,8 +1941,18 @@
   const btnAddTextMemo = document.getElementById('btnAddTextMemo');
   const btnAddImageMemo = document.getElementById('btnAddImageMemo');
   const btnAddStampMemo = document.getElementById('btnAddStampMemo');
+  const btnViewerMore = document.getElementById('btnViewerMore');
+  const btnScoreMore = document.getElementById('btnScoreMore');
+  const toolbarMorePanel = document.getElementById('toolbarMorePanel');
+  const toolbarMoreHead = document.getElementById('toolbarMoreHead');
+  const toolbarMoreTitle = document.getElementById('toolbarMoreTitle');
+  const toolbarMoreBody = document.getElementById('toolbarMoreBody');
+  const toolbarMoreCustom = document.getElementById('toolbarMoreCustom');
+  const btnToolbarMoreCustomize = document.getElementById('btnToolbarMoreCustomize');
+  const btnToolbarMoreClose = document.getElementById('btnToolbarMoreClose');
   const stampPalette = document.getElementById('stampPalette');
   const stampPaletteBody = document.getElementById('stampPaletteBody');
+  const stampPaletteTabs = document.getElementById('stampPaletteTabs');
   const btnStampPaletteClose = document.getElementById('btnStampPaletteClose');
   const btnAddScoreMemo = document.getElementById('btnAddScoreMemo');
   const scoreEditorOverlay = document.getElementById('scoreEditorOverlay');
@@ -2819,7 +2901,11 @@
     // メモ編集モードで種類を選択済みなら、ほぼ動いていないタップを配置操作として扱う
     if (memoEditMode && pendingMemoType && moved < 8 && e) {
       const type = pendingMemoType;
-      setPendingMemoType(null);
+      // スタンプは「続けて何枚も貼れる」ようにパレットの選択を保持する。
+      // ここで setPendingMemoType(null) を呼ぶと、選択中のスタンプID
+      // (pendingStampId)まで一緒に消えてしまい、placeMemoAtが何もせず
+      // 帰るだけになっていた(タップしても貼れない不具合、2026-08-20修正)。
+      if (type !== 'stamp') setPendingMemoType(null);
       placeMemoAt(e.clientX, e.clientY, type);
       return;
     }
@@ -5774,6 +5860,142 @@
     });
   }
 
+
+  // ==================================================
+  // ツールバーの整理(「⋯ その他」、2026-08-20〜)
+  // ==================================================
+  // スマホではツールバーがビューアで画面の34%(290px)、楽譜エディタでは55%(468px)を
+  // 占めていて、肝心の譜面が232pxしか残らなかった。よく使うものだけを常時出し、
+  // 残りは「⋯」の中に畳む。
+  //
+  // どれを常時出すかは**ユーザーが選べる**(「⚙ 表示を選ぶ」)。既定はこちらで
+  // 決めた組み合わせだが、使い方は人によって違うので決め打ちにはしない。
+  //
+  // 実装は「要素を実際に動かす」方式。複製して見た目だけ真似ると、押した時の
+  // 動作やselectの選択状態を二重管理することになって必ず食い違う。
+  const TOOLBAR_UNITS = {
+    'v:play': '再生', 'v:click': 'クリック', 'v:speed': '速度', 'v:speed5': '速度 ±5',
+    'v:speedcalc': '速度計算', 'v:text': '+ テキスト', 'v:stamp': '+ スタンプ',
+    'v:pen': 'ペン', 'v:memo': 'メモ編集', 'v:video': '動画', 'v:audio': '音源',
+    'v:bpm': 'BPM', 'v:image': '+ 画像', 'v:score': '+ 楽譜', 'v:marker': '蛍光ペン',
+    's:dur': '音価(全〜64分)', 's:dot': '付点・3連', 's:rest': '休符',
+    's:linebreak': '改行', 's:undo': '取消・やり直し', 's:chordmode': '単音/和音',
+    's:insert': '挿入モード', 's:del': '直前を削除',
+    's:timesig': '拍子', 's:keysig': '調号', 's:clef': '音部', 's:clefkey': '冒頭記号',
+    's:stafftype': '譜表', 's:pickup': '弱起', 's:dynamic': '強弱', 's:articulation': '奏法',
+    's:transpose': '転調', 's:tie': 'タイ・スラー・8va', 's:repeat': '反復記号',
+    's:acc': '♯ ♭ ♮ 異名同音', 's:hand': 'L / R', 's:chord': 'コード名',
+    's:sound': '音あり', 's:clear': '全消去', 's:midi': 'MIDI入力',
+  };
+  // 既定で常時出すもの(ユーザーと相談して決めた組み合わせ)
+  const TOOLBAR_DEFAULT_ON = [
+    'v:play', 'v:click', 'v:speed', 'v:text', 'v:stamp', 'v:pen',
+    's:dur', 's:dot', 's:rest', 's:linebreak', 's:undo', 's:chordmode', 's:insert', 's:del',
+  ];
+  const TOOLBAR_VISIBLE_KEY = 'cwlv_toolbar_visible';
+  let toolbarVisibleUnits = null;
+  let toolbarMoreScope = 'v'; // 今開いているのがビューア側('v')か楽譜エディタ側('s')か
+
+  function loadToolbarVisible() {
+    if (toolbarVisibleUnits) return toolbarVisibleUnits;
+    try {
+      const raw = JSON.parse(localStorage.getItem(TOOLBAR_VISIBLE_KEY));
+      toolbarVisibleUnits = new Set(Array.isArray(raw) ? raw : TOOLBAR_DEFAULT_ON);
+    } catch (err) { toolbarVisibleUnits = new Set(TOOLBAR_DEFAULT_ON); }
+    return toolbarVisibleUnits;
+  }
+  function saveToolbarVisible() {
+    localStorage.setItem(TOOLBAR_VISIBLE_KEY, JSON.stringify(Array.from(loadToolbarVisible())));
+  }
+
+  // 要素の元の居場所を覚えておく(畳む→戻すで位置がずれないように)
+  function rememberToolbarHomes() {
+    document.querySelectorAll('[data-tbu]').forEach((el) => {
+      if (el.__tbHome) return;
+      el.__tbHome = { parent: el.parentElement, next: el.nextElementSibling };
+    });
+  }
+  function toolbarUnitsInScope(scope) {
+    return Object.keys(TOOLBAR_UNITS).filter((u) => u.charAt(0) === scope);
+  }
+  // 畳むものはパネルへ、出すものは元の場所へ戻す
+  function applyToolbarLayout() {
+    rememberToolbarHomes();
+    const on = loadToolbarVisible();
+    const stash = document.createDocumentFragment();
+    Object.keys(TOOLBAR_UNITS).forEach((unit) => {
+      const els = document.querySelectorAll('[data-tbu="' + unit + '"]');
+      els.forEach((el) => {
+        if (on.has(unit)) {
+          const home = el.__tbHome;
+          if (home && el.parentElement !== home.parent) {
+            if (home.next && home.next.parentElement === home.parent) {
+              home.parent.insertBefore(el, home.next);
+            } else {
+              home.parent.appendChild(el);
+            }
+          }
+        } else if (el.parentElement !== toolbarMoreBody) {
+          stash.appendChild(el);
+        }
+      });
+    });
+    if (stash.childNodes.length) toolbarMoreBody.appendChild(stash);
+    renderToolbarMore();
+  }
+  // パネルの中身を「今開いている側」に絞って出す
+  function renderToolbarMore() {
+    const on = loadToolbarVisible();
+    toolbarMoreBody.querySelectorAll('[data-tbu]').forEach((el) => {
+      const mine = el.dataset.tbu.charAt(0) === toolbarMoreScope;
+      el.style.display = mine ? '' : 'none';
+    });
+    toolbarMoreTitle.textContent = toolbarMoreScope === 's'
+      ? 'しまってあるボタン(楽譜エディタ)' : 'しまってあるボタン';
+    toolbarMoreCustom.innerHTML = '';
+    const note = document.createElement('p');
+    note.className = 'tbCustomNote';
+    note.textContent = '押して光らせたものが、ツールバーに常時出ます。'
+      + '消したものはこの「⋯」の中に入ります。';
+    toolbarMoreCustom.appendChild(note);
+    const list = document.createElement('div');
+    list.className = 'tbCustomList';
+    toolbarUnitsInScope(toolbarMoreScope).forEach((unit) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = TOOLBAR_UNITS[unit];
+      b.className = on.has(unit) ? 'on' : '';
+      b.addEventListener('click', () => {
+        if (on.has(unit)) on.delete(unit); else on.add(unit);
+        saveToolbarVisible();
+        applyToolbarLayout();
+      });
+      list.appendChild(b);
+    });
+    toolbarMoreCustom.appendChild(list);
+  }
+  function openToolbarMore(scope) {
+    toolbarMoreScope = scope;
+    toolbarMorePanel.classList.remove('hidden');
+    renderToolbarMore();
+  }
+  btnViewerMore.addEventListener('click', () => {
+    if (!toolbarMorePanel.classList.contains('hidden') && toolbarMoreScope === 'v') {
+      toolbarMorePanel.classList.add('hidden');
+    } else { openToolbarMore('v'); }
+  });
+  btnScoreMore.addEventListener('click', () => {
+    if (!toolbarMorePanel.classList.contains('hidden') && toolbarMoreScope === 's') {
+      toolbarMorePanel.classList.add('hidden');
+    } else { openToolbarMore('s'); }
+  });
+  btnToolbarMoreClose.addEventListener('click', () => toolbarMorePanel.classList.add('hidden'));
+  btnToolbarMoreCustomize.addEventListener('click', () => {
+    const open = toolbarMoreCustom.classList.toggle('hidden');
+    btnToolbarMoreCustomize.classList.toggle('active', !open);
+  });
+  applyToolbarLayout();
+
   // ==================================================
   // ピアノロール(2026-08-20〜)
   // ==================================================
@@ -6105,12 +6327,26 @@
   scoreRollCanvas.addEventListener('pointercancel', scoreRollEndDrag);
   scoreRollGrid.addEventListener('change', () => renderScoreRoll());
 
+  let scoreToolsOpenBeforeRoll = null;
   function setScoreRollMode(on) {
     scoreRollMode = on;
     btnScoreRollMode.classList.toggle('active', on);
     scoreRollCanvas.classList.toggle('hidden', !on);
     scoreEditorCanvas.classList.toggle('hidden', on);
     scoreRollBar.classList.toggle('hidden', !on);
+    scoreEditorOverlay.classList.toggle('roll-mode', on);
+    // ツールバーも畳む。ただし畳んだ状態を端末に保存はしない(ロールを抜けたら戻す)。
+    if (on) {
+      if (scoreToolsOpenBeforeRoll === null) {
+        scoreToolsOpenBeforeRoll = !scoreEditorToolbar.classList.contains('collapsed');
+      }
+      scoreEditorToolbar.classList.add('collapsed');
+      btnScoreToolsToggle.innerHTML = '▸ ツール';
+    } else if (scoreToolsOpenBeforeRoll !== null) {
+      scoreEditorToolbar.classList.toggle('collapsed', !scoreToolsOpenBeforeRoll);
+      btnScoreToolsToggle.innerHTML = scoreToolsOpenBeforeRoll ? '▾ ツール' : '▸ ツール';
+      scoreToolsOpenBeforeRoll = null;
+    }
     if (on) renderScoreRoll();
     renderScoreSystemControls(); // ロール表示中は「＋」「−」を出さない
   }
@@ -7015,35 +7251,36 @@
   // 「パレットで選ぶ → 譜面をタップして置く」という、テキスト/画像メモと同じ2段構え。
   // パレットは開いたままにしてあるので、続けて何枚も貼れる(強弱記号は曲中に
   // 何度も出てくるため、1枚ごとにパレットを開き直すのは煩わしい)。
+  let stampPaletteTab = 0; // 今開いている分類
   function renderStampPalette() {
+    stampPaletteTabs.innerHTML = '';
+    SHEET_STAMP_GROUPS.forEach((group, gi) => {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.textContent = group.name;
+      tab.className = gi === stampPaletteTab ? 'active' : '';
+      tab.addEventListener('click', () => { stampPaletteTab = gi; renderStampPalette(); });
+      stampPaletteTabs.appendChild(tab);
+    });
     stampPaletteBody.innerHTML = '';
-    for (const group of SHEET_STAMP_GROUPS) {
-      const wrap = document.createElement('div');
-      wrap.className = 'stampGroup';
-      const name = document.createElement('div');
-      name.className = 'stampGroupName';
-      name.textContent = group.name;
-      wrap.appendChild(name);
-      const items = document.createElement('div');
-      items.className = 'stampGroupItems';
-      for (const def of group.items) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'stampChoice' + (pendingStampId === def.id ? ' selected' : '');
-        btn.title = def.sub ? `${def.label} ${def.sub}` : def.label;
-        btn.innerHTML = buildSheetStampSvg(def);
-        btn.addEventListener('click', () => {
-          // 同じものをもう一度押したら選択解除(置くのをやめる)
-          pendingStampId = pendingStampId === def.id ? null : def.id;
-          setPendingMemoType(pendingStampId ? 'stamp' : null);
-          renderStampPalette();
-        });
-        items.appendChild(btn);
-      }
-      wrap.appendChild(items);
-      stampPaletteBody.appendChild(wrap);
+    const group = SHEET_STAMP_GROUPS[stampPaletteTab];
+    if (!group) return;
+    for (const def of group.items) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'stampChoice' + (pendingStampId === def.id ? ' selected' : '');
+      btn.title = def.sub ? `${def.label} ${def.sub}` : def.label;
+      btn.innerHTML = buildSheetStampSvg(def);
+      btn.addEventListener('click', () => {
+        // 同じものをもう一度押したら選択解除(置くのをやめる)
+        pendingStampId = pendingStampId === def.id ? null : def.id;
+        setPendingMemoType(pendingStampId ? 'stamp' : null);
+        renderStampPalette();
+      });
+      stampPaletteBody.appendChild(btn);
     }
   }
+
   function setStampPaletteOpen(open) {
     stampPalette.classList.toggle('hidden', !open);
     if (open) {
@@ -9379,7 +9616,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-1210';
+  const APP_BUILD = '20260820-1520';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -10550,6 +10787,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
