@@ -6140,9 +6140,10 @@
   const ROLL_BEAT_W = 72;       // 拍子の下の数字ぶんの音符1つの横幅
   const ROLL_PAD_TOP = 8;
   const ROLL_BLACK = new Set([1, 3, 6, 8, 10]);
-  // オンスクリーン鍵盤と同じドレミ表記に揃える(英語名だと見比べる時に頭を使う)
-  const SCORE_ROLL_NOTE_NAMES = ['ド', 'ド#', 'レ', 'ミb', 'ミ', 'ファ',
-    'ファ#', 'ソ', 'ラb', 'ラ', 'シb', 'シ'];
+  // 英語表記(2026-08-20)。当初はオンスクリーン鍵盤に合わせてドレミにしたが、
+  // コード名(Bm7・G#m7b5…)と並べて見るのでこちらの方が対応が取りやすい。
+  const SCORE_ROLL_NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F',
+    'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
   let scoreRollMode = false;
   let scoreRollLo = 48;
   let scoreRollHi = 72;
@@ -6420,7 +6421,12 @@
     scoreRollDrag = {
       notes, idx: hitIdx,
       mode: edgePx <= ROLL_EDGE_PX ? 'resize' : 'move',
+      // 掴んだ位置を横**と縦の両方**で覚える。縦を覚えずに「指のある行」を
+      // そのまま音高にしていた頃は、掴んだ瞬間に音符が指の行へ飛んでいた
+      // (1行14pxしかないので、指を置いた場所が1〜2行ずれるのは普通)。
+      // 覚えておけば「動かした分だけ動く」ので、狙った音に落とせる。
       grabOffset: pt.u - n.start,
+      grabAbs: pt.abs - n.abs,
       startX: e.clientX, startY: e.clientY, moved: false, created: false,
     };
   });
@@ -6441,7 +6447,7 @@
       n.len = Math.max(grid.step, end - n.start);
     } else {
       const start = Math.max(0, Math.round((pt.u - d.grabOffset) / grid.step) * grid.step);
-      const abs = clamp(pt.abs, scoreRollLo, scoreRollHi);
+      const abs = clamp(pt.abs - d.grabAbs, scoreRollLo, scoreRollHi);
       if (abs !== n.abs) scorePlayPitches([scoreResolveFromSemitone(abs)]);
       n.start = start;
       n.abs = abs;
@@ -9767,7 +9773,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-1720';
+  const APP_BUILD = '20260820-1810';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -10938,6 +10944,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
