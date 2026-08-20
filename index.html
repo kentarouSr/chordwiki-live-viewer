@@ -4054,7 +4054,8 @@
       const t = scoreParseChordToken(part);
       if (!t) return null;
       const deg = SCORE_DEGREE_NAMES[(((t.semitone - tonic) % 12) + 12) % 12];
-      out.push(deg + t.suffix);
+      // テンションは索引に載せない。V7(9) も V7b9 も「V7」として1つに数える。
+      out.push(deg + scoreCoreQuality(t.suffix));
     }
     return out.join('/');
   }
@@ -4126,32 +4127,47 @@
   // 無印のコード(I、V など)は「その度数の本来の姿」として読む。
   // キーの中で I なら IM7、V なら V7、II なら IIm7 が既定。
   const SCORE_CHORD_FAMILIES = [
-    { id: 'major', name: 'メジャー', scale: 'アイオニアン',
-      qualities: ['', 'M7', 'maj7', '△', '△7', '6', '69', '6/9', 'M9', 'M13', 'add9', 'M7(9)'] },
-    { id: 'dom', name: 'ドミナント', scale: 'ミクソリディアン',
-      qualities: ['7', '9', '11', '13', '7sus4', 'sus4', 'sus', '7(9)', '7(13)'] },
-    { id: 'domalt', name: 'ドミナント(オルタード)', scale: 'オルタード / コンディミ',
-      qualities: ['7b9', '7#9', '7#11', '7b13', '7b5', '7#5', 'alt', '7alt', '7(b9)', '7(#9)', '7(#11)', '7(b13)'] },
-    { id: 'min7', name: 'マイナー7', scale: 'ドリアン / エオリアン',
-      qualities: ['m', 'm7', 'm9', 'm11', '-7', 'min7', 'm7(9)', 'm7(11)'] },
-    { id: 'min6', name: 'マイナー6', scale: 'ドリアン',
-      qualities: ['m6', 'm69', 'm13', 'm6/9'] },
-    { id: 'minmaj', name: 'マイナーメジャー7', scale: 'メロディックマイナー',
-      qualities: ['mM7', 'mmaj7', 'm△7', 'mM9'] },
-    { id: 'half', name: 'ハーフディミニッシュ', scale: 'ロクリアン',
-      qualities: ['m7b5', 'm7-5', 'ø', 'ø7', 'm7(b5)'] },
-    { id: 'dim', name: 'ディミニッシュ', scale: 'ディミニッシュ',
-      qualities: ['dim', 'dim7', 'o', 'o7', '°', '°7'] },
-    { id: 'aug', name: 'オーグメント', scale: 'ホールトーン',
-      qualities: ['aug', '+', 'M7#5', '+5'] },
+    { id: 'major', name: 'メジャー', scale: 'アイオニアン', example: 'IM7 / I6 / I' },
+    { id: 'dom', name: 'ドミナント', scale: 'ミクソリディアン / オルタード', example: 'V7 / V9 / V7b9' },
+    { id: 'min7', name: 'マイナー7', scale: 'ドリアン / エオリアン', example: 'IIm7 / IIm9' },
+    { id: 'min6', name: 'マイナー6', scale: 'ドリアン', example: 'IIm6' },
+    { id: 'minmaj', name: 'マイナーメジャー7', scale: 'メロディックマイナー', example: 'ImM7' },
+    { id: 'half', name: 'ハーフディミニッシュ', scale: 'ロクリアン', example: 'VIIm7b5' },
+    { id: 'dim', name: 'ディミニッシュ', scale: 'ディミニッシュ', example: 'VIIdim7' },
+    { id: 'aug', name: 'オーグメント', scale: 'ホールトーン', example: 'Iaug' },
   ];
   // 無印のコードは、その度数でいちばん自然な族として読む
   const SCORE_BARE_FAMILY_BY_DEGREE = {
     I: 'major', II: 'min7', III: 'min7', IV: 'major', V: 'dom', VI: 'min7', VII: 'half',
     bII: 'major', bIII: 'major', '#IV': 'half', bVI: 'major', bVII: 'dom',
   };
-  // ユーザーが束ね方を変えられるようにする(既定は上の表)。
-  // 「まとめない」にした族は、品質の文字が完全に一致した時だけ同じ扱いになる。
+  // 族どうしを束ねる指定(既定は束ねる)。族の表は細かい粒度で持っておき、
+  // 「実際に区別したいか」はここで切り替える。分けたくなった時に戻せるようにするため。
+  const SCORE_FAMILY_LINKS = [
+    { id: 'min7+min6', a: 'min7', b: 'min6',
+      name: 'マイナー7とマイナー6を同じ扱いにする',
+      note: 'm7 と m6 を区別しない' },
+  ];
+  const SCORE_LINK_OFF_KEY = 'cwlv_family_link_off';
+  let scoreLinkOff = null;
+  function loadLinkOff() {
+    if (scoreLinkOff) return scoreLinkOff;
+    try {
+      const raw = JSON.parse(localStorage.getItem(SCORE_LINK_OFF_KEY));
+      scoreLinkOff = new Set(Array.isArray(raw) ? raw : []);
+    } catch (err) { scoreLinkOff = new Set(); }
+    return scoreLinkOff;
+  }
+  function saveLinkOff() {
+    localStorage.setItem(SCORE_LINK_OFF_KEY, JSON.stringify(Array.from(loadLinkOff())));
+  }
+  function scoreFamiliesEquivalent(fa, fb) {
+    if (fa === fb) return true;
+    const off = loadLinkOff();
+    return SCORE_FAMILY_LINKS.some((l) => !off.has(l.id)
+      && ((l.a === fa && l.b === fb) || (l.a === fb && l.b === fa)));
+  }
+
   const SCORE_FAMILY_OFF_KEY = 'cwlv_family_off';
   let scoreFamilyOff = null;
   function loadFamilyOff() {
@@ -4166,19 +4182,54 @@
     localStorage.setItem(SCORE_FAMILY_OFF_KEY, JSON.stringify(Array.from(loadFamilyOff())));
   }
 
-  // 品質の文字を正規化(全角・大文字小文字・括弧の揺れを吸収)
   function normalizeQuality(q) {
     return String(q || '')
       .replace(/[Ｍ]/g, 'M').replace(/[♭]/g, 'b').replace(/[♯]/g, '#')
       .replace(/\s+/g, '');
   }
-  const SCORE_FAMILY_BY_QUALITY = (() => {
-    const m = new Map();
-    SCORE_CHORD_FAMILIES.forEach((f) => {
-      f.qualities.forEach((q) => { if (q !== '') m.set(normalizeQuality(q), f.id); });
-    });
-    return m;
-  })();
+
+  // **テンションはコードの種類に含めない**(2026-08-20)。
+  // 9th・11th・13th とその変化(b9 #9 #11 b13)は「上に乗せる音」であって、
+  // どのスケールを使うかを決める骨組みではない。V7 と V7b9 と V9 は
+  // 全部「Vのドミナント」として1つに扱いたい。
+  // b5・#5 は5度そのものを変える = コードの種類が変わるので落とさない。
+  function scoreCoreQuality(qRaw) {
+    let q = normalizeQuality(qRaw);
+    let hadExtension = false;
+    // 括弧つきのテンション "(9)" "(b9,13)" をまとめて落とす
+    q = q.replace(/\([^)]*\)/g, () => { hadExtension = true; return ''; });
+    // add9 は「トライアドに9thを足しただけ」で7thの和音ではない。
+    // ここを普通のテンションと同じに扱うと Cadd9 が C7 扱いになってしまう。
+    q = q.replace(/add(?:b9|#9|#11|b13|9|11|13)/g, '');
+    // 素で書かれたテンション。b5・#5 は5度の変化なので対象外。
+    q = q.replace(/(?:b9|#9|#11|b13|9|11|13)/g, () => { hadExtension = true; return ''; });
+    q = q.replace(/alt$/, () => { hadExtension = true; return '7'; });
+    // テンションだけ書かれていた場合(C9・Cm9・CM9 など)は7thの和音を意味する
+    if (hadExtension && !/(6|7|dim|o|°|aug|\+|sus)/.test(q)) {
+      if (/^(m|min|-)?$/.test(q)) q += '7';
+      else if (/^(M|maj|△)$/.test(q)) q = 'M7';
+    }
+    return q;
+  }
+
+  // 品質(テンションを落とした後)から族を決める。
+  // 一覧表を持たずに判定するのは、コードの書き方が無数にあって
+  // 表を書ききれないため(m7-5 / mM7 / △ / ø など揺れが多い)。
+  function scoreQualityFamily(qRaw, root) {
+    const q = scoreCoreQuality(qRaw);
+    if (q === '') return SCORE_BARE_FAMILY_BY_DEGREE[root] || 'major';
+    if (/^(m|min|-)?(7)?(b5|-5)/.test(q) || /^ø/.test(q)) return 'half';
+    if (/^(dim|o|°)/.test(q)) return 'dim';
+    if (/^(aug|\+)/.test(q) || /#5/.test(q)) return 'aug';
+    if (/^(m|min|-)(M7|maj7|△7?|M)/.test(q)) return 'minmaj';
+    if (/^(m|min|-)6/.test(q)) return 'min6';
+    if (/^(m|min|-)/.test(q)) return 'min7';
+    if (/^(M7|maj7|△|M)/.test(q)) return 'major';
+    if (/^6/.test(q)) return 'major';
+    if (/sus/.test(q)) return 'dom';
+    if (/^7/.test(q)) return 'dom';
+    return null;
+  }
 
   // ディグリー("IIm7" 等)を { root, family, quality } に分解する
   function scoreDegreeParts(degree) {
@@ -4187,10 +4238,7 @@
     if (!m) return null;
     const root = m[1] + m[2];
     const quality = normalizeQuality(m[3]);
-    let family;
-    if (quality === '') family = SCORE_BARE_FAMILY_BY_DEGREE[root] || 'major';
-    else family = SCORE_FAMILY_BY_QUALITY.get(quality) || null;
-    return { root, quality, family };
+    return { root, quality, family: scoreQualityFamily(quality, root) };
   }
 
   // 2つのディグリーが「同じコードとして使えるか」。
@@ -4202,8 +4250,11 @@
     if (pa.root !== pb.root) return false;
     if (pa.quality === pb.quality) return true;
     if (!pa.family || !pb.family) return false;
-    if (pa.family !== pb.family) return false;
-    return !loadFamilyOff().has(pa.family);
+    if (!scoreFamiliesEquivalent(pa.family, pb.family)) return false;
+    // 「まとめない」にした族は、書き方が完全に一致した時だけ同じ扱い。
+    // 束ねた相手側の族も同じ扱いにする(片方だけ厳密にしても意味が通らないため)。
+    const off = loadFamilyOff();
+    return !off.has(pa.family) && !off.has(pb.family);
   }
 
   // 譜面全体を半音単位で転調する。音符の高さ・コード名・調号を一度に動かす。
@@ -9192,8 +9243,40 @@
     note.textContent = 'そのコードで「使えるスケールが同じ」ものを、同じコードとして扱います。'
       + '例: I・I6・IM7 はどれもアイオニアンなので同じ。V と V7 も同じですが、'
       + 'VM7 は7thが違うので別物です。'
+      + 'テンション(9th・11th・13thとその変化)は種類に含めないので、V7・V9・V7b9 は全部同じ「V7」です。'
       + '「まとめない」にした族は、コードの書き方が完全に一致した時だけ同じ扱いになります。';
     phraseFamilyPanel.appendChild(note);
+
+    // 族どうしを束ねる指定(既定はどちらも束ねる)
+    const linkOff = loadLinkOff();
+    SCORE_FAMILY_LINKS.forEach((l) => {
+      const row = document.createElement('div');
+      row.className = 'famRow';
+      const main = document.createElement('div');
+      main.className = 'famMain';
+      const n = document.createElement('div');
+      n.className = 'famName';
+      n.textContent = l.name;
+      main.appendChild(n);
+      const q = document.createElement('div');
+      q.className = 'famQuals';
+      q.textContent = l.note;
+      main.appendChild(q);
+      row.appendChild(main);
+      const b = document.createElement('button');
+      b.type = 'button';
+      const on = !linkOff.has(l.id);
+      b.className = on ? 'on' : '';
+      b.textContent = on ? '同じ扱い' : '別扱い';
+      b.addEventListener('click', () => {
+        if (linkOff.has(l.id)) linkOff.delete(l.id); else linkOff.add(l.id);
+        saveLinkOff();
+        renderPhraseFamilyPanel();
+        renderPhraseList();
+      });
+      row.appendChild(b);
+      phraseFamilyPanel.appendChild(row);
+    });
     SCORE_CHORD_FAMILIES.forEach((f) => {
       const row = document.createElement('div');
       row.className = 'famRow';
@@ -9209,7 +9292,7 @@
       main.appendChild(sc);
       const q = document.createElement('div');
       q.className = 'famQuals';
-      q.textContent = f.qualities.filter(Boolean).slice(0, 8).join(' , ');
+      q.textContent = f.example;
       main.appendChild(q);
       row.appendChild(main);
       const b = document.createElement('button');
@@ -10779,7 +10862,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-0340';
+  const APP_BUILD = '20260821-0520';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -11917,6 +12000,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
