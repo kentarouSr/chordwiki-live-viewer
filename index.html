@@ -1193,13 +1193,11 @@
     <button id="btnToggleSettings" aria-expanded="false">&#9881; 設定・バックアップ &#9662;</button>
     <div id="backupBar" class="collapsed">
       <a id="btnManual" href="./manual.html">&#128214; 使い方</a>
-      <a id="btnStartGuide" href="./start.html">&#128640; はじめに(招待された方へ)</a>
       <div class="backupGroup">
         <span class="backupGroupLabel">&#9729; クラウド同期</span>
         <button id="btnSync">今すぐ同期</button>
         <button id="btnSetSyncKey">同期キーを設定</button>
         <button id="btnCopySetupLink">他の端末用リンクをコピー</button>
-        <button id="btnInviteFriend">&#128101; 友達を招待</button>
       </div>
       <div class="backupGroup">
         <span class="backupGroupLabel">&#128190; バックアップ</span>
@@ -1924,7 +1922,6 @@
   const btnSync = document.getElementById('btnSync');
   const btnSetSyncKey = document.getElementById('btnSetSyncKey');
   const btnCopySetupLink = document.getElementById('btnCopySetupLink');
-  const btnInviteFriend = document.getElementById('btnInviteFriend');
   const btnGoSetlists = document.getElementById('btnGoSetlists');
   const btnAppMode = document.getElementById('btnAppMode');
   const offlineCacheInfo = document.getElementById('offlineCacheInfo');
@@ -9773,7 +9770,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-1810';
+  const APP_BUILD = '20260820-1900';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -10688,39 +10685,6 @@
       alert('セットアップ用リンクをコピーしました。LINEやメモなどに貼り付けて、他の端末で開いてください。');
     } catch (err) {
       prompt('コピーしてください:', url);
-    }
-  });
-
-  // 友達に「別の本棚」を渡すための招待リンクを作る。上の「他の端末用リンクを
-  // コピー」は今の自分のキー(=自分の本棚)をそのまま渡すので、渡した相手と
-  // 曲・セットリストを共有する形になる。それとは違い、こちらはサーバーに新しい
-  // キーをその場で発行してもらい、渡した相手だけの空の本棚を作る。
-  btnInviteFriend.addEventListener('click', async () => {
-    const key = localStorage.getItem(SYNC_KEY_STORAGE);
-    if (!key) {
-      alert('まだ同期キーが設定されていません。先に「クラウド同期」を1回実行してください。');
-      return;
-    }
-    if (!confirm('友達専用の新しい招待リンクを作ります。\nあなたの曲やメモは共有されず、招待された相手は空の本棚から始まります。\nよろしいですか?')) return;
-    try {
-      const res = await syncFetch(`${SYNC_API_URL}/api/invite`, {
-        method: 'POST',
-        headers: { 'X-Sync-Key': key },
-      });
-      if (res.status === 401) throw new Error('同期キーが正しくありません(再度お試しください)');
-      if (!res.ok) throw new Error(`サーバーエラー (${res.status})`);
-      const { key: newKey } = await res.json();
-      // アプリ本体(index.html)ではなく、招待された人向けのクイックスタート案内
-      // (start.html)に着地させる。キーの保存ロジックはstart.html側にも同じものがある。
-      const url = `${new URL('start.html', location.href).href}?key=${encodeURIComponent(newKey)}`;
-      try {
-        await navigator.clipboard.writeText(url);
-        alert('招待リンクをコピーしました。友達に送ってください。開くとその友達専用の本棚がセットアップされ、使い方の案内ページが表示されます。');
-      } catch (err) {
-        prompt('コピーしてください:', url);
-      }
-    } catch (err) {
-      alert(`招待リンクの作成に失敗しました: ${err.message}`);
     }
   });
 
