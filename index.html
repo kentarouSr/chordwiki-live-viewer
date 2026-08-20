@@ -1418,17 +1418,17 @@
         <button id="btnToggleAudio" data-tbu="v:audio" class="appModeEditOnly" title="この曲の音源ファイルを再生する(端末内に保存されます)">&#127925; 音源</button>
       </div>
       <div class="toolbarGroup">
-        <button id="btnAddImageMemo" data-tbu="v:image" class="memoEditOnly">+ 画像</button>
-        <button id="btnAddScoreMemo" data-tbu="v:score" class="memoEditOnly">+ 楽譜</button>
-        <button id="btnDrawHighlighter" data-tbu="v:marker" class="memoEditOnly">&#128309; 蛍光ペン</button>
+        <button id="btnAddImageMemo" data-tbu="v:image" class="appModeEditOnly">+ 画像</button>
+        <button id="btnAddScoreMemo" data-tbu="v:score" class="appModeEditOnly">+ 楽譜</button>
+        <button id="btnDrawHighlighter" data-tbu="v:marker" class="appModeEditOnly">&#128309; 蛍光ペン</button>
         <input type="color" id="drawColorInput" class="drawOnly" value="#ff3b3b">
         <input type="range" id="drawWidthInput" class="drawOnly" min="1" max="40" value="4">
         <span id="drawWidthLabel" class="drawOnly">4px</span>
         <button id="btnUndoStroke" class="drawOnly">&#8617; 元に戻す</button>
       </div>
       <div class="toolbarGroup">
-        <button id="btnEditBpm" data-tbu="v:bpm" class="memoEditOnly">&#127932; BPM: --</button>
-        <button id="btnReadBpm" data-tbu="v:bpm" class="memoEditOnly" title="譜面の「BPM=◯◯」の記載を読み取ります(初回は文字認識エンジンの読み込みに時間がかかります)">&#128269; BPM読取</button>
+        <button id="btnEditBpm" data-tbu="v:bpm" class="appModeEditOnly">&#127932; BPM: --</button>
+        <button id="btnReadBpm" data-tbu="v:bpm" class="appModeEditOnly" title="譜面の「BPM=◯◯」の記載を読み取ります(初回は文字認識エンジンの読み込みに時間がかかります)">&#128269; BPM読取</button>
         <button id="btnMetronome" data-tbu="v:click">&#129345; クリック</button>
       </div>
       <div class="toolbarGroup">
@@ -7357,8 +7357,13 @@
   }
 
   btnAddScoreMemo.addEventListener('click', () => {
+    // 「メモ編集中だけ表示」をやめた(2026-08-20)ので、押された時点で
+    // メモ編集に入っていないことがある。配置にはメモ編集モードが要るので自分で入る。
+    // setMemoEditMode()は保留状態を消すため、モードに入るのが先・種別の指定が後。
+    const wasPending = pendingMemoType === 'score';
+    if (!memoEditMode) setMemoEditMode(true);
     setDrawMode(false);
-    setPendingMemoType(pendingMemoType === 'score' ? null : 'score');
+    setPendingMemoType(wasPending ? null : 'score');
   });
 
   // 誤操作対策は演奏モード/編集モード(アプリ全体の切り替え、曲一覧で選ぶ)側で
@@ -7387,8 +7392,10 @@
     setPendingMemoType(wasPending ? null : 'text');
   });
   btnAddImageMemo.addEventListener('click', () => {
+    const wasPending = pendingMemoType === 'image';
+    if (!memoEditMode) setMemoEditMode(true);
     setDrawMode(false);
-    setPendingMemoType(pendingMemoType === 'image' ? null : 'image');
+    setPendingMemoType(wasPending ? null : 'image');
   });
 
   // ---- 画像スタンプ(2026-08-20〜) ----
@@ -9760,7 +9767,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-1640';
+  const APP_BUILD = '20260820-1720';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
