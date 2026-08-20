@@ -9384,6 +9384,11 @@
   });
   // 以前に保存したフレーズには degrees が無いので、開いた時に一度だけ補完する。
   // ディグリーは導出値なので、いつ作り直しても結果は同じ。
+  //
+  // プレビュー画像も同じように補完する。一覧に譜面のサムネイルが出ないと
+  // 何のフレーズか分からないため。外から流し込んだフレーズ(テスト用に
+  // APIへ直接入れたものなど)にはプレビューが無いので、ここで作る。
+  // 1枚ずつVexFlowで描くので、無い分だけ・一度きりにしている。
   async function backfillPhraseDegrees() {
     let changed = false;
     (musicPhrases.items || []).forEach((it) => {
@@ -9391,6 +9396,41 @@
       it.degrees = scorePhraseDegrees(it.elements, it.keyFifths || 0);
       changed = true;
     });
+    const needPreview = (musicPhrases.items || []).filter((it) => !it.preview && it.elements);
+    if (needPreview.length) {
+      const overlay = scoreEditorOverlay;
+      const wasHidden = overlay.classList.contains('hidden');
+      overlay.classList.remove('hidden');
+      // 今の編集内容を壊さないよう控えて、最後に戻す
+      const keep = {
+        elements: scoreElements, timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths,
+        clef: scoreClef, pickupUnits: scorePickupUnits, staffType: scoreStaffType,
+        width: scoreSystemWidth,
+      };
+      for (const it of needPreview) {
+        try {
+          scoreElements = cloneScoreElements(it.elements);
+          scoreTimeSigIdx = it.timeSigIdx || 0;
+          scoreKeyFifths = it.keyFifths || 0;
+          scoreClef = it.clef || 'treble';
+          scorePickupUnits = it.pickupUnits || 0;
+          scoreStaffType = it.staffType || 'standard';
+          scoreSelectedIndex = null;
+          scoreSelectedRange = new Set();
+          await renderScoreCanvas();
+          it.preview = scoreEditorCanvas.toDataURL('image/png');
+          changed = true;
+        } catch (err) { /* 1枚失敗しても他は続ける */ }
+      }
+      scoreElements = keep.elements;
+      scoreTimeSigIdx = keep.timeSigIdx;
+      scoreKeyFifths = keep.keyFifths;
+      scoreClef = keep.clef;
+      scorePickupUnits = keep.pickupUnits;
+      scoreStaffType = keep.staffType;
+      scoreSystemWidth = keep.width;
+      if (wasHidden) overlay.classList.add('hidden');
+    }
     if (changed) await saveMusicPhrases();
   }
   btnGoPhrases.addEventListener('click', async () => {
@@ -10416,7 +10456,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-2320';
+  const APP_BUILD = '20260821-0010';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
