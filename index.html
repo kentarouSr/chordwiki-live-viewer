@@ -73,6 +73,16 @@
      何のためのボタンかが一目で分かるようにする。 */
   .backupGroup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .backupGroupLabel { font-weight: bold; color: #ccc; min-width: 96px; }
+  /* 使う人が少ない設定は畳んでおく。見出しそのものを開閉ボタンにして、
+     閉じている間は中身を全部隠す(見出しだけが残る)。 */
+  /* #footKeyList や #backupBar button といったID込みの指定より詳細度を上げないと勝てない */
+  #backupBar .backupGroup.foldable.collapsed > *:not(.backupGroupToggle) { display: none; }
+  #backupBar button.backupGroupToggle {
+    font-weight: bold; color: #ccc; background: none; border: none;
+    padding: 0; font-size: inherit; cursor: pointer; text-align: left;
+  }
+  #backupBar button.backupGroupToggle::after { content: ' \25B8'; color: #888; }
+  .backupGroup.foldable:not(.collapsed) > .backupGroupToggle::after { content: ' \25BE'; }
 
   #songSearchRow { display: flex; gap: 8px; margin-bottom: 12px; }
   #songSearchInput {
@@ -1347,8 +1357,8 @@
         <button id="btnCopySetupLink">あなた用のURLをコピー</button>
         <button id="btnSetSyncKey">別のURLに切り替える</button>
       </div>
-      <div class="backupGroup">
-        <span class="backupGroupLabel">&#129461; フットコントローラー / キー操作</span>
+      <div class="backupGroup foldable collapsed" id="footGroup">
+        <button class="backupGroupToggle" id="btnFootFold" type="button" aria-expanded="false">&#129461; フットコントローラー / キー操作</button>
         <span id="footHint">ペダルや外付けキーボードのキーに、譜めくりなどを割り当てられます。</span>
         <div id="footKeyList"></div>
         <button id="btnFootReset">既定に戻す</button>
@@ -2148,6 +2158,8 @@
   const btnFeedbackCancel = document.getElementById('btnFeedbackCancel');
   const btnFeedbackClose = document.getElementById('btnFeedbackClose');
   const btnFootReset = document.getElementById('btnFootReset');
+  const footGroup = document.getElementById('footGroup');
+  const btnFootFold = document.getElementById('btnFootFold');
   const btnToggleSettings = document.getElementById('btnToggleSettings');
   const backupBar = document.getElementById('backupBar');
 
@@ -11024,7 +11036,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-1210';
+  const APP_BUILD = '20260821-1355';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -11930,6 +11942,20 @@
   if (localStorage.getItem(SYNC_KEY_STORAGE)) {
     runSync({ silent: true });
   }
+
+  // フットコントローラーの設定は使う人が少ないので、既定では畳んでおく。
+  // 一度開いた人は次回も開いた状態で始めたいので、状態を覚えておく。
+  const FOOT_FOLD_KEY = 'cwlv_foot_open';
+  function applyFootFold(open) {
+    footGroup.classList.toggle('collapsed', !open);
+    btnFootFold.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  applyFootFold(localStorage.getItem(FOOT_FOLD_KEY) === '1');
+  btnFootFold.addEventListener('click', () => {
+    const open = footGroup.classList.contains('collapsed');
+    applyFootFold(open);
+    localStorage.setItem(FOOT_FOLD_KEY, open ? '1' : '0');
+  });
 
   // URL経由の自動取得がうまくいかない場合(ホーム画面PWAでURLのパラメータが渡らない等)の
   // 手動フォールバック。今のURLを初期値にして貼り直せる。空にすれば端末内だけの利用に戻る。
