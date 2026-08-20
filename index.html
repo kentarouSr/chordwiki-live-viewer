@@ -8846,10 +8846,15 @@
     if (!query.length) return true;
     const list = phraseDegrees || [];
     const hit = (a, b) => {
-      // 検索語に品質が無ければ度数だけ見る。あれば前方一致(IIm で IIm7 も拾う)。
+      // 検索語に品質が無ければ度数だけ見る(2-5-1検索)。
       const qRoot = scoreDegreeRootOnly(b);
       if (qRoot === b) return scoreDegreeRootOnly(a) === qRoot;
-      return a === b || a.indexOf(b) === 0;
+      // 品質があれば前方一致。「IIm」で「IIm7」「IIm9」まで拾いたいため。
+      // ただし b5・#5 が続くものは別のコードなので拾わない
+      // (Dm7 で引いた時に Dm7b5 のフレーズが出るのはおかしい)。
+      if (a === b) return true;
+      if (a.indexOf(b) !== 0) return false;
+      return !/^[b#]5/.test(a.slice(b.length));
     };
     for (let i = 0; i + query.length <= list.length; i++) {
       let all = true;
@@ -10456,7 +10461,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-0010';
+  const APP_BUILD = '20260821-0055';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
