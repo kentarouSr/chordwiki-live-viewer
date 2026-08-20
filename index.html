@@ -282,6 +282,60 @@
   /* --- 不具合・要望の送信(2026-08-21) ---
      一般公開する予定なので、鍵(URLのパラメータ)を持たない人からも送れるようにする。
      送ったあとに何も起きないと届いたか分からないので、完了画面を必ず出す。 */
+  /* --- チューナー(2026-08-20) ---
+     声にも楽器にも使えるように、いちばん近い音とセントのずれだけを大きく出す。
+     本番前に慌てて使うものなので、情報を増やさないことを優先している。 */
+  #tunerOverlay {
+    position: fixed; inset: 0; z-index: 72; display: flex;
+    align-items: center; justify-content: center; padding: 16px;
+    background: #0d0d0f;
+  }
+  #tunerOverlay.hidden { display: none; }
+  #tunerBox { width: 100%; max-width: 440px; text-align: center; }
+  #tunerTop {
+    display: flex; align-items: center; gap: 8px; justify-content: space-between;
+    margin-bottom: 26px; font-size: 13px; color: #999;
+  }
+  #tunerRef b { color: #ccc; }
+  #tunerRefBtns { display: flex; gap: 4px; }
+  #tunerTop button {
+    font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid #3a3a3c;
+    background: #1c1c1e; color: #ccc; cursor: pointer;
+  }
+  #tunerMeter {
+    position: relative; height: 54px; margin: 0 4px;
+    border-bottom: 1px solid #2a2a2c;
+  }
+  #tunerScale { position: absolute; inset: 0; }
+  .tunerTick {
+    position: absolute; top: 22px; bottom: 0; width: 1px; background: #333;
+    margin-left: -0.5px;
+  }
+  .tunerTick.tunerTickCenter { top: 6px; width: 2px; background: #4ade80; margin-left: -1px; }
+  #tunerNeedle {
+    position: absolute; top: 2px; bottom: 0; left: 50%; width: 3px;
+    margin-left: -1.5px; background: #6cf; border-radius: 2px;
+    transition: left 0.08s linear, background 0.15s, opacity 0.2s;
+    opacity: 0.25;
+  }
+  #tunerScaleLabels {
+    display: flex; justify-content: space-between; font-size: 11px; color: #666;
+    margin: 6px 4px 22px;
+  }
+  #tunerNote { line-height: 1; margin-bottom: 10px; }
+  #tunerNoteName {
+    font-size: 84px; font-weight: bold; color: #555;
+    transition: color 0.15s;
+  }
+  #tunerNoteOct { font-size: 30px; color: #666; margin-left: 4px; }
+  #tunerNote.inTune #tunerNoteName { color: #4ade80; }
+  #tunerNote.heard #tunerNoteName { color: #eee; }
+  #tunerCents { font-size: 15px; color: #999; min-height: 24px; }
+  #tunerHz { font-size: 12px; color: #666; min-height: 20px; margin-top: 4px; }
+  #tunerHint {
+    font-size: 11px; color: #777; line-height: 1.7; margin-top: 30px; text-align: left;
+  }
+
   #feedbackOverlay, #keyNoticeOverlay {
     position: fixed; inset: 0; z-index: 70; display: flex;
     align-items: center; justify-content: center; padding: 16px;
@@ -1351,6 +1405,7 @@
       <button id="btnGoTodos">&#9989; 練習ToDo</button>
       <button id="btnGoLinks">&#128279; リンク集</button>
       <button id="btnGoPhrases">&#127925; フレーズ集</button>
+      <button id="btnGoTuner">&#127908; チューナー</button>
       <button id="btnAddSong">＋ 曲を追加</button>
     </div>
     <button id="btnToggleSettings" aria-expanded="false">&#9881; 設定・バックアップ &#9662;</button>
@@ -1475,6 +1530,39 @@
       <h1>曲を選択して追加</h1>
     </div>
     <div id="songPickerList"></div>
+  </div>
+
+  <div id="tunerOverlay" class="hidden">
+    <div id="tunerBox">
+      <div id="tunerTop">
+        <span id="tunerRef">A = <b id="tunerRefHz">440</b> Hz</span>
+        <span id="tunerRefBtns">
+          <button id="btnTunerRefDown" type="button">&minus;</button>
+          <button id="btnTunerRefUp" type="button">＋</button>
+        </span>
+        <button id="btnTunerClose" type="button">&#10005; 閉じる</button>
+      </div>
+
+      <div id="tunerMeter">
+        <div id="tunerScale">
+          <span class="tunerTick" style="left:0%"></span>
+          <span class="tunerTick" style="left:25%"></span>
+          <span class="tunerTick tunerTickCenter" style="left:50%"></span>
+          <span class="tunerTick" style="left:75%"></span>
+          <span class="tunerTick" style="left:100%"></span>
+        </div>
+        <div id="tunerNeedle"></div>
+      </div>
+      <div id="tunerScaleLabels"><span>♭ 低い</span><span>ぴったり</span><span>高い ♯</span></div>
+
+      <div id="tunerNote">
+        <span id="tunerNoteName">–</span><span id="tunerNoteOct"></span>
+      </div>
+      <div id="tunerCents">声や音を出してください</div>
+      <div id="tunerHz"></div>
+
+      <p id="tunerHint">いちばん近い音の名前と、そこからどれだけずれているかを出します。まん中の緑に入れば合っています。<br>マイクは、この画面を開いている間だけ使います。閉じると止まります。</p>
+    </div>
   </div>
 
   <div id="keyNoticeOverlay" class="hidden">
@@ -2181,6 +2269,18 @@
   const keyNoticeUrl = document.getElementById('keyNoticeUrl');
   const btnKeyNoticeCopy = document.getElementById('btnKeyNoticeCopy');
   const btnKeyNoticeClose = document.getElementById('btnKeyNoticeClose');
+  const btnGoTuner = document.getElementById('btnGoTuner');
+  const tunerOverlay = document.getElementById('tunerOverlay');
+  const btnTunerClose = document.getElementById('btnTunerClose');
+  const tunerNeedle = document.getElementById('tunerNeedle');
+  const tunerNote = document.getElementById('tunerNote');
+  const tunerNoteName = document.getElementById('tunerNoteName');
+  const tunerNoteOct = document.getElementById('tunerNoteOct');
+  const tunerCents = document.getElementById('tunerCents');
+  const tunerHz = document.getElementById('tunerHz');
+  const tunerRefHz = document.getElementById('tunerRefHz');
+  const btnTunerRefUp = document.getElementById('btnTunerRefUp');
+  const btnTunerRefDown = document.getElementById('btnTunerRefDown');
   const btnFootReset = document.getElementById('btnFootReset');
   const footGroup = document.getElementById('footGroup');
   const btnFootFold = document.getElementById('btnFootFold');
@@ -8919,6 +9019,176 @@
   });
 
   // ==================================================
+  // チューナー(2026-08-20)
+  // ==================================================
+  // 声にも楽器にも使えるように、音の高さだけを見て「いちばん近い音」と
+  // 「そこからのずれ(セント)」を出す。本番前に慌てて使うものなので、
+  // 表示する情報はこの2つに絞っている。
+  const TUNER_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const TUNER_REF_KEY = 'cwlv_tuner_ref';
+  // 探す高さの範囲。低い方は男声の下(C2あたり)、高い方は女声の上と
+  // 楽器の高音まで。範囲を絞るぶん計算が軽くなり、1オクターブ間違いも減る。
+  const TUNER_MIN_HZ = 65;
+  const TUNER_MAX_HZ = 1200;
+  const TUNER_IN_TUNE_CENTS = 5;
+
+  let tunerRefA = parseFloat(localStorage.getItem(TUNER_REF_KEY)) || 440;
+  let tunerCtx = null;
+  let tunerStream = null;
+  let tunerAnalyser = null;
+  let tunerBuf = null;
+  let tunerTimer = null;
+  // 数値が細かく震えると読めないので、少しだけならす。
+  let tunerSmoothHz = 0;
+
+  // 自己相関で基本周波数を出す。
+  // 山を「いちばん高い所」ではなく「十分高い最初の山」で採るのが肝で、
+  // これをしないと1オクターブ下を拾うことがある(倍音の方が強い声で起きやすい)。
+  function tunerDetectPitch(buf, sampleRate) {
+    const n = buf.length;
+    let rms = 0;
+    for (let i = 0; i < n; i++) rms += buf[i] * buf[i];
+    rms = Math.sqrt(rms / n);
+    if (rms < 0.008) return -1; // 静かすぎる
+
+    const minLag = Math.max(2, Math.floor(sampleRate / TUNER_MAX_HZ));
+    const maxLag = Math.min(n - 1, Math.floor(sampleRate / TUNER_MIN_HZ));
+    if (maxLag <= minLag) return -1;
+
+    const corr = new Float32Array(maxLag + 1);
+    let best = 0;
+    for (let lag = minLag; lag <= maxLag; lag++) {
+      let sum = 0;
+      let e1 = 0;
+      let e2 = 0;
+      for (let i = 0; i < n - lag; i++) {
+        sum += buf[i] * buf[i + lag];
+        e1 += buf[i] * buf[i];
+        e2 += buf[i + lag] * buf[i + lag];
+      }
+      const norm = Math.sqrt(e1 * e2);
+      corr[lag] = norm > 0 ? sum / norm : 0;
+      if (corr[lag] > best) best = corr[lag];
+    }
+    if (best < 0.5) return -1; // 音程として読めない(ノイズや子音)
+
+    const threshold = best * 0.9;
+    let peak = -1;
+    for (let lag = minLag + 1; lag < maxLag; lag++) {
+      if (corr[lag] > threshold && corr[lag] >= corr[lag - 1] && corr[lag] >= corr[lag + 1]) {
+        peak = lag;
+        break;
+      }
+    }
+    if (peak < 0) return -1;
+
+    // 山の頂点を放物線で補間する。これが無いと半音の何分の一かの精度しか出ない。
+    const y1 = corr[peak - 1];
+    const y2 = corr[peak];
+    const y3 = corr[peak + 1];
+    const denom = y1 + y3 - 2 * y2;
+    const shift = denom !== 0 ? (y1 - y3) / (2 * denom) : 0;
+    return sampleRate / (peak + shift);
+  }
+
+  function tunerRender() {
+    if (!tunerAnalyser) return;
+    tunerAnalyser.getFloatTimeDomainData(tunerBuf);
+    const hz = tunerDetectPitch(tunerBuf, tunerCtx.sampleRate);
+
+    if (hz <= 0) {
+      tunerSmoothHz = 0;
+      tunerNote.classList.remove('heard', 'inTune');
+      tunerNoteName.textContent = '–';
+      tunerNoteOct.textContent = '';
+      tunerCents.textContent = '声や音を出してください';
+      tunerHz.textContent = '';
+      tunerNeedle.style.left = '50%';
+      tunerNeedle.style.opacity = '0.25';
+      return;
+    }
+
+    tunerSmoothHz = tunerSmoothHz ? tunerSmoothHz * 0.7 + hz * 0.3 : hz;
+    const f = tunerSmoothHz;
+
+    // A4を基準に半音いくつ分ずれているか。端数がそのままセントのずれになる。
+    const semitones = 12 * Math.log2(f / tunerRefA);
+    const nearest = Math.round(semitones);
+    const cents = Math.round((semitones - nearest) * 100);
+    const midi = nearest + 69;
+    const name = TUNER_NOTE_NAMES[((midi % 12) + 12) % 12];
+    const octave = Math.floor(midi / 12) - 1;
+
+    tunerNoteName.textContent = name;
+    tunerNoteOct.textContent = String(octave);
+    tunerHz.textContent = f.toFixed(1) + ' Hz';
+
+    const inTune = Math.abs(cents) <= TUNER_IN_TUNE_CENTS;
+    tunerNote.classList.add('heard');
+    tunerNote.classList.toggle('inTune', inTune);
+    if (inTune) {
+      tunerCents.textContent = 'ぴったり';
+      tunerCents.style.color = '#4ade80';
+    } else {
+      tunerCents.textContent = cents > 0
+        ? `${cents} 高い(少し下げる)`
+        : `${-cents} 低い(少し上げる)`;
+      tunerCents.style.color = '#999';
+    }
+
+    const clamped = Math.max(-50, Math.min(50, cents));
+    tunerNeedle.style.left = (50 + clamped) + '%';
+    tunerNeedle.style.background = inTune ? '#4ade80' : '#6cf';
+    tunerNeedle.style.opacity = '1';
+  }
+
+  async function openTuner() {
+    tunerOverlay.classList.remove('hidden');
+    tunerRefHz.textContent = String(tunerRefA);
+    if (tunerTimer) return;
+    try {
+      // 自動ゲイン等が入ると音程がぶれるので、切れるものは切る。
+      tunerStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false, autoGainControl: false, noiseSuppression: false,
+        },
+      });
+    } catch (err) {
+      tunerCents.textContent = 'マイクを使えませんでした。ブラウザの設定でマイクを許可してください。';
+      tunerCents.style.color = '#e88';
+      return;
+    }
+    tunerCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (tunerCtx.state === 'suspended') await tunerCtx.resume();
+    tunerAnalyser = tunerCtx.createAnalyser();
+    tunerAnalyser.fftSize = 2048;
+    tunerBuf = new Float32Array(tunerAnalyser.fftSize);
+    tunerCtx.createMediaStreamSource(tunerStream).connect(tunerAnalyser);
+    // 毎フレーム回すほどの精度は要らない。1秒に20回で十分読める。
+    tunerTimer = setInterval(tunerRender, 50);
+  }
+
+  // マイクを掴んだままにしないよう、閉じたら必ず止める。
+  function closeTuner() {
+    tunerOverlay.classList.add('hidden');
+    if (tunerTimer) { clearInterval(tunerTimer); tunerTimer = null; }
+    if (tunerStream) { tunerStream.getTracks().forEach((t) => t.stop()); tunerStream = null; }
+    if (tunerCtx) { tunerCtx.close().catch(() => {}); tunerCtx = null; }
+    tunerAnalyser = null;
+    tunerSmoothHz = 0;
+  }
+
+  btnGoTuner.addEventListener('click', openTuner);
+  btnTunerClose.addEventListener('click', closeTuner);
+  function setTunerRef(v) {
+    tunerRefA = Math.max(415, Math.min(466, v));
+    tunerRefHz.textContent = String(tunerRefA);
+    localStorage.setItem(TUNER_REF_KEY, String(tunerRefA));
+  }
+  btnTunerRefUp.addEventListener('click', () => setTunerRef(tunerRefA + 1));
+  btnTunerRefDown.addEventListener('click', () => setTunerRef(tunerRefA - 1));
+
+  // ==================================================
   // 不具合・要望の送信 / 使われ方の記録(2026-08-21〜)
   // ==================================================
   // 一般公開する予定なので、**鍵(URLのパラメータ)を持たない人からも送れる**
@@ -11060,7 +11330,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-1520';
+  const APP_BUILD = '20260821-1710';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
