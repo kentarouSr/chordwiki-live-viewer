@@ -1,8 +1,14 @@
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-Sync-Key',
 };
+
+// IPをそのまま保存せず、連投を数えるためだけのハッシュにする
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export default {
   async fetch(request, env) {
@@ -31,9 +37,7 @@ export default {
     // 誰でも好きなキーで使えるようにすると、URLさえ分かれば第三者にストレージを
     // 使われてしまう(無料枠を食い潰される)ため、許可リストに載っているキーだけを
     // 受け付ける。許可リストはD1の allowed_keys テーブルで持つ(Workerのシークレット
-    // だと実行時に書き換えられず、アプリからの「招待」ボタンで新しいキーを発行
-    // できないため)。/api/invite で「今すでに有効なキーを持っている人なら誰でも、
-    // 新しいキーをその場で発行できる」仕組みにしている。
+    // だと実行時に書き換えられないため)。
     // env.SYNC_KEYS / env.SYNC_KEY はD1移行前からの後方互換のフォールバック。
     const envAllowedKeys = () =>
       String(env.SYNC_KEYS || env.SYNC_KEY || '')
@@ -49,9 +53,10 @@ export default {
       return row ? key : null;
     };
 
-    // base64url、24バイト(=32文字)のランダムキーを生成する。招待で発行する
-    // キーも、最初の1本(ユーザー自身が決めたもの)と同程度の強度にするため。
-    const generateInviteKey = () => {
+    // base64url、24バイト(=32文字)のランダムな鍵を生成する。
+    // 「あなた用のURLを発行する」機能で使う予定(2026-08-21時点では未接続)。
+    // eslint-disable-next-line no-unused-vars
+    const generateSpaceKey = () => {
       const bytes = crypto.getRandomValues(new Uint8Array(24));
       let bin = '';
       for (const b of bytes) bin += String.fromCharCode(b);
@@ -342,17 +347,68 @@ export default {
         return json({ ok: true });
       }
 
-      // 招待: 今すでに有効なキーを持っている人なら誰でも、新しい(別の本棚の)キーを
-      // その場で発行できる。発行されたキーはこのリクエストのキーとは完全に独立した
-      // 新しい本棚になる(データを共有しない、一からの空の本棚)。
-      if (path === '/api/invite' && request.method === 'POST') {
-        const key = await requireKey();
-        if (!key) return err('invalid key', 401);
-        const newKey = generateInviteKey();
+      // ------------------------------------------------------------------
+      // 不具合・要望の受け取り(2026-08-21)
+      // ------------------------------------------------------------------
+      // **鍵(URLのパラメータ)を必須にしない。** 一般公開する予定で、
+      // 鍵を持たない人(クラウド保存を使わず端末内だけで使う人)が大半になる
+      // 見込みだから。鍵が要ると新規の人がまったく報告できず、
+      // 受け取り口の意味が無くなる。
+      //
+      // そのぶん誰でも投げられるので、荒らし対策を2つ入れている:
+      //   ・本文とバージョン/UAの長さを切る(D1を埋められないように)
+      //   ・同じIPからの連投を1時間あたり10件までにする
+      //     (IPはそのまま保存せず、ハッシュにして数えるためだけに使う)
+      if (path === '/api/feedback' && request.method === 'POST') {
+        const payload = await request.json().catch(() => null);
+        if (!payload) return err('bad body');
+        const kind = payload.kind === 'bug' ? 'bug' : 'request';
+        const body = String(payload.body || '').trim().slice(0, 4000);
+        if (!body) return err('本文が空です');
+        const appVersion = String(payload.appVersion || '').slice(0, 40);
+        const ua = String(request.headers.get('User-Agent') || '').slice(0, 300);
+        const key = getKey();
+        const keyTail = key ? String(key).slice(-4) : null;
+
+        const ipHash = await sha256Hex(
+          (request.headers.get('CF-Connecting-IP') || 'unknown') + '|cwlv-feedback'
+        );
+        const since = Date.now() - 60 * 60 * 1000;
+        const recent = await env.DB.prepare(
+          'SELECT COUNT(*) AS n FROM feedback WHERE ip_hash = ? AND created_at > ?'
+        ).bind(ipHash, since).first();
+        if (recent && recent.n >= 10) {
+          return err('しばらく待ってから送信してください(送信が多すぎます)', 429);
+        }
+
         await env.DB.prepare(
-          'INSERT INTO allowed_keys (key, label, created_at) VALUES (?, ?, ?)'
-        ).bind(newKey, `invited (via key ...${key.slice(-4)})`, Date.now()).run();
-        return json({ key: newKey });
+          'INSERT INTO feedback (id, kind, body, app_version, user_agent, key_tail, ip_hash, created_at)'
+          + ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(crypto.randomUUID(), kind, body, appVersion, ua, keyTail, ipHash, Date.now()).run();
+        return json({ ok: true });
+      }
+
+      // ------------------------------------------------------------------
+      // 使われ方の記録(2026-08-21)
+      // ------------------------------------------------------------------
+      // 「日ごとに何人が開いたか」だけを数える。anon_id は端末ごとにアプリが作る
+      // ランダムなIDで、誰かは分からない。同じ日・同じ端末は1行にまとまるので
+      // 行数は増え続けない。こちらも鍵は不要(鍵を持たない人こそ数えたいため)。
+      if (path === '/api/usage' && request.method === 'POST') {
+        const payload = await request.json().catch(() => null);
+        if (!payload) return err('bad body');
+        const anonId = String(payload.anonId || '').slice(0, 64);
+        if (!anonId) return err('bad id');
+        const appVersion = String(payload.appVersion || '').slice(0, 40);
+        const now = Date.now();
+        const day = new Date(now).toISOString().slice(0, 10);
+        await env.DB.prepare(
+          'INSERT INTO usage_daily (day, anon_id, app_version, opens, last_at)'
+          + ' VALUES (?, ?, ?, 1, ?)'
+          + ' ON CONFLICT(day, anon_id) DO UPDATE SET'
+          + '   opens = opens + 1, app_version = excluded.app_version, last_at = excluded.last_at'
+        ).bind(day, anonId, appVersion, now).run();
+        return json({ ok: true });
       }
 
       return err('not found', 404);

@@ -269,11 +269,55 @@
     background: #1c1c1c; color: #ccc; cursor: pointer;
   }
   .phraseTagChip.active { background: #6cf; color: #111; border-color: #6cf; font-weight: bold; }
+  /* --- 不具合・要望の送信(2026-08-21) ---
+     一般公開する予定なので、鍵(URLのパラメータ)を持たない人からも送れるようにする。
+     送ったあとに何も起きないと届いたか分からないので、完了画面を必ず出す。 */
+  #feedbackOverlay {
+    position: fixed; inset: 0; z-index: 70; display: flex;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(0,0,0,0.6);
+  }
+  #feedbackOverlay.hidden { display: none; }
+  #feedbackBox {
+    width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
+    background: #1c1c1e; border: 1px solid #3a3a3c; border-radius: 14px;
+    padding: 18px 18px 16px;
+  }
+  #feedbackBox h2 { font-size: 16px; margin: 0 0 6px; color: #eee; }
+  .fbNote { font-size: 11px; color: #999; line-height: 1.6; margin: 0 0 10px; }
+  #feedbackKinds { display: flex; gap: 8px; margin-bottom: 10px; }
+  .fbKind {
+    flex: 1; font-size: 14px; padding: 10px; border-radius: 10px;
+    border: 1px solid #444; background: #2c2c2e; color: #ccc; cursor: pointer;
+  }
+  .fbKind.active { background: #6cf; border-color: #6cf; color: #111; font-weight: bold; }
+  #feedbackBody {
+    width: 100%; box-sizing: border-box; font-size: 15px; padding: 10px;
+    border-radius: 10px; border: 1px solid #444; background: #111; color: #eee;
+    line-height: 1.6; resize: vertical;
+  }
+  #feedbackButtons { display: flex; gap: 8px; justify-content: flex-end; }
+  #feedbackButtons button {
+    font-size: 14px; padding: 10px 16px; border-radius: 10px; border: none;
+    background: #3a3a3c; color: #eee; cursor: pointer;
+  }
+  /* 上の #feedbackButtons button より詳細度を上げないと勝てない */
+  #feedbackButtons #btnFeedbackSend { background: #6cf; color: #111; font-weight: bold; }
+  #feedbackButtons #btnFeedbackSend:disabled { opacity: 0.4; cursor: default; }
+  #feedbackDone { text-align: center; padding: 14px 0 6px; }
+  #feedbackDone.hidden, #feedbackForm.hidden { display: none; }
+  #feedbackDoneMark {
+    font-size: 40px; color: #4ade80; line-height: 1; margin-bottom: 10px;
+  }
+  #btnFeedbackClose {
+    font-size: 14px; padding: 10px 20px; border-radius: 10px; border: none;
+    background: #6cf; color: #111; font-weight: bold; cursor: pointer; margin-top: 6px;
+  }
   /* --- フットコントローラーのキー割り当て(2026-08-20) ---
      譜めくりペダルの多くはBluetoothキーボードとして振る舞い、
      矢印やPageUp/PageDownを送ってくる。何のキーを送るかは機種でまちまちなので、
      こちらで決め打ちにせず割り当てを変えられるようにする。 */
-  #footHint { font-size: 11px; color: #888; line-height: 1.5; }
+  #footHint, #syncHint { font-size: 11px; color: #888; line-height: 1.5; }
   #footKeyList { display: flex; flex-direction: column; gap: 5px; width: 100%; }
   .footKeyRow { display: flex; align-items: center; gap: 8px; }
   .footKeyName { font-size: 12px; color: #ddd; min-width: 96px; }
@@ -1295,11 +1339,13 @@
     <button id="btnToggleSettings" aria-expanded="false">&#9881; 設定・バックアップ &#9662;</button>
     <div id="backupBar" class="collapsed">
       <a id="btnManual" href="./manual.html">&#128214; 使い方</a>
+      <button id="btnFeedback" type="button">&#128172; 不具合・要望を送る</button>
       <div class="backupGroup">
-        <span class="backupGroupLabel">&#9729; クラウド同期</span>
+        <span class="backupGroupLabel">&#9729; クラウド保存(あなた用のURL)</span>
+        <span id="syncHint">あなた用のURLで開いている間、データはクラウドにも保存され、同じURLを開いた他の端末とも中身がそろいます。</span>
         <button id="btnSync">今すぐ同期</button>
-        <button id="btnSetSyncKey">同期キーを設定</button>
-        <button id="btnCopySetupLink">他の端末用リンクをコピー</button>
+        <button id="btnCopySetupLink">あなた用のURLをコピー</button>
+        <button id="btnSetSyncKey">別のURLに切り替える</button>
       </div>
       <div class="backupGroup">
         <span class="backupGroupLabel">&#129461; フットコントローラー / キー操作</span>
@@ -1412,6 +1458,31 @@
       <h1>曲を選択して追加</h1>
     </div>
     <div id="songPickerList"></div>
+  </div>
+
+  <div id="feedbackOverlay" class="hidden">
+    <div id="feedbackBox">
+      <div id="feedbackForm">
+        <h2>不具合・要望を送る</h2>
+        <p class="fbNote">作者に直接届きます。返信はできませんが、全部読みます。</p>
+        <div id="feedbackKinds">
+          <button type="button" class="fbKind active" data-kind="bug">&#128027; 不具合</button>
+          <button type="button" class="fbKind" data-kind="request">&#128161; 要望</button>
+        </div>
+        <textarea id="feedbackBody" rows="7" placeholder="例: ピアノロールで音符をドラッグすると消えてしまう&#10;例: セットリストを並べ替えたい"></textarea>
+        <p class="fbNote" id="feedbackMeta"></p>
+        <div id="feedbackButtons">
+          <button id="btnFeedbackCancel" type="button">閉じる</button>
+          <button id="btnFeedbackSend" type="button">送信</button>
+        </div>
+      </div>
+      <div id="feedbackDone" class="hidden">
+        <div id="feedbackDoneMark">&#10004;</div>
+        <h2>送信しました</h2>
+        <p class="fbNote">ありがとうございます。いただいた内容は全部読んでいます。</p>
+        <button id="btnFeedbackClose" type="button">閉じる</button>
+      </div>
+    </div>
   </div>
 
   <div id="viewer" class="hidden">
@@ -2067,6 +2138,15 @@
   const btnUpdateOfflineCache = document.getElementById('btnUpdateOfflineCache');
   const appVersionInfo = document.getElementById('appVersionInfo');
   const footKeyList = document.getElementById('footKeyList');
+  const btnFeedback = document.getElementById('btnFeedback');
+  const feedbackOverlay = document.getElementById('feedbackOverlay');
+  const feedbackForm = document.getElementById('feedbackForm');
+  const feedbackDone = document.getElementById('feedbackDone');
+  const feedbackBody = document.getElementById('feedbackBody');
+  const feedbackMeta = document.getElementById('feedbackMeta');
+  const btnFeedbackSend = document.getElementById('btnFeedbackSend');
+  const btnFeedbackCancel = document.getElementById('btnFeedbackCancel');
+  const btnFeedbackClose = document.getElementById('btnFeedbackClose');
   const btnFootReset = document.getElementById('btnFootReset');
   const btnToggleSettings = document.getElementById('btnToggleSettings');
   const backupBar = document.getElementById('backupBar');
@@ -8803,6 +8883,88 @@
   });
 
   // ==================================================
+  // 不具合・要望の送信 / 使われ方の記録(2026-08-21〜)
+  // ==================================================
+  // 一般公開する予定なので、**鍵(URLのパラメータ)を持たない人からも送れる**
+  // ようにしてある。鍵が要ると新規の人がまったく報告できない。
+  let feedbackKind = 'bug';
+
+  function openFeedback() {
+    feedbackForm.classList.remove('hidden');
+    feedbackDone.classList.add('hidden');
+    feedbackOverlay.classList.remove('hidden');
+    feedbackBody.value = '';
+    btnFeedbackSend.disabled = false;
+    btnFeedbackSend.textContent = '送信';
+    // 何が一緒に送られるかを隠さずに書いておく
+    feedbackMeta.textContent = `一緒に送られるもの: 版 ${APP_BUILD} / ブラウザの種類`;
+    setTimeout(() => feedbackBody.focus(), 50);
+  }
+  function closeFeedback() { feedbackOverlay.classList.add('hidden'); }
+  btnFeedback.addEventListener('click', openFeedback);
+  btnFeedbackCancel.addEventListener('click', closeFeedback);
+  btnFeedbackClose.addEventListener('click', closeFeedback);
+  feedbackOverlay.addEventListener('click', (e) => {
+    if (e.target === feedbackOverlay) closeFeedback();
+  });
+  document.querySelectorAll('.fbKind').forEach((b) => {
+    b.addEventListener('click', () => {
+      feedbackKind = b.dataset.kind;
+      document.querySelectorAll('.fbKind').forEach((x) => x.classList.toggle('active', x === b));
+    });
+  });
+  btnFeedbackSend.addEventListener('click', async () => {
+    const body = feedbackBody.value.trim();
+    if (!body) { alert('内容を書いてください。'); return; }
+    btnFeedbackSend.disabled = true;
+    btnFeedbackSend.textContent = '送信中...';
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      const key = localStorage.getItem(SYNC_KEY_STORAGE);
+      if (key) headers['X-Sync-Key'] = key; // 誰からか大まかに分かるように(末尾4文字だけ保存される)
+      const res = await fetch(`${SYNC_API_URL}/api/feedback`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ kind: feedbackKind, body, appVersion: APP_BUILD }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || `サーバーエラー (${res.status})`);
+      }
+      feedbackForm.classList.add('hidden');
+      feedbackDone.classList.remove('hidden');
+    } catch (err) {
+      alert(`送信できませんでした: ${err.message}\n電波の状況を確認して、もう一度お試しください。`);
+      btnFeedbackSend.disabled = false;
+      btnFeedbackSend.textContent = '送信';
+    }
+  });
+
+  // 使われ方の記録。**日ごとに何人が開いたか**だけを数える。
+  // 端末ごとのランダムなIDを送るだけで、誰かは分からない。
+  // 起動のたびに投げると無駄なので、同じ日に一度だけにする。
+  const USAGE_ID_KEY = 'cwlv_anon_id';
+  const USAGE_SENT_KEY = 'cwlv_usage_sent_day';
+  // 呼び出しは一番下(起動処理の最後)にある。ここで呼ぶと SYNC_API_URL より
+  // 前になってしまい、参照エラーが下のcatchに飲まれて「何も起きないのに
+  // 送信済み扱い」になる。実際に一度そうなった。
+  function pingUsage() {
+    let anonId;
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      if (localStorage.getItem(USAGE_SENT_KEY) === today) return;
+      anonId = localStorage.getItem(USAGE_ID_KEY);
+      if (!anonId) { anonId = crypto.randomUUID(); localStorage.setItem(USAGE_ID_KEY, anonId); }
+      localStorage.setItem(USAGE_SENT_KEY, today);
+    } catch (err) {
+      return; // localStorageが使えない環境でも、以降の動作には影響させない
+    }
+    fetch(`${SYNC_API_URL}/api/usage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anonId, appVersion: APP_BUILD }),
+    }).catch(() => { /* 届かなくても使用には影響しないので黙って諦める */ });
+  }
+
+  // ==================================================
   // Wake Lock
   // ==================================================
   async function acquireWakeLock() {
@@ -10862,7 +11024,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-0520';
+  const APP_BUILD = '20260821-1210';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -11153,7 +11315,7 @@
   }
 
   btnDeleteLocalBackup.addEventListener('click', async () => {
-    if (!confirm('端末に自動保存されているバックアップを削除しますか？(クラウド同期や「書き出す」でのファイル保存には影響しません)')) return;
+    if (!confirm('端末に自動保存されているバックアップを削除しますか？(クラウド保存や「書き出す」でのファイル保存には影響しません)')) return;
     await backupDelete();
     renderLocalBackupInfo();
   });
@@ -11378,7 +11540,7 @@
   // 失われてしまう(実際に発生した不具合)。
   //
   // URLにもlocalStorageにもキーが無い「真っさらな初回訪問」の場合だけ、その場で
-  // 同期キーの設定を促す。以前は何もしないと設定画面の存在にすら気づきにくかった
+  // あなた用のURLへの切り替えを促す。以前は何もしないと設定画面の存在にすら気づきにくかった
   // ため。「キャンセル」を選べばそのままローカル利用のみ続けられ、この確認は
   // 端末ごとに一度きりにする(うるさくならないようフラグをlocalStorageに残す)。
   const SYNC_PROMPT_SHOWN_KEY = 'cwlv_sync_prompt_shown';
@@ -11392,40 +11554,53 @@
     if (localStorage.getItem(SYNC_KEY_STORAGE)) return;
     if (localStorage.getItem(SYNC_PROMPT_SHOWN_KEY)) return;
     localStorage.setItem(SYNC_PROMPT_SHOWN_KEY, '1');
-    if (confirm('同期キーがまだ設定されていません。\n他の端末ともデータを共有するには同期キーの設定が必要です。\n今すぐ設定しますか？\n(「キャンセル」を選んでもこのままローカルで使えます。後から「設定・バックアップ」内の「同期キーを設定」でいつでも設定できます)')) {
+    if (confirm('このURLは、まだあなた用のURLになっていません。\nあなた用のURLで開くと、データがクラウドにも保存され、同じURLを開いた他の端末とも中身がそろいます。\n今すぐ設定しますか？\n(「キャンセル」を選んでもこのままこの端末だけで使えます。後から「設定・バックアップ」内の「別のURLに切り替える」でいつでも設定できます)')) {
       promptAndSetSyncKey('');
     }
   })();
 
-  // 同期キーをlocalStorageに保存し、アドレスバーのURLにも ?key=... を反映する。
+  // 「あなた用のURL」の正体は、URLの末尾に付く ?key=... というパラメータ。
+  // 保存すると同時にアドレスバーのURLにも反映する。
   // 「ホーム画面に追加」はその時点のURLをそのままブックマークするため、これを
-  // しておかないと後から手入力でキーを設定した端末では、ホーム画面追加後に
-  // キーが失われてしまう。
+  // しておかないと後からURLを貼り直した端末では、ホーム画面追加後に
+  // パラメータが失われてしまう。
   function saveSyncKey(key) {
     localStorage.setItem(SYNC_KEY_STORAGE, key);
     const url = `${location.pathname}?key=${encodeURIComponent(key)}`;
     history.replaceState(null, '', url);
   }
 
-  // 同期キーをprompt()で入力させて保存する共通処理。初回訪問時の自動プロンプトと、
-  // 「同期キーを設定」ボタンの両方から呼ばれる。
+  // 貼り付けられた文字列から ?key=... の中身を取り出す。
+  // 利用者に見えているのは「あなた用のURL」なので、URLをまるごと貼っても、
+  // パラメータの部分だけを貼っても、どちらでも通るようにする。
+  function extractSyncKey(text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return '';
+    const m = trimmed.match(/[?&]key=([^&#\s]+)/);
+    return m ? decodeURIComponent(m[1]) : trimmed;
+  }
+
+  // あなた用のURLをprompt()で入力させて保存する共通処理。初回訪問時の自動プロンプトと、
+  // 「別のURLに切り替える」ボタンの両方から呼ばれる。
   function promptAndSetSyncKey(current) {
-    const input = prompt('同期キーを入力してください(空にすると解除されます)', current || '');
+    const shown = current ? `${location.origin}${location.pathname}?key=${encodeURIComponent(current)}` : '';
+    const input = prompt('あなた用のURLを貼り付けてください(空にするとこの端末だけの利用に戻ります)', shown);
     if (input === null) return;
-    const trimmed = input.trim();
-    if (trimmed === '') {
+    const key = extractSyncKey(input);
+    if (key === '') {
       localStorage.removeItem(SYNC_KEY_STORAGE);
-      alert('同期キーを解除しました。');
+      alert('この端末だけの利用に戻しました。データは端末内に残っています。');
       return;
     }
-    saveSyncKey(trimmed);
-    alert('同期キーを設定しました。URLにも反映したので、このままホーム画面に追加すれば次回からこのキーで開けます。');
+    saveSyncKey(key);
+    alert('あなた用のURLに切り替えました。アドレスバーのURLにも反映したので、このままホーム画面に追加すれば次回からこのURLで開けます。');
   }
 
   function getSyncKey() {
     let key = localStorage.getItem(SYNC_KEY_STORAGE);
     if (!key) {
-      key = prompt('同期キーを入力してください');
+      const input = prompt('あなた用のURLを貼り付けてください');
+      key = extractSyncKey(input);
       if (key) saveSyncKey(key);
     }
     return key || null;
@@ -11533,7 +11708,7 @@
     const res = await syncFetch(`${SYNC_API_URL}/api/songs`, { headers: { 'X-Sync-Key': key } });
     if (res.status === 401) {
       localStorage.removeItem(SYNC_KEY_STORAGE);
-      throw new Error('同期キーが正しくありません(再度お試しください)');
+      throw new Error('このURLでは保存できません(URLをご確認のうえ再度お試しください)');
     }
     if (!res.ok) throw new Error(`サーバーエラー (${res.status})`);
     const remoteSongs = await res.json();
@@ -11748,7 +11923,7 @@
   }
   btnSync.addEventListener('click', () => runSync({ silent: false }));
 
-  // 同期キーが既に設定されている端末では、起動時に自動でも同期する。
+  // あなた用のURLで開いている端末では、起動時に自動でも同期する。
   // 「毎回ボタンを押さなくても良いのでは」というフィードバックのため。
   // getSyncKey()は未設定時にprompt()を出してしまうので、ここでは直接
   // localStorageを見て「既にキーがある場合だけ」に限定している。
@@ -11756,25 +11931,25 @@
     runSync({ silent: true });
   }
 
-  // URL経由の自動取得がうまくいかない場合(ホーム画面PWAでURLのkeyが渡らない等)の
-  // 手動フォールバック。現在の値を初期値にして入力し直せる。空にすれば解除。
+  // URL経由の自動取得がうまくいかない場合(ホーム画面PWAでURLのパラメータが渡らない等)の
+  // 手動フォールバック。今のURLを初期値にして貼り直せる。空にすれば端末内だけの利用に戻る。
   btnSetSyncKey.addEventListener('click', () => {
     promptAndSetSyncKey(localStorage.getItem(SYNC_KEY_STORAGE) || '');
   });
 
-  // 他端末のセットアップ用に、同期キー入り(?key=...)のURLをコピーする。
-  // この端末自体でキーが必要な場合は「同期キーを設定」ボタンで直接貼り付ける方が
-  // シンプルなので、ここでは画面遷移などは行わずコピーに徹する。
+  // 他端末のセットアップ用に、あなた用のURL(?key=... 付き)をコピーする。
+  // この端末自体で貼り直したい場合は「別のURLに切り替える」の方がシンプルなので、
+  // ここでは画面遷移などは行わずコピーに徹する。
   btnCopySetupLink.addEventListener('click', async () => {
     const key = localStorage.getItem(SYNC_KEY_STORAGE);
     if (!key) {
-      alert('まだ同期キーが設定されていません。先に「クラウド同期」を1回実行してください。');
+      alert('このURLはまだあなた用のURLではありません。先に「今すぐ同期」を1回押して設定してください。');
       return;
     }
     const url = `${location.origin}${location.pathname}?key=${encodeURIComponent(key)}`;
     try {
       await navigator.clipboard.writeText(url);
-      alert('セットアップ用リンクをコピーしました。LINEやメモなどに貼り付けて、他の端末で開いてください。');
+      alert('あなた用のURLをコピーしました。LINEやメモなどに貼り付けて、他の端末で開いてください。');
     } catch (err) {
       prompt('コピーしてください:', url);
     }
@@ -12036,6 +12211,7 @@
 
   applyAppMode();
   renderSongList();
+  pingUsage();
 })();
 </script>
 </body>
