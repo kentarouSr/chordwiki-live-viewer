@@ -284,6 +284,27 @@
   }
   .footKeyRow button { font-size: 12px; padding: 5px 10px; }
   .footKeyRow button.listening { background: #c0392b; color: #fff; font-weight: bold; }
+  #btnPhraseFamily {
+    margin-top: 7px; font-size: 12px; padding: 6px 11px; border-radius: 8px;
+    border: 1px solid #444; background: #262626; color: #ccc; cursor: pointer;
+  }
+  #btnPhraseFamily.active { background: #6cf; border-color: #6cf; color: #111; font-weight: bold; }
+  #phraseFamilyPanel { margin-top: 8px; }
+  #phraseFamilyPanel.hidden { display: none; }
+  .famNote { font-size: 11px; color: #888; line-height: 1.6; margin: 0 0 8px; }
+  .famRow {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0;
+    border-top: 1px solid #2c2c2e;
+  }
+  .famMain { flex: 1; min-width: 0; }
+  .famName { font-size: 12px; color: #ddd; font-weight: bold; }
+  .famScale { font-size: 11px; color: #8a8; }
+  .famQuals { font-size: 11px; color: #777; word-break: break-all; }
+  .famRow button {
+    flex-shrink: 0; font-size: 12px; padding: 6px 11px; border-radius: 999px;
+    border: 1px solid #444; background: #262626; color: #ccc; cursor: pointer;
+  }
+  .famRow button.on { background: #6cf; border-color: #6cf; color: #111; font-weight: bold; }
   /* --- フレーズの参考音源(2026-08-20) ---
      YouTubeか、取り込み済みの曲の音源のどちらかを、開始秒つきで紐づける。
      ボタン1つでその箇所から流せること、そして**繰り返しと速度変更**が目的。
@@ -1354,7 +1375,9 @@
         <button id="btnPhraseFindClear" type="button">✕</button>
       </div>
       <div id="phraseFindChips"></div>
-      <div id="phraseFindHint">コード名を打つと、そのコードで使えるフレーズが出ます。出たフレーズは選んだキーに移調されます。</div>
+      <div id="phraseFindHint">コード名を打つと、そのコードで使えるフレーズが出ます。チップは続けて押すと進行になります(2-5-1など)。出たフレーズは選んだキーに移調されます。</div>
+      <button id="btnPhraseFamily" type="button">&#9881; コードのまとめ方</button>
+      <div id="phraseFamilyPanel" class="hidden"></div>
     </div>
     <div id="phraseTagFilter"></div>
     <div id="phraseList"></div>
@@ -2067,6 +2090,8 @@
   const phraseFindKey = document.getElementById('phraseFindKey');
   const phraseFindInput = document.getElementById('phraseFindInput');
   const phraseFindChips = document.getElementById('phraseFindChips');
+  const btnPhraseFamily = document.getElementById('btnPhraseFamily');
+  const phraseFamilyPanel = document.getElementById('phraseFamilyPanel');
   const phrasePlayPanel = document.getElementById('phrasePlayPanel');
   const phrasePlayTitle = document.getElementById('phrasePlayTitle');
   const phrasePlayBody = document.getElementById('phrasePlayBody');
@@ -4090,10 +4115,95 @@
           (all, a, r) => a + r.toUpperCase());
       });
   }
-  // 度数だけを取り出す(品質を無視した「2-5-1」検索用)
-  function scoreDegreeRootOnly(degree) {
-    const m = String(degree).match(/^([#b]*)(VII|VI|IV|V|III|II|I)/);
-    return m ? m[1] + m[2] : String(degree);
+
+  // ==================================================
+  // コードの「族」= 使えるスケールで束ねる(2026-08-20〜)
+  // ==================================================
+  // フレーズ検索は、コードの綴りではなく**そのコードで使えるスケールが同じか**で
+  // 一致を判定する。I / I6 / IM7 はどれもアイオニアンなので同じ扱い、
+  // V と V7 はどちらもミクソリディアンなので同じ、V と VM7 は7thが違うので別物。
+  //
+  // 無印のコード(I、V など)は「その度数の本来の姿」として読む。
+  // キーの中で I なら IM7、V なら V7、II なら IIm7 が既定。
+  const SCORE_CHORD_FAMILIES = [
+    { id: 'major', name: 'メジャー', scale: 'アイオニアン',
+      qualities: ['', 'M7', 'maj7', '△', '△7', '6', '69', '6/9', 'M9', 'M13', 'add9', 'M7(9)'] },
+    { id: 'dom', name: 'ドミナント', scale: 'ミクソリディアン',
+      qualities: ['7', '9', '11', '13', '7sus4', 'sus4', 'sus', '7(9)', '7(13)'] },
+    { id: 'domalt', name: 'ドミナント(オルタード)', scale: 'オルタード / コンディミ',
+      qualities: ['7b9', '7#9', '7#11', '7b13', '7b5', '7#5', 'alt', '7alt', '7(b9)', '7(#9)', '7(#11)', '7(b13)'] },
+    { id: 'min7', name: 'マイナー7', scale: 'ドリアン / エオリアン',
+      qualities: ['m', 'm7', 'm9', 'm11', '-7', 'min7', 'm7(9)', 'm7(11)'] },
+    { id: 'min6', name: 'マイナー6', scale: 'ドリアン',
+      qualities: ['m6', 'm69', 'm13', 'm6/9'] },
+    { id: 'minmaj', name: 'マイナーメジャー7', scale: 'メロディックマイナー',
+      qualities: ['mM7', 'mmaj7', 'm△7', 'mM9'] },
+    { id: 'half', name: 'ハーフディミニッシュ', scale: 'ロクリアン',
+      qualities: ['m7b5', 'm7-5', 'ø', 'ø7', 'm7(b5)'] },
+    { id: 'dim', name: 'ディミニッシュ', scale: 'ディミニッシュ',
+      qualities: ['dim', 'dim7', 'o', 'o7', '°', '°7'] },
+    { id: 'aug', name: 'オーグメント', scale: 'ホールトーン',
+      qualities: ['aug', '+', 'M7#5', '+5'] },
+  ];
+  // 無印のコードは、その度数でいちばん自然な族として読む
+  const SCORE_BARE_FAMILY_BY_DEGREE = {
+    I: 'major', II: 'min7', III: 'min7', IV: 'major', V: 'dom', VI: 'min7', VII: 'half',
+    bII: 'major', bIII: 'major', '#IV': 'half', bVI: 'major', bVII: 'dom',
+  };
+  // ユーザーが束ね方を変えられるようにする(既定は上の表)。
+  // 「まとめない」にした族は、品質の文字が完全に一致した時だけ同じ扱いになる。
+  const SCORE_FAMILY_OFF_KEY = 'cwlv_family_off';
+  let scoreFamilyOff = null;
+  function loadFamilyOff() {
+    if (scoreFamilyOff) return scoreFamilyOff;
+    try {
+      const raw = JSON.parse(localStorage.getItem(SCORE_FAMILY_OFF_KEY));
+      scoreFamilyOff = new Set(Array.isArray(raw) ? raw : []);
+    } catch (err) { scoreFamilyOff = new Set(); }
+    return scoreFamilyOff;
+  }
+  function saveFamilyOff() {
+    localStorage.setItem(SCORE_FAMILY_OFF_KEY, JSON.stringify(Array.from(loadFamilyOff())));
+  }
+
+  // 品質の文字を正規化(全角・大文字小文字・括弧の揺れを吸収)
+  function normalizeQuality(q) {
+    return String(q || '')
+      .replace(/[Ｍ]/g, 'M').replace(/[♭]/g, 'b').replace(/[♯]/g, '#')
+      .replace(/\s+/g, '');
+  }
+  const SCORE_FAMILY_BY_QUALITY = (() => {
+    const m = new Map();
+    SCORE_CHORD_FAMILIES.forEach((f) => {
+      f.qualities.forEach((q) => { if (q !== '') m.set(normalizeQuality(q), f.id); });
+    });
+    return m;
+  })();
+
+  // ディグリー("IIm7" 等)を { root, family, quality } に分解する
+  function scoreDegreeParts(degree) {
+    const head = String(degree).split('/')[0];
+    const m = head.match(/^([#b]*)(VII|VI|IV|V|III|II|I)(.*)$/);
+    if (!m) return null;
+    const root = m[1] + m[2];
+    const quality = normalizeQuality(m[3]);
+    let family;
+    if (quality === '') family = SCORE_BARE_FAMILY_BY_DEGREE[root] || 'major';
+    else family = SCORE_FAMILY_BY_QUALITY.get(quality) || null;
+    return { root, quality, family };
+  }
+
+  // 2つのディグリーが「同じコードとして使えるか」。
+  // 族が同じなら同じ扱い。ただしユーザーが「まとめない」にした族は文字が一致した時だけ。
+  function scoreDegreeSameChord(a, b) {
+    const pa = scoreDegreeParts(a);
+    const pb = scoreDegreeParts(b);
+    if (!pa || !pb) return String(a) === String(b);
+    if (pa.root !== pb.root) return false;
+    if (pa.quality === pb.quality) return true;
+    if (!pa.family || !pb.family) return false;
+    if (pa.family !== pb.family) return false;
+    return !loadFamilyOff().has(pa.family);
   }
 
   // 譜面全体を半音単位で転調する。音符の高さ・コード名・調号を一度に動かす。
@@ -9002,17 +9112,10 @@
   function phraseMatchesDegrees(phraseDegrees, query) {
     if (!query.length) return true;
     const list = phraseDegrees || [];
-    const hit = (a, b) => {
-      // 検索語に品質が無ければ度数だけ見る(2-5-1検索)。
-      const qRoot = scoreDegreeRootOnly(b);
-      if (qRoot === b) return scoreDegreeRootOnly(a) === qRoot;
-      // 品質があれば前方一致。「IIm」で「IIm7」「IIm9」まで拾いたいため。
-      // ただし b5・#5 が続くものは別のコードなので拾わない
-      // (Dm7 で引いた時に Dm7b5 のフレーズが出るのはおかしい)。
-      if (a === b) return true;
-      if (a.indexOf(b) !== 0) return false;
-      return !/^[b#]5/.test(a.slice(b.length));
-    };
+    // 「そのコードで使えるスケールが同じか」で一致を見る(2026-08-20〜)。
+    // 以前は品質の前方一致だったが、IIm7 が IIm7b5 まで拾ってしまい、
+    // 逆に I と IM7 が別物になるなど、音楽的な意味と合っていなかった。
+    const hit = (a, b) => scoreDegreeSameChord(a, b);
     for (let i = 0; i + query.length <= list.length; i++) {
       let all = true;
       for (let j = 0; j < query.length; j++) {
@@ -9063,15 +9166,73 @@
       b.type = 'button';
       const chord = scoreDegreeToChord(deg, phraseFindKeyFifths);
       b.textContent = `${deg} (${chord}) ${n}`;
-      b.className = phraseFindQuery.trim() === deg ? 'on' : '';
+      // チップは押すたびに検索語へ足していく(2-5-1のような進行を組み立てられる)。
+      // 末尾が同じものなら外す = 押し間違えた分だけ取り消せる。
+      const tokens = phraseFindQuery.trim().split(/\s+/).filter(Boolean);
+      b.className = tokens.includes(deg) ? 'on' : '';
       b.addEventListener('click', () => {
-        phraseFindQuery = phraseFindQuery.trim() === deg ? '' : deg;
+        const cur = phraseFindQuery.trim().split(/\s+/).filter(Boolean);
+        if (cur.length && cur[cur.length - 1] === deg) cur.pop();
+        else cur.push(deg);
+        phraseFindQuery = cur.join(' ');
         renderPhraseFindBar();
         renderPhraseList();
       });
       phraseFindChips.appendChild(b);
     });
   }
+
+  // コードのまとめ方(族)の設定。既定は「スケールが同じなら同じ扱い」で、
+  // 族ごとに「まとめない」へ切り替えられる。人によって欲しい粒度が違うため。
+  function renderPhraseFamilyPanel() {
+    const off = loadFamilyOff();
+    phraseFamilyPanel.innerHTML = '';
+    const note = document.createElement('p');
+    note.className = 'famNote';
+    note.textContent = 'そのコードで「使えるスケールが同じ」ものを、同じコードとして扱います。'
+      + '例: I・I6・IM7 はどれもアイオニアンなので同じ。V と V7 も同じですが、'
+      + 'VM7 は7thが違うので別物です。'
+      + '「まとめない」にした族は、コードの書き方が完全に一致した時だけ同じ扱いになります。';
+    phraseFamilyPanel.appendChild(note);
+    SCORE_CHORD_FAMILIES.forEach((f) => {
+      const row = document.createElement('div');
+      row.className = 'famRow';
+      const main = document.createElement('div');
+      main.className = 'famMain';
+      const n = document.createElement('div');
+      n.className = 'famName';
+      n.textContent = f.name;
+      main.appendChild(n);
+      const sc = document.createElement('div');
+      sc.className = 'famScale';
+      sc.textContent = f.scale;
+      main.appendChild(sc);
+      const q = document.createElement('div');
+      q.className = 'famQuals';
+      q.textContent = f.qualities.filter(Boolean).slice(0, 8).join(' , ');
+      main.appendChild(q);
+      row.appendChild(main);
+      const b = document.createElement('button');
+      b.type = 'button';
+      const on = !off.has(f.id);
+      b.className = on ? 'on' : '';
+      b.textContent = on ? 'まとめる' : 'まとめない';
+      b.addEventListener('click', () => {
+        if (off.has(f.id)) off.delete(f.id); else off.add(f.id);
+        saveFamilyOff();
+        renderPhraseFamilyPanel();
+        renderPhraseList();
+      });
+      row.appendChild(b);
+      phraseFamilyPanel.appendChild(row);
+    });
+  }
+  btnPhraseFamily.addEventListener('click', () => {
+    const opening = phraseFamilyPanel.classList.contains('hidden');
+    phraseFamilyPanel.classList.toggle('hidden', !opening);
+    btnPhraseFamily.classList.toggle('active', opening);
+    if (opening) renderPhraseFamilyPanel();
+  });
 
   phraseFindKey.addEventListener('change', () => {
     phraseFindKeyFifths = parseInt(phraseFindKey.value, 10) || 0;
@@ -10618,7 +10779,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-0210';
+  const APP_BUILD = '20260821-0340';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -11756,6 +11917,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
