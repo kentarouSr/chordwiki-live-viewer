@@ -269,6 +269,21 @@
     background: #1c1c1c; color: #ccc; cursor: pointer;
   }
   .phraseTagChip.active { background: #6cf; color: #111; border-color: #6cf; font-weight: bold; }
+  /* --- フットコントローラーのキー割り当て(2026-08-20) ---
+     譜めくりペダルの多くはBluetoothキーボードとして振る舞い、
+     矢印やPageUp/PageDownを送ってくる。何のキーを送るかは機種でまちまちなので、
+     こちらで決め打ちにせず割り当てを変えられるようにする。 */
+  #footHint { font-size: 11px; color: #888; line-height: 1.5; }
+  #footKeyList { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+  .footKeyRow { display: flex; align-items: center; gap: 8px; }
+  .footKeyName { font-size: 12px; color: #ddd; min-width: 96px; }
+  .footKeyVal {
+    font-size: 12px; color: #6cf; font-family: ui-monospace, monospace;
+    background: #1c1c1c; border: 1px solid #333; border-radius: 6px;
+    padding: 4px 8px; min-width: 92px; text-align: center;
+  }
+  .footKeyRow button { font-size: 12px; padding: 5px 10px; }
+  .footKeyRow button.listening { background: #c0392b; color: #fff; font-weight: bold; }
   /* --- フレーズの参考音源(2026-08-20) ---
      YouTubeか、取り込み済みの曲の音源のどちらかを、開始秒つきで紐づける。
      ボタン1つでその箇所から流せること、そして**繰り返しと速度変更**が目的。
@@ -1266,6 +1281,12 @@
         <button id="btnCopySetupLink">他の端末用リンクをコピー</button>
       </div>
       <div class="backupGroup">
+        <span class="backupGroupLabel">&#129461; フットコントローラー / キー操作</span>
+        <span id="footHint">ペダルや外付けキーボードのキーに、譜めくりなどを割り当てられます。</span>
+        <div id="footKeyList"></div>
+        <button id="btnFootReset">既定に戻す</button>
+      </div>
+      <div class="backupGroup">
         <span class="backupGroupLabel">&#128190; バックアップ</span>
         <span id="lastBackupInfo"></span>
         <button id="btnExportZip">書き出す</button>
@@ -2022,6 +2043,8 @@
   const offlineCacheInfo = document.getElementById('offlineCacheInfo');
   const btnUpdateOfflineCache = document.getElementById('btnUpdateOfflineCache');
   const appVersionInfo = document.getElementById('appVersionInfo');
+  const footKeyList = document.getElementById('footKeyList');
+  const btnFootReset = document.getElementById('btnFootReset');
   const btnToggleSettings = document.getElementById('btnToggleSettings');
   const backupBar = document.getElementById('backupBar');
 
@@ -2803,7 +2826,11 @@
     applyTransform();
   }
 
+  // PDFの各ページの先頭位置(画像1枚の曲では空のまま)
+  let currentPageOffsets = [];
+
   async function buildTilesFromImage(img) {
+    currentPageOffsets = []; // 画像1枚の曲にはページの区切りが無い
     clearTiles();
     contentHeight = tileFromDrawableSource(img, img.naturalWidth, img.naturalHeight);
     applyTransform();
@@ -2813,7 +2840,10 @@
     clearTiles();
     const cssWidth = contentWidthCss();
     let total = 0;
+    // 各ページの先頭が縦にどこから始まるかを覚えておく(譜めくりの飛び先に使う)
+    currentPageOffsets = [];
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      currentPageOffsets.push(total);
       const page = await pdf.getPage(pageNum);
       const baseViewport = page.getViewport({ scale: 1 });
       const renderScale = (cssWidth * DPR) / baseViewport.width;
@@ -8486,6 +8516,132 @@
   btnZoomOut.addEventListener('click', () => setZoomLevel(zoomLevel - ZOOM_STEP));
 
   // ==================================================
+  // フットコントローラー(譜めくりペダル)対応 2026-08-20〜
+  // ==================================================
+  // ペダルの多くはBluetoothキーボードとして振る舞い、矢印やPageUp/PageDownを
+  // 送ってくる。何を送るかは機種でまちまちなので、割り当てを変えられるようにする。
+  //
+  // 「ページ」はPDFの時だけ実際のページ境界へ飛ぶ。画像1枚の曲には区切りが無いので
+  // 1画面ぶんの送りにする(ペダルの操作感は同じにしたい)。
+  const FOOT_KEYS_KEY = 'cwlv_foot_keys';
+  const FOOT_ACTIONS = [
+    { id: 'nextPage', name: '次のページ', keys: ['ArrowDown', 'PageDown'] },
+    { id: 'prevPage', name: '前のページ', keys: ['ArrowUp', 'PageUp'] },
+    { id: 'playToggle', name: '再生 / 停止', keys: [' '] },
+    { id: 'speedUp', name: '速度を上げる', keys: ['ArrowRight'] },
+    { id: 'speedDown', name: '速度を下げる', keys: ['ArrowLeft'] },
+  ];
+  let footKeys = null;
+  let footListeningFor = null;
+
+  function loadFootKeys() {
+    if (footKeys) return footKeys;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(FOOT_KEYS_KEY)); } catch (err) { saved = null; }
+    footKeys = {};
+    FOOT_ACTIONS.forEach((a) => {
+      footKeys[a.id] = Array.isArray(saved && saved[a.id]) ? saved[a.id] : a.keys.slice();
+    });
+    return footKeys;
+  }
+  function saveFootKeys() { localStorage.setItem(FOOT_KEYS_KEY, JSON.stringify(loadFootKeys())); }
+  function footKeyLabel(k) {
+    if (k === ' ') return 'Space';
+    return k;
+  }
+
+  function renderFootKeys() {
+    const map = loadFootKeys();
+    footKeyList.innerHTML = '';
+    FOOT_ACTIONS.forEach((a) => {
+      const row = document.createElement('div');
+      row.className = 'footKeyRow';
+      const name = document.createElement('span');
+      name.className = 'footKeyName';
+      name.textContent = a.name;
+      row.appendChild(name);
+      const val = document.createElement('span');
+      val.className = 'footKeyVal';
+      val.textContent = (map[a.id] || []).map(footKeyLabel).join(' / ') || '(なし)';
+      row.appendChild(val);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const listening = footListeningFor === a.id;
+      btn.className = listening ? 'listening' : '';
+      btn.textContent = listening ? 'ペダルを踏む…' : '変更';
+      btn.addEventListener('click', () => {
+        footListeningFor = footListeningFor === a.id ? null : a.id;
+        renderFootKeys();
+      });
+      row.appendChild(btn);
+      footKeyList.appendChild(row);
+    });
+  }
+  btnFootReset.addEventListener('click', () => {
+    footKeys = null;
+    localStorage.removeItem(FOOT_KEYS_KEY);
+    footListeningFor = null;
+    renderFootKeys();
+  });
+
+  // PDFのページ境界(または1画面)へ飛ぶ
+  function footJumpPage(dir) {
+    stopMomentumScroll();
+    const offsets = currentPageOffsets;
+    if (offsets && offsets.length > 1) {
+      const EPS = 4; // 今のページの先頭ちょうどにいる時に前へ戻れるように少し余裕を持たせる
+      const target = dir > 0
+        ? offsets.find((o) => o > scrollY + EPS)
+        : offsets.slice().reverse().find((o) => o < scrollY - EPS);
+      if (target !== undefined) { scrollY = clamp(target, 0, maxScroll()); applyTransform(); return; }
+      // 端に来たら端へ寄せる
+      scrollY = dir > 0 ? maxScroll() : 0;
+      applyTransform();
+      return;
+    }
+    // 画像1枚の曲はページが無いので1画面ぶん動かす(少し重ねて見失わないように)
+    const step = Math.max(40, viewportHeight() - 60);
+    scrollY = clamp(scrollY + dir * step, 0, maxScroll());
+    applyTransform();
+  }
+  function footRunAction(actionId) {
+    if (actionId === 'nextPage') { footJumpPage(1); return true; }
+    if (actionId === 'prevPage') { footJumpPage(-1); return true; }
+    if (actionId === 'playToggle') { if (playing) stopPlayback(); else startPlayback(); return true; }
+    // 速度ボタンは長押し対応(bindHold)でpointerdownを見ており、click()では動かない。
+    // 速度変更そのものを直接呼ぶ。
+    if (actionId === 'speedUp') { changeSpeed(1); return true; }
+    if (actionId === 'speedDown') { changeSpeed(-1); return true; }
+    return false;
+  }
+
+  document.addEventListener('keydown', (e) => {
+    // 割り当ての変更中は、押されたキーをそのまま登録する
+    if (footListeningFor) {
+      e.preventDefault();
+      if (e.key === 'Escape') { footListeningFor = null; renderFootKeys(); return; }
+      const map = loadFootKeys();
+      // 他の動作に同じキーが割り当たっていたら外す(1つのキーで2つ動くと事故になる)
+      Object.keys(map).forEach((id) => { map[id] = map[id].filter((k) => k !== e.key); });
+      map[footListeningFor] = [e.key];
+      saveFootKeys();
+      footListeningFor = null;
+      renderFootKeys();
+      return;
+    }
+    // 譜面を見ている時だけ効かせる。入力欄・楽譜エディタ・曲一覧では邪魔になる。
+    if (viewer.classList.contains('hidden')) return;
+    if (!scoreEditorOverlay.classList.contains('hidden')) return;
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const map = loadFootKeys();
+    const hitId = Object.keys(map).find((id) => (map[id] || []).includes(e.key));
+    if (!hitId) return;
+    if (footRunAction(hitId)) e.preventDefault();
+  });
+
+  // ==================================================
   // Wake Lock
   // ==================================================
   async function acquireWakeLock() {
@@ -8557,6 +8713,7 @@
     renderLastBackupInfo();
     renderOfflineCacheInfo();
     renderAppVersionInfo();
+    renderFootKeys();
     renderLocalBackupInfo();
     runAutoBackupIfDue(); // 前回から24時間経っていた時だけ裏で実行(内部で間引き済み)
     let songs = await dbGetAll();
@@ -10461,7 +10618,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-0055';
+  const APP_BUILD = '20260821-0210';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -11599,6 +11756,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
