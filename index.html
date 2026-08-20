@@ -336,12 +336,21 @@
     font-size: 11px; color: #777; line-height: 1.7; margin-top: 30px; text-align: left;
   }
 
-  #feedbackOverlay, #keyNoticeOverlay {
+  #mxLinks { font-size: 12px; color: #bbb; line-height: 1.9; padding-left: 20px; margin: 0 0 10px; }
+  #mxLinks a { color: #6cf; }
+  #mxResult.hidden, #mxIntro.hidden { display: none; }
+  #mxResultBody { font-size: 13px; color: #ccc; line-height: 1.8; margin-bottom: 12px; }
+  #mxResultBody .mxWarn { color: #e9b96e; }
+  #mxResultBody .mxErr { color: #e88; }
+  #feedbackButtons #btnMusicXmlChoose,
+  #feedbackButtons #btnMusicXmlApply { background: #6cf; color: #111; font-weight: bold; }
+
+  #feedbackOverlay, #keyNoticeOverlay, #musicXmlOverlay {
     position: fixed; inset: 0; z-index: 70; display: flex;
     align-items: center; justify-content: center; padding: 16px;
     background: rgba(0,0,0,0.6);
   }
-  #feedbackOverlay.hidden, #keyNoticeOverlay.hidden { display: none; }
+  #feedbackOverlay.hidden, #keyNoticeOverlay.hidden, #musicXmlOverlay.hidden { display: none; }
   /* URLは長いので折り返す。読めることより「これが鍵だ」と分かることが大事 */
   #keyNoticeUrl {
     font-size: 11px; color: #9ad; background: #111; border: 1px solid #333;
@@ -1532,6 +1541,36 @@
     <div id="songPickerList"></div>
   </div>
 
+  <input id="musicXmlInput" type="file" accept=".musicxml,.xml,.mxl,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml,text/xml" style="display:none">
+
+  <div id="musicXmlOverlay" class="hidden">
+    <div id="feedbackBox">
+      <div id="mxIntro">
+        <h2>&#128228; 他のアプリから読み込む</h2>
+        <p class="fbNote">Audiveris・MuseScore・Sibelius・Finale・Guitar Pro などが書き出した <b>MusicXML</b>(<code>.musicxml</code> / <code>.xml</code> / <code>.mxl</code>)を、この楽譜に取り込みます。</p>
+        <p class="fbNote"><b>譜面の写真から音符を読み取りたい場合</b>も、まず下のどれかで MusicXML にしてから読み込んでください。読み取りはこのアプリの外で行うので、<b>画像はどこにも送られません。</b></p>
+        <ul id="mxLinks">
+          <li><a href="https://audiveris.com/" target="_blank" rel="noopener">Audiveris</a> &mdash; 無料。パソコンに入れて使う。いちばん精度がいい</li>
+          <li><a href="https://www.quickstave.com/optical-music-recognition" target="_blank" rel="noopener">QuickStave</a> &mdash; 無料。ブラウザで動くので入れなくていい</li>
+          <li><a href="https://musescore.org/" target="_blank" rel="noopener">MuseScore</a> &mdash; 無料。自分で打ち込んだ譜面を書き出す時に</li>
+        </ul>
+        <p class="fbNote">取り込めるのは <b>1パート・第1譜表・最初の声部</b>だけです(この楽譜エディターは1本の旋律と和音のためのものなので)。落としたものは件数でお知らせします。</p>
+        <div id="feedbackButtons">
+          <button id="btnMusicXmlCancel" type="button">閉じる</button>
+          <button id="btnMusicXmlChoose" type="button">ファイルを選ぶ</button>
+        </div>
+      </div>
+      <div id="mxResult" class="hidden">
+        <h2 id="mxResultTitle">読み込みました</h2>
+        <div id="mxResultBody"></div>
+        <div id="feedbackButtons">
+          <button id="btnMusicXmlBack" type="button">やめる</button>
+          <button id="btnMusicXmlApply" type="button">この内容で置き換える</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="tunerOverlay" class="hidden">
     <div id="tunerBox">
       <div id="tunerTop">
@@ -1778,6 +1817,7 @@
       <button id="btnScoreRecord" class="hidden" title="クリックに合わせてMIDIキーボードで弾くと、そのまま楽譜になります">&#9210; 録音</button>
       <button id="btnScorePhraseSource" class="hidden" title="このフレーズの参考音源をその箇所から流す(繰り返し・速度変更つき)">&#9835; 参考</button>
       <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067; 使い方</a>
+      <button id="btnScoreImportXml" title="他のアプリ(Audiveris・MuseScore等)で作ったMusicXMLを読み込みます">&#128228; 読み込む</button>
       <button id="btnScoreToolsToggle" title="ツールバーを開閉する(譜面を広く見たい時に)">&#9662; ツール</button>
       <button id="btnScoreShortcutToggle" title="キーボードショートカット一覧を表示/隠す">&#9000; キー</button>
       <button id="btnScoreDone">完了</button>
@@ -1874,6 +1914,7 @@
         <button id="btnScoreClefKey" data-tbu="s:clefkey" title="各段の頭の音部記号と調号を表示するか">&#119070; 冒頭記号</button>
         <label data-tbu="s:stafftype" title="音程を持たないリズムだけの譜面に切り替える">譜表 <select id="scoreStaffTypeSelect"><option value="standard">通常</option><option value="rhythm">リズム</option></select></label>
         <label data-tbu="s:pickup" title="曲が1拍目から始まらない時に、1小節目だけ短くする">弱起 <select id="scorePickupSelect"></select></label>
+        <label data-tbu="s:beamsplit" title="拍をまたぐ音符をタイで切って、連桁を1拍ごとに揃えるか">連桁 <select id="scoreBeamSplitSelect"><option value="beat">拍で切る</option><option value="shape">音符の形を残す</option></select></label>
         <label data-tbu="s:dynamic" title="選択中の音符に強弱記号を付ける">強弱 <select id="scoreDynamicSelect"></select></label>
         <label data-tbu="s:articulation" title="選択中の音符に奏法記号を付ける">奏法 <select id="scoreArticulationSelect"></select></label>
       </div>
@@ -2281,6 +2322,17 @@
   const tunerRefHz = document.getElementById('tunerRefHz');
   const btnTunerRefUp = document.getElementById('btnTunerRefUp');
   const btnTunerRefDown = document.getElementById('btnTunerRefDown');
+  const btnScoreImportXml = document.getElementById('btnScoreImportXml');
+  const musicXmlInput = document.getElementById('musicXmlInput');
+  const musicXmlOverlay = document.getElementById('musicXmlOverlay');
+  const mxIntro = document.getElementById('mxIntro');
+  const mxResult = document.getElementById('mxResult');
+  const mxResultTitle = document.getElementById('mxResultTitle');
+  const mxResultBody = document.getElementById('mxResultBody');
+  const btnMusicXmlChoose = document.getElementById('btnMusicXmlChoose');
+  const btnMusicXmlCancel = document.getElementById('btnMusicXmlCancel');
+  const btnMusicXmlBack = document.getElementById('btnMusicXmlBack');
+  const btnMusicXmlApply = document.getElementById('btnMusicXmlApply');
   const btnFootReset = document.getElementById('btnFootReset');
   const footGroup = document.getElementById('footGroup');
   const btnFootFold = document.getElementById('btnFootFold');
@@ -2405,6 +2457,7 @@
   const scoreKeySelect = document.getElementById('scoreKeySelect');
   const scoreClefSelect = document.getElementById('scoreClefSelect');
   const scorePickupSelect = document.getElementById('scorePickupSelect');
+  const scoreBeamSplitSelect = document.getElementById('scoreBeamSplitSelect');
   const scoreStaffTypeSelect = document.getElementById('scoreStaffTypeSelect');
   const btnScoreHandL = document.getElementById('btnScoreHandL');
   const btnScoreHandR = document.getElementById('btnScoreHandR');
@@ -4701,36 +4754,45 @@
   }
   // タイで分割してでも音符をまたがせてはいけない「強い境界」。
   //
-  // 2026-08-20の初版では**拍の境界すべて**で分割していたが、それは記譜法として
-  // 厳しすぎた。付点8分を4つ並べただけで付点が2つ消えて `16分~8分` のタイに化け、
-  // 「付点の処理が残念」という状態になった(ユーザー報告)。
-  // 実際の記譜では、短い音符が普通の拍をまたぐこと自体はごく普通に許される
-  // (8分+付点8分+16分... のようなシンコペーションは、そのまま書くのが読みやすい)。
+  // **ここは「拍が見える譜面」と「音符の形が残る譜面」のどちらを取るかの分岐点で、
+  // 両立しない。**経緯:
   //
-  // 本当に分割すべきなのは、またぐと小節の骨格が見えなくなる位置だけ:
-  //   - 小節線(これは従来から分割している)
-  //   - **小節の真ん中**(4/4の3拍目、6/8の後半など)
-  // 4/4で3拍目を隠す音符は読みにくいというのが記譜法の定番の禁則で、
-  // 逆に言えばそれ以外の拍はまたいでよい。
+  //   1. 2026-08-20の初版は拍の境界すべてで分割していた。連桁は綺麗に拍ごとに
+  //      揃うが、付点8分を4つ並べると付点が2つ消えて `16分~8分` のタイに化ける。
+  //      「付点の処理が残念すぎる」と指摘され、
+  //   2. 小節線と小節の真ん中だけに弱めた。付点は残るようになったが、今度は
+  //      **拍をまたぐ音符が前の拍の連桁に取り込まれ、連桁が1拍ごとにならなくなった。**
+  //      「連桁が1拍ごとではない」と指摘され、
+  //   3. **どちらを取るかを利用者に選ばせる形にした(2026-08-20)。**
   //
-  // 3/4・9/8のように2等分が拍の境界に来ない拍子では、内側の強い境界は無し
-  // (小節線だけで区切る)。
-  function scoreStrongSplitBoundary(measureIndex) {
+  // 既定は 'beat'(拍で切る)。本番で読む譜面では拍が見えることが最優先、
+  // というのが持ち主の判断。リックを書き留める用途で音符の形を残したい時は
+  // 'shape' に切り替える。
+  const SCORE_BEAM_SPLIT_KEY = 'cwlv_score_beam_split';
+  let scoreBeamSplitMode = localStorage.getItem(SCORE_BEAM_SPLIT_KEY) === 'shape' ? 'shape' : 'beat';
+
+  // またいではいけない位置の一覧(小節先頭からの累積、内側のみ)。
+  function scoreStrongSplitBoundaries(measureIndex) {
     const EPS = 1e-9;
     const cap = scoreCapacityForMeasure(measureIndex);
+    const bounds = scoreMeasureBeatBoundaries(measureIndex)
+      .filter((b) => b > EPS && b < cap - EPS);
+    if (scoreBeamSplitMode === 'beat') return bounds;
+    // 'shape': 小節の真ん中だけ。4/4で3拍目を隠す音符は読みにくい、という
+    // 記譜法の定番の禁則。3/4・9/8のように2等分が拍に来ない拍子では境界なし。
     const mid = cap / 2;
-    const found = scoreMeasureBeatBoundaries(measureIndex)
-      .find((b) => Math.abs(b - mid) < EPS);
-    return found === undefined ? null : found;
+    const found = bounds.find((b) => Math.abs(b - mid) < EPS);
+    return found === undefined ? [] : [found];
   }
   // 分割のための「今の位置から切って良い最大の長さ」。
-  // 1拍以上の音符(4分・付点4分・2分など)は元々またいでよいので対象外。
+  // 1拍以上の音符(4分・付点4分・2分など)は元々またいでよいので対象外
+  // (そもそも連桁が付かないので、切っても読みやすさは変わらない)。
   function scoreBeatChunkLimit(measureIndex, posInMeasure, noteUnits) {
     const EPS = 1e-6;
     if (noteUnits >= scoreBeatStep() - EPS) return Infinity;
-    const strong = scoreStrongSplitBoundary(measureIndex);
-    if (strong === null || strong <= posInMeasure + EPS) return Infinity;
-    return strong - posInMeasure;
+    const next = scoreStrongSplitBoundaries(measureIndex)
+      .find((b) => b > posInMeasure + EPS);
+    return next === undefined ? Infinity : next - posInMeasure;
   }
 
   // { type:'note', pitches:[{step,accidental}], duration, dotted, triplet, tripletGroup, chord } | { type:'rest', ... }
@@ -4940,6 +5002,11 @@
     renderScoreCanvas();
     renderScorePianoKeyboard(); // auto時の黒鍵表記が調号に追従するため再描画
   });
+  scoreBeamSplitSelect.addEventListener('change', () => {
+    scoreBeamSplitMode = scoreBeamSplitSelect.value === 'shape' ? 'shape' : 'beat';
+    localStorage.setItem(SCORE_BEAM_SPLIT_KEY, scoreBeamSplitMode);
+    renderScoreCanvas();
+  });
   scoreClefSelect.addEventListener('change', () => {
     scoreClef = scoreClefSelect.value;
     // 音の高さ(step)は音部記号に依存しないので、既に置いた音符のデータは触らない。
@@ -5013,6 +5080,7 @@
     scoreKeySelect.value = String(scoreKeyFifths);
     scoreClefSelect.value = scoreClef;
     scorePickupSelect.value = String(scorePickupUnits);
+    scoreBeamSplitSelect.value = scoreBeamSplitMode;
     scoreApplyPianoRangeForClef();
     scorePianoKeysBuilt = false;      // 音域が変わっている可能性があるので作り直す
     scorePianoKeyboardEl.innerHTML = '';
@@ -6617,6 +6685,7 @@
     's:clefkey': { name: '冒頭記号', cat: '譜面の設定' },
     's:stafftype': { name: '譜表', cat: '譜面の設定' },
     's:pickup': { name: '弱起', cat: '譜面の設定' },
+    's:beamsplit': { name: '連桁', cat: '譜面の設定' },
     's:transpose': { name: '転調', cat: '譜面の設定' },
     's:sound': { name: '音あり', cat: '入力' },
     's:midi': { name: 'MIDI入力', cat: '入力' },
@@ -7778,7 +7847,12 @@
   }
   function scoreMakeBeams(VF, notes, queue, measureIdxs, measureIndex) {
     const beams = [];
-    scoreBeamRuns(notes, queue, measureIdxs, measureIndex).forEach((run) => {
+    const runs = scoreBeamRuns(notes, queue, measureIdxs, measureIndex);
+    // 連桁が拍ごとに切れているかは、描かれた絵を見ても数えにくい。
+    // テストから覗けるように、まとまりの音符数だけ記録できるようにしてある
+    // (window.__beamProbe に配列を入れた時だけ動く。普段は真偽判定1回で済む)。
+    if (window.__beamProbe) window.__beamProbe.push({ m: measureIndex, runs: runs.map((r) => r.length) });
+    runs.forEach((run) => {
       // 全音符4つぶん。どんなグループもこれを超えないので必ず1本にまとまる。
       VF.Beam.generateBeams(run, { groups: [new VF.Fraction(4, 1)] })
         .forEach((b) => beams.push(b));
@@ -9016,6 +9090,504 @@
     const hitId = Object.keys(map).find((id) => (map[id] || []).includes(e.key));
     if (!hitId) return;
     if (footRunAction(hitId)) e.preventDefault();
+  });
+
+  // ==================================================
+  // MusicXMLの取り込み(2026-08-20)
+  // ==================================================
+  // 他のアプリ(Audiveris・MuseScore・Sibelius・Finale・Guitar Pro等)が
+  // 書き出したMusicXMLを、この楽譜エディターの形に取り込む。
+  //
+  // **これが「譜面の画像から音符を読む(OMR)」の受け皿**でもある。
+  // OMRそのものはブラウザでは動かないし、サーバーでやると自炊代行判例に近づく。
+  // 一方どのOMRツールも出口はMusicXMLなので、**取り込み口さえあれば
+  // 「好きな道具で読ませて、ここに持ってくる」が成立する。**
+  // 取り込み口はどの道具を選んでも使い回せるので、ここが本体になる。
+  //
+  // 取り込む範囲は「1パート・第1譜表・最初の声部」だけ。
+  // 楽譜エディターがもともと単旋律+和音のための物で、
+  // ピアノの左右手や複数声部を表現できないため。
+  // 落としたものは必ず件数で報告する(黙って消さない)。
+
+  const MUSICXML_TYPE_TO_DURATION = {
+    whole: 'whole', half: 'half', quarter: 'quarter', eighth: 'eighth',
+    '16th': 'sixteenth', '32nd': 'thirtysecond', '64th': 'sixtyfourth',
+  };
+  const MUSICXML_ACCIDENTAL = {
+    sharp: 'sharp', flat: 'flat', natural: 'natural',
+  };
+
+  // 調号(fifths)から「この音名には何が付いているか」を作る。
+  // #は F C G D A E B の順、♭は B E A D G C F の順に増える。
+  function musicXmlKeyAlterMap(fifths) {
+    const map = {};
+    'ABCDEFG'.split('').forEach((l) => { map[l] = 0; });
+    if (fifths > 0) SCORE_SHARP_ORDER_LETTERS.slice(0, fifths).forEach((l) => { map[l] = 1; });
+    if (fifths < 0) SCORE_FLAT_ORDER_LETTERS.slice(0, -fifths).forEach((l) => { map[l] = -1; });
+    return map;
+  }
+
+  const mxText = (el, tag) => {
+    const n = el ? el.querySelector(tag) : null;
+    return n ? n.textContent.trim() : '';
+  };
+  const mxNum = (el, tag, fallback) => {
+    const t = mxText(el, tag);
+    const v = parseFloat(t);
+    return Number.isFinite(v) ? v : fallback;
+  };
+
+  // <harmony>からコード名を組み立てる。ルート音+種類だけの簡易版。
+  // 楽譜エディターのコード名欄は自由入力なので、多少崩れても実害は無い。
+  const MUSICXML_KIND_TO_SUFFIX = {
+    'major': '', 'minor': 'm', 'augmented': 'aug', 'diminished': 'dim',
+    'dominant': '7', 'major-seventh': 'M7', 'minor-seventh': 'm7',
+    'diminished-seventh': 'dim7', 'augmented-seventh': 'aug7',
+    'half-diminished': 'm7b5', 'major-minor': 'mM7',
+    'major-sixth': '6', 'minor-sixth': 'm6',
+    'dominant-ninth': '9', 'major-ninth': 'M9', 'minor-ninth': 'm9',
+    'dominant-11th': '11', 'major-11th': 'M11', 'minor-11th': 'm11',
+    'dominant-13th': '13', 'major-13th': 'M13', 'minor-13th': 'm13',
+    'suspended-second': 'sus2', 'suspended-fourth': 'sus4', 'power': '5',
+  };
+  function musicXmlHarmonyToChord(harmony) {
+    const rootStep = mxText(harmony.querySelector('root'), 'root-step');
+    if (!rootStep) return null;
+    const alter = mxNum(harmony.querySelector('root'), 'root-alter', 0);
+    let name = rootStep + (alter > 0 ? '#'.repeat(alter) : alter < 0 ? 'b'.repeat(-alter) : '');
+    const kindEl = harmony.querySelector('kind');
+    const kind = kindEl ? kindEl.textContent.trim() : '';
+    // kindのtext属性があれば、書き手が意図した表記なのでそちらを優先する
+    const kindText = kindEl ? kindEl.getAttribute('text') : null;
+    if (kindText) name += kindText;
+    else if (kind && kind !== 'none') name += (MUSICXML_KIND_TO_SUFFIX[kind] ?? kind);
+    const bassStep = mxText(harmony.querySelector('bass'), 'bass-step');
+    if (bassStep) {
+      const bAlter = mxNum(harmony.querySelector('bass'), 'bass-alter', 0);
+      name += '/' + bassStep + (bAlter > 0 ? '#' : bAlter < 0 ? 'b' : '');
+    }
+    return name;
+  }
+
+  // 本体。文字列を受け取って、楽譜エディターに入れられる形にして返す。
+  // 例外は投げず、読めなかった理由は report.errors に入れる。
+  function parseMusicXmlScore(xmlText) {
+    const report = {
+      measures: 0, notes: 0, rests: 0, chordNotes: 0,
+      skippedGrace: 0, skippedOtherVoice: 0, skippedOtherStaff: 0,
+      otherParts: 0, unknownDuration: 0, doubleAccidental: 0,
+      timeSigChanged: false, unsupportedTimeSig: null, keyChanged: false,
+      errors: [],
+    };
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    if (doc.querySelector('parsererror')) {
+      report.errors.push('ファイルの形式が読み取れませんでした(XMLとして壊れています)。');
+      return { report };
+    }
+    if (doc.querySelector('score-timewise')) {
+      report.errors.push('この形式(score-timewise)には対応していません。'
+        + '書き出し側で通常のMusicXML(score-partwise)を選んでください。');
+      return { report };
+    }
+    const parts = Array.from(doc.querySelectorAll('part'));
+    if (parts.length === 0) {
+      report.errors.push('楽譜のデータが見つかりませんでした。MusicXMLファイルか確認してください。');
+      return { report };
+    }
+    report.otherParts = parts.length - 1;
+
+    const part = parts[0];
+    const elements = [];
+    let divisions = 1;          // 4分音符あたりの分解能
+    let keyFifths = 0;
+    let timeBeats = 4;
+    let timeUnit = 4;
+    let clef = 'treble';
+    let pickupUnits = 0;
+    let firstVoice = null;
+    let pendingChord = null;
+    let tripletSeq = 0;
+    let sawTimeSig = false;
+    let sawKey = false;
+
+    const measures = Array.from(part.children).filter((n) => n.tagName === 'measure');
+    measures.forEach((measure, mi) => {
+      report.measures += 1;
+      let measureUnits = 0;
+
+      Array.from(measure.children).forEach((node) => {
+        const tag = node.tagName;
+
+        if (tag === 'attributes') {
+          const d = mxNum(node, 'divisions', null);
+          if (d && d > 0) divisions = d;
+          const keyEl = node.querySelector('key');
+          if (keyEl) {
+            const f = mxNum(keyEl, 'fifths', null);
+            if (f !== null) {
+              if (sawKey && f !== keyFifths) report.keyChanged = true;
+              keyFifths = f;
+              sawKey = true;
+            }
+          }
+          const timeEl = node.querySelector('time');
+          if (timeEl) {
+            const b = mxNum(timeEl, 'beats', null);
+            const u = mxNum(timeEl, 'beat-type', null);
+            if (b && u) {
+              if (sawTimeSig && (b !== timeBeats || u !== timeUnit)) report.timeSigChanged = true;
+              timeBeats = b; timeUnit = u; sawTimeSig = true;
+            }
+          }
+          const clefEl = node.querySelector('clef');
+          if (clefEl && mxText(clefEl, 'sign') === 'F') clef = 'bass';
+          return;
+        }
+
+        if (tag === 'harmony') {
+          const name = musicXmlHarmonyToChord(node);
+          if (name) pendingChord = name;
+          return;
+        }
+
+        if (tag !== 'note') return;
+
+        // 装飾音符は、この楽譜エディターに置き場所が無いので落とす
+        if (node.querySelector('grace')) { report.skippedGrace += 1; return; }
+
+        const voice = mxText(node, 'voice');
+        if (voice) {
+          if (firstVoice === null) firstVoice = voice;
+          if (voice !== firstVoice) { report.skippedOtherVoice += 1; return; }
+        }
+        const staff = mxText(node, 'staff');
+        if (staff && staff !== '1') { report.skippedOtherStaff += 1; return; }
+
+        const isChordNote = !!node.querySelector('chord');
+        const isRest = !!node.querySelector('rest');
+
+        // 音価。<type>があればそれを信じる(書き手の意図がそのまま入っている)。
+        // 無ければ<duration>とdivisionsから逆算する。
+        const typeText = mxText(node, 'type');
+        let duration = MUSICXML_TYPE_TO_DURATION[typeText] || null;
+        const dotted = !!node.querySelector('dot');
+        const timeMod = node.querySelector('time-modification');
+        const actual = timeMod ? mxNum(timeMod, 'actual-notes', 0) : 0;
+        const normal = timeMod ? mxNum(timeMod, 'normal-notes', 0) : 0;
+        const triplet = actual === 3 && normal === 2;
+
+        if (!duration) {
+          const rawDur = mxNum(node, 'duration', null);
+          if (rawDur !== null && divisions > 0) {
+            let units = (rawDur / divisions) * 0.25;   // 4分音符 = 0.25
+            if (triplet) units *= 1.5;                 // 3連の1個ぶんから元の音価に戻す
+            if (dotted) units /= 1.5;
+            let best = null;
+            let bestDiff = Infinity;
+            Object.keys(SCORE_DURATION_UNITS).forEach((k) => {
+              const diff = Math.abs(SCORE_DURATION_UNITS[k] - units);
+              if (diff < bestDiff) { bestDiff = diff; best = k; }
+            });
+            duration = best;
+            if (bestDiff > 1e-6) report.unknownDuration += 1;
+          } else {
+            duration = 'quarter';
+            report.unknownDuration += 1;
+          }
+        }
+
+        if (isRest) {
+          elements.push({
+            type: 'rest', duration, dotted,
+            triplet, tripletGroup: triplet ? tripletSeq : null, tripletFirst: false,
+          });
+          report.rests += 1;
+          measureUnits += scoreElementDurationUnits(elements[elements.length - 1]);
+          return;
+        }
+
+        const pitchEl = node.querySelector('pitch');
+        if (!pitchEl) return;
+        const letter = mxText(pitchEl, 'step');
+        const octave = mxNum(pitchEl, 'octave', 4);
+        const alter = mxNum(pitchEl, 'alter', 0);
+        if (!letter) return;
+        const step = scoreLetterOctaveToStep(letter, octave);
+
+        // 臨時記号。<accidental>は「実際に紙に書かれている記号」なので、
+        // あればそれをそのまま使う(このアプリのaccidentalも同じ意味)。
+        // 無ければ、調号が示す高さと違う時だけ自分で付ける。
+        let accidental = null;
+        const accEl = node.querySelector('accidental');
+        if (accEl) {
+          const a = accEl.textContent.trim();
+          if (MUSICXML_ACCIDENTAL[a]) {
+            accidental = MUSICXML_ACCIDENTAL[a];
+          } else {
+            report.doubleAccidental += 1;
+            accidental = a.indexOf('sharp') >= 0 ? 'sharp' : a.indexOf('flat') >= 0 ? 'flat' : null;
+          }
+        } else {
+          const keyAlter = musicXmlKeyAlterMap(keyFifths)[letter] || 0;
+          if (alter !== keyAlter) {
+            if (alter === 1) accidental = 'sharp';
+            else if (alter === -1) accidental = 'flat';
+            else if (alter === 0) accidental = 'natural';
+            else { report.doubleAccidental += 1; accidental = alter > 0 ? 'sharp' : 'flat'; }
+          }
+        }
+
+        if (isChordNote && elements.length > 0) {
+          // 和音の2つ目以降。直前の音符に足す。
+          const prev = elements[elements.length - 1];
+          if (prev.type === 'note') {
+            const at = prev.pitches.findIndex((q) => q.step > step);
+            const np = { step, accidental };
+            if (at === -1) prev.pitches.push(np); else prev.pitches.splice(at, 0, np);
+            report.chordNotes += 1;
+            return; // 和音は時間を進めない
+          }
+        }
+
+        const tied = !!(node.querySelector('tie[type="stop"]')
+          || node.querySelector('tied[type="stop"]'));
+        const el = {
+          type: 'note', pitches: [{ step, accidental }], duration, dotted,
+          triplet, tripletGroup: triplet ? tripletSeq : null, tripletFirst: false,
+          chord: pendingChord || null,
+          tiedFromPrev: tied || undefined,
+        };
+        if (!el.tiedFromPrev) delete el.tiedFromPrev;
+        pendingChord = null;
+        elements.push(el);
+        report.notes += 1;
+        measureUnits += scoreElementDurationUnits(el);
+      });
+
+      // 3連符のまとまりは小節をまたがない扱いにする(またぐ書き方は稀なため)
+      tripletSeq += 1;
+
+      // 最初の小節だけが短ければ弱起とみなす
+      if (mi === 0) {
+        const cap = timeBeats / timeUnit;
+        if (measureUnits > 1e-6 && measureUnits < cap - 1e-6
+            && measures.length > 1) {
+          pickupUnits = measureUnits;
+        }
+      }
+    });
+
+    // 3連符の1個目に「3」のラベルを出す
+    const seenTripletGroup = new Set();
+    elements.forEach((el) => {
+      if (!el.triplet) return;
+      if (!seenTripletGroup.has(el.tripletGroup)) {
+        seenTripletGroup.add(el.tripletGroup);
+        el.tripletFirst = true;
+      }
+    });
+
+    if (elements.length === 0) {
+      report.errors.push('音符が1つも見つかりませんでした。'
+        + '対応しているのは「1パート・第1譜表・最初の声部」だけです。');
+      return { report };
+    }
+
+    // 拍子。この楽譜エディターが持っていない拍子は4/4に倒す。
+    let timeSigIdx = SCORE_TIME_SIGS.findIndex((t) => t.beats === timeBeats && t.unit === timeUnit);
+    if (timeSigIdx < 0) {
+      report.unsupportedTimeSig = `${timeBeats}/${timeUnit}`;
+      timeSigIdx = 0;
+    }
+    // 調号。持っていない調号は近い方に倒す。
+    if (!SCORE_KEY_OPTIONS.some((k) => k.fifths === keyFifths)) {
+      keyFifths = Math.max(-6, Math.min(6, keyFifths));
+      if (!SCORE_KEY_OPTIONS.some((k) => k.fifths === keyFifths)) keyFifths = 0;
+    }
+    // 弱起は選択肢にある値だけ使う
+    const pickupChoices = Array.from(scorePickupSelect.options).map((o) => Number(o.value));
+    if (pickupUnits > 0 && !pickupChoices.some((v) => Math.abs(v - pickupUnits) < 1e-6)) {
+      pickupUnits = 0;
+    }
+
+    return { elements, timeSigIdx, keyFifths, clef, pickupUnits, report };
+  }
+
+  // 取り込んだ結果を、人が読める報告文にする。黙って落とさないための物。
+  function musicXmlReportLines(report) {
+    const lines = [];
+    lines.push(`${report.measures}小節 / 音符${report.notes}個`
+      + (report.chordNotes ? `(うち和音の重なり${report.chordNotes}個)` : '')
+      + ` / 休符${report.rests}個を取り込みました。`);
+    const dropped = [];
+    if (report.otherParts) dropped.push(`他のパート${report.otherParts}個`);
+    if (report.skippedOtherStaff) dropped.push(`2段目の譜表${report.skippedOtherStaff}音`);
+    if (report.skippedOtherVoice) dropped.push(`2声目以降${report.skippedOtherVoice}音`);
+    if (report.skippedGrace) dropped.push(`装飾音符${report.skippedGrace}個`);
+    if (dropped.length) {
+      lines.push('取り込めなかったもの: ' + dropped.join(' / ')
+        + '(この楽譜エディターは1本の旋律と和音のためのものです)');
+    }
+    if (report.unsupportedTimeSig) {
+      lines.push(`拍子 ${report.unsupportedTimeSig} には対応していないので 4/4 にしました。`);
+    }
+    if (report.timeSigChanged) lines.push('途中で拍子が変わっていますが、最初の拍子だけを使いました。');
+    if (report.keyChanged) lines.push('途中で調号が変わっていますが、最初の調号だけを使いました。');
+    if (report.unknownDuration) lines.push(`長さが読めなかった音符が${report.unknownDuration}個ありました(近い長さにしています)。`);
+    if (report.doubleAccidental) lines.push(`ダブルシャープ/ダブルフラットが${report.doubleAccidental}個ありました(♯/♭にしています)。`);
+    lines.push('読み取りは必ず間違いが混ざります。保存する前に必ず見直してください。');
+    return lines;
+  }
+
+  // テスト用の覗き窓。?scoretest=1 の時だけ生やす。
+  // 取り込みは結果の細部(音価・臨時記号・和音・タイ・3連)が合っているかが肝で、
+  // 画面の文言だけでは確かめきれないため。
+  if (new URLSearchParams(location.search).get('scoretest') === '1') {
+    window.__mxlParse = parseMusicXmlScore;
+    window.__rerender = renderScoreCanvas;
+    window.__mxlScore = () => ({
+      elements: scoreElements, timeSigIdx: scoreTimeSigIdx,
+      keyFifths: scoreKeyFifths, clef: scoreClef, pickupUnits: scorePickupUnits,
+    });
+  }
+
+  // ---- 取り込みの画面まわり ----
+  let musicXmlPending = null;   // 確認画面で「置き換える」を押した時に使う
+
+  // .mxl はMusicXMLをZIPで包んだ物。META-INF/container.xml が本体の場所を指す。
+  // 中身はDEFLATEで圧縮されているので、ブラウザの DecompressionStream で解く
+  // (このためだけにライブラリを足したくないため)。
+  async function inflateRaw(bytes) {
+    if (typeof DecompressionStream === 'undefined') {
+      throw new Error('このブラウザでは .mxl を開けません。.musicxml や .xml で書き出してください。');
+    }
+    const ds = new DecompressionStream('deflate-raw');
+    const stream = new Blob([bytes]).stream().pipeThrough(ds);
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function readMusicXmlFile(file) {
+    const isMxl = /\.mxl$/i.test(file.name);
+    if (!isMxl) return await file.text();
+
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const entries = parseZipRaw(buf);
+    const get = async (name) => {
+      const e = entries.find((x) => x.name === name);
+      if (!e) return null;
+      const raw = e.method === 0 ? e.data : await inflateRaw(e.data);
+      return new TextDecoder().decode(raw);
+    };
+    // container.xml が本体を指しているので、まずそれを読む
+    let target = null;
+    const container = await get('META-INF/container.xml');
+    if (container) {
+      const cdoc = new DOMParser().parseFromString(container, 'application/xml');
+      const rf = cdoc.querySelector('rootfile');
+      if (rf) target = rf.getAttribute('full-path');
+    }
+    if (!target) {
+      // container.xml が無い/壊れている時は、それらしいファイルを拾う
+      const cand = entries.find((x) => /\.(musicxml|xml)$/i.test(x.name)
+        && x.name.indexOf('META-INF/') !== 0);
+      target = cand ? cand.name : null;
+    }
+    if (!target) throw new Error('.mxl の中に楽譜のファイルが見つかりませんでした。');
+    const text = await get(target);
+    if (!text) throw new Error('.mxl の中身を取り出せませんでした。');
+    return text;
+  }
+
+  function openMusicXmlDialog() {
+    mxIntro.classList.remove('hidden');
+    mxResult.classList.add('hidden');
+    musicXmlPending = null;
+    musicXmlOverlay.classList.remove('hidden');
+  }
+  function closeMusicXmlDialog() {
+    musicXmlOverlay.classList.add('hidden');
+    musicXmlPending = null;
+  }
+  btnScoreImportXml.addEventListener('click', openMusicXmlDialog);
+  btnMusicXmlCancel.addEventListener('click', closeMusicXmlDialog);
+  btnMusicXmlBack.addEventListener('click', closeMusicXmlDialog);
+  musicXmlOverlay.addEventListener('click', (e) => {
+    if (e.target === musicXmlOverlay) closeMusicXmlDialog();
+  });
+  btnMusicXmlChoose.addEventListener('click', () => {
+    musicXmlInput.value = '';   // 同じファイルを続けて選べるように
+    musicXmlInput.click();
+  });
+
+  function showMusicXmlError(msg) {
+    mxIntro.classList.add('hidden');
+    mxResult.classList.remove('hidden');
+    mxResultTitle.textContent = '読み込めませんでした';
+    mxResultBody.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'mxErr';
+    p.textContent = msg;
+    mxResultBody.appendChild(p);
+    btnMusicXmlApply.classList.add('hidden');
+    btnMusicXmlBack.textContent = '閉じる';
+  }
+
+  musicXmlInput.addEventListener('change', async () => {
+    const file = musicXmlInput.files && musicXmlInput.files[0];
+    if (!file) return;
+    try {
+      const text = await readMusicXmlFile(file);
+      const parsed = parseMusicXmlScore(text);
+      if (!parsed.elements) {
+        showMusicXmlError(parsed.report.errors[0] || '読み取れませんでした。');
+        return;
+      }
+      musicXmlPending = parsed;
+      mxIntro.classList.add('hidden');
+      mxResult.classList.remove('hidden');
+      mxResultTitle.textContent = '読み込みました';
+      mxResultBody.innerHTML = '';
+      musicXmlReportLines(parsed.report).forEach((line, i) => {
+        const p = document.createElement('p');
+        // 1行目は結果、最後の1行は注意、間は落としたものの説明
+        if (i > 0) p.className = 'mxWarn';
+        p.textContent = line;
+        p.style.margin = '0 0 6px';
+        mxResultBody.appendChild(p);
+      });
+      const warn = document.createElement('p');
+      warn.style.margin = '10px 0 0';
+      warn.className = 'mxErr';
+      warn.textContent = '「置き換える」を押すと、いま作りかけの譜面は消えます。';
+      mxResultBody.appendChild(warn);
+      btnMusicXmlApply.classList.remove('hidden');
+      btnMusicXmlBack.textContent = 'やめる';
+    } catch (err) {
+      console.error(err);
+      showMusicXmlError(err && err.message ? err.message : '読み込みに失敗しました。');
+    }
+  });
+
+  btnMusicXmlApply.addEventListener('click', () => {
+    if (!musicXmlPending) return;
+    pushScoreUndoSnapshot();   // 取り消せるようにしてから置き換える
+    const d = musicXmlPending;
+    scoreElements = d.elements;
+    scoreTimeSigIdx = d.timeSigIdx;
+    scoreKeyFifths = d.keyFifths;
+    scoreClef = d.clef;
+    scorePickupUnits = d.pickupUnits;
+    scoreSelectedIndex = null;
+    scoreTimeSigSelect.value = String(scoreTimeSigIdx);
+    scoreKeySelect.value = String(scoreKeyFifths);
+    scoreClefSelect.value = scoreClef;
+    scorePickupSelect.value = String(scorePickupUnits);
+    scoreApplyPianoRangeForClef();
+    scorePianoKeysBuilt = false;
+    scorePianoKeyboardEl.innerHTML = '';
+    closeMusicXmlDialog();
+    updateScoreToolbarUI();
+    renderScoreCanvas();
   });
 
   // ==================================================
@@ -11257,6 +11829,17 @@
 
   // このアプリが書き出したZIP(STORE方式・data descriptorなし)専用の簡易パーサー
   function parseZip(buf) {
+    // 中身の取り出しは parseZipRaw に任せ、ここは「このアプリのZIPか」の確認だけ。
+    // MusicXMLの.mxlは圧縮されている(方式8)ので、そちらは parseZipRaw を直接使う。
+    return parseZipRaw(buf).map((e) => {
+      if (e.method !== 0) {
+        throw new Error(`未対応の圧縮方式です(${e.name})。このアプリで書き出したZIPのみ読み込めます。`);
+      }
+      return { name: e.name, data: e.data };
+    });
+  }
+
+  function parseZipRaw(buf) {
     const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
     let eocdOffset = -1;
     const scanStart = Math.max(0, buf.length - 22 - 65536);
@@ -11283,14 +11866,12 @@
       const localOffset = view.getUint32(centralOffset + 42, true);
       const name = new TextDecoder().decode(buf.subarray(centralOffset + 46, centralOffset + 46 + nameLen));
 
-      if (method !== 0) {
-        throw new Error(`未対応の圧縮方式です(${name})。このアプリで書き出したZIPのみ読み込めます。`);
-      }
-
+      const compSize = view.getUint32(centralOffset + 20, true);
       const localNameLen = view.getUint16(localOffset + 26, true);
       const localExtraLen = view.getUint16(localOffset + 28, true);
       const dataStart = localOffset + 30 + localNameLen + localExtraLen;
-      entries.push({ name, data: buf.subarray(dataStart, dataStart + uncompSize) });
+      const size = method === 0 ? uncompSize : compSize;
+      entries.push({ name, method, uncompSize, data: buf.subarray(dataStart, dataStart + size) });
 
       centralOffset += 46 + nameLen + extraLen + commentLen;
     }
@@ -11330,7 +11911,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-1710';
+  const APP_BUILD = '20260821-2110';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって

@@ -70,6 +70,8 @@
       <li><a href="#phrases">フレーズ集</a></li>
       <li><a href="#footpedal">フットコントローラー(譜めくりペダル)</a></li>
       <li><a href="#tuner">チューナー</a></li>
+      <li><a href="#beamsplit">連桁の切り方</a></li>
+      <li><a href="#musicxml">他のアプリから楽譜を読み込む(MusicXML)</a></li>
       <li><a href="#sync">クラウド保存(あなた用のURL)</a></li>
       <li><a href="#zip">ZIPバックアップ</a></li>
       <li><a href="#offline">オフライン対応・ホーム画面への追加</a></li>
@@ -476,6 +478,46 @@
     <li><strong>マイクはこの画面を開いている間だけ使います。</strong>「閉じる」を押すと必ず止まります</li>
     <li>音を出していない時・雑音だけの時は何も出しません(適当な音名を出しません)</li>
   </ul>
+
+  <h2 id="beamsplit">10.75 連桁(音符をつなぐ横棒)の切り方</h2>
+  <p><strong>楽譜エディターのツールバーの「連桁」で、2つのやり方を選べます(2026-08-20〜)。</strong></p>
+  <table>
+    <tr><th></th><th>何をするか</th><th>向いている用途</th></tr>
+    <tr><td><strong>拍で切る</strong>(既定)</td><td>拍をまたぐ音符を<strong>タイで切って</strong>、連桁を必ず1拍ごとに揃えます</td><td><strong>本番で読む譜面。</strong>連桁を見れば拍が分かります</td></tr>
+    <tr><td>音符の形を残す</td><td>小節線と小節の真ん中でだけ切ります。それ以外は音符の形をそのまま残します</td><td>リックを書き留める時。<strong>付点がタイに化けません</strong></td></tr>
+  </table>
+  <ul>
+    <li><strong>この2つは両立しません。</strong>拍をまたぐ音符は「切って拍を見せる」か「切らずに形を残す」かのどちらかしかありません</li>
+    <li>「拍で切る」だと、たとえば<strong>付点8分を4つ並べると2つ目と3つ目が <code>16分〜8分</code> のタイになります</strong>。見た目は変わりますが、<strong>元のデータ(音符そのもの)は変わらない</strong>ので、切り替えれば元の形に戻ります</li>
+    <li>設定は端末に覚えます。全部の譜面に効きます</li>
+  </ul>
+
+  <h2 id="musicxml">10.8 他のアプリから楽譜を読み込む(MusicXML)</h2>
+  <p><strong>楽譜エディターの「📤 読み込む」から、他のアプリが書き出した MusicXML を取り込めます(2026-08-20〜)。</strong>対応するのは <code>.musicxml</code> / <code>.xml</code> / <code>.mxl</code> です。</p>
+  <h3>何に使うか</h3>
+  <p>1つは<strong>譜面の写真から音符を読み取る(OMR)</strong>ため。読み取りそのものはブラウザでは動かないので、<strong>このアプリの外でやってもらって、結果だけ持ってくる</strong>形にしています。<strong>画像はどこにも送られません。</strong></p>
+  <ul>
+    <li><a href="https://audiveris.com/" target="_blank" rel="noopener">Audiveris</a> &mdash; 無料。パソコンに入れて使う。いちばん精度がいい</li>
+    <li><a href="https://www.quickstave.com/optical-music-recognition" target="_blank" rel="noopener">QuickStave</a> &mdash; 無料。ブラウザで動くので入れなくていい</li>
+  </ul>
+  <p>もう1つは、<strong>MuseScore・Sibelius・Finale・Guitar Pro などで打ち込んだ譜面を持ち込む</strong>ため。これらは全部 MusicXML を書き出せます。</p>
+  <h3>取り込めるもの / 取り込めないもの</h3>
+  <ul>
+    <li>取り込めるのは <strong>1パート・第1譜表・最初の声部</strong>だけです。この楽譜エディターは1本の旋律と和音のためのもので、ピアノの左右手や複数声部を表現できないためです</li>
+    <li>読むもの: 音符・休符・和音・音価と付点・タイ・3連符・臨時記号・調号・拍子・音部記号・<strong>コード名(<code>&lt;harmony&gt;</code>)</strong></li>
+    <li>落とすもの: 装飾音符・2声目以降・2段目の譜表・他のパート。<strong>落としたものは必ず件数で報告します</strong>(黙って消しません)</li>
+    <li>途中で拍子や調号が変わる曲は、<strong>最初の値だけ</strong>を使います。その旨も報告します</li>
+    <li>5/4 のような対応していない拍子は 4/4 に倒します</li>
+  </ul>
+  <h3>使い方</h3>
+  <ol>
+    <li>楽譜エディターで「📤 読み込む」</li>
+    <li>案内が出るのでファイルを選ぶ</li>
+    <li><strong>何が取り込めて何が落ちたかが出る</strong>ので、確認してから「この内容で置き換える」</li>
+    <li><strong>読み取りは必ず間違いが混ざります。</strong>保存する前に見直してください</li>
+    <li>気に入らなければ <strong>Ctrl+Z(取消)で読み込む前に戻せます</strong></li>
+  </ol>
+  <div class="note"><strong>「置き換える」は、いま作りかけの譜面を消します。</strong>追記ではないので注意してください。</div>
 
   <h2 id="sync">11. クラウド保存(あなた用のURL)</h2>
   <p><strong>初めて開いた時点で、あなた専用のURLが自動で用意されます。</strong>いつものURLの末尾に <code>?key=...</code> というパラメータが付いた形で、アドレスバーを見ると分かります。設定も登録も要りません。</p>
