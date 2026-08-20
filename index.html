@@ -269,6 +269,36 @@
     background: #1c1c1c; color: #ccc; cursor: pointer;
   }
   .phraseTagChip.active { background: #6cf; color: #111; border-color: #6cf; font-weight: bold; }
+  /* --- フレーズの逆引き(2026-08-20) ---
+     「このコードの時に何が使えるか」を引くための帯。コード名かディグリーを入れると、
+     一致するフレーズが**選んだキーに移調された状態**で並ぶ。
+     そのまま弾けないと意味がないので、移調は結果表示の必須要件。 */
+  #phraseFindBar { padding: 8px 14px; border-bottom: 1px solid #2c2c2e; }
+  #phraseFindRow1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #phraseFindRow1 label { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 4px; }
+  #phraseFindKey {
+    font-size: 13px; padding: 7px 8px; border-radius: 8px;
+    border: 1px solid #444; background: #1c1c1c; color: #eee;
+  }
+  #phraseFindInput {
+    flex: 1; min-width: 150px; font-size: 14px; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid #444; background: #1c1c1c; color: #eee;
+  }
+  #btnPhraseFindClear {
+    width: 34px; height: 34px; border-radius: 8px; border: none;
+    background: #3a3a3c; color: #eee; font-size: 14px; cursor: pointer;
+  }
+  #phraseFindChips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+  #phraseFindChips button {
+    font-size: 12px; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid #444; background: #262626; color: #ccc; cursor: pointer;
+  }
+  #phraseFindChips button.on { background: #6cf; border-color: #6cf; color: #111; font-weight: bold; }
+  #phraseFindHint { font-size: 11px; color: #888; margin-top: 6px; line-height: 1.5; }
+  .phraseHit {
+    font-size: 12px; color: #6cf; margin-top: 4px; word-break: break-all;
+  }
+  .phraseHitFrom { color: #888; }
   #phraseList { display: flex; flex-direction: column; gap: 10px; }
   #phraseList .empty { color: #999; font-size: 14px; text-align: center; margin-top: 40px; }
   .phraseItem { background: #1c1c1c; border-radius: 10px; padding: 12px 14px; }
@@ -1260,6 +1290,15 @@
       <h1>フレーズ集</h1>
       <button id="btnPhraseNew">＋ 新しいフレーズ</button>
     </div>
+    <div id="phraseFindBar">
+      <div id="phraseFindRow1">
+        <label>キー <select id="phraseFindKey"></select></label>
+        <input id="phraseFindInput" type="text" placeholder="コード名かディグリー(例: Dm7 / 2-5-1)">
+        <button id="btnPhraseFindClear" type="button">✕</button>
+      </div>
+      <div id="phraseFindChips"></div>
+      <div id="phraseFindHint">コード名を打つと、そのコードで使えるフレーズが出ます。出たフレーズは選んだキーに移調されます。</div>
+    </div>
     <div id="phraseTagFilter"></div>
     <div id="phraseList"></div>
   </div>
@@ -1947,6 +1986,10 @@
   const btnPhraseNew = document.getElementById('btnPhraseNew');
   const phraseTagFilterEl = document.getElementById('phraseTagFilter');
   const phraseListEl = document.getElementById('phraseList');
+  const phraseFindKey = document.getElementById('phraseFindKey');
+  const phraseFindInput = document.getElementById('phraseFindInput');
+  const phraseFindChips = document.getElementById('phraseFindChips');
+  const btnPhraseFindClear = document.getElementById('btnPhraseFindClear');
   const btnTodoBack = document.getElementById('btnTodoBack');
   const todoNewInput = document.getElementById('todoNewInput');
   const btnTodoAdd = document.getElementById('btnTodoAdd');
@@ -3847,6 +3890,114 @@
     const preferFlat = scorePreferFlatForPitchClass(idx, newFifths);
     const letter = preferFlat ? def.black[1] : def.black[0];
     return { step: scoreLetterOctaveToStep(letter, octave), accidental: preferFlat ? 'flat' : 'sharp' };
+  }
+
+  // ==================================================
+  // コード名 ⇄ ディグリー(度数)表記(2026-08-20〜)
+  // ==================================================
+  // フレーズ集を「このコードの時に何が使えるか」で引けるようにするための土台。
+  //
+  // **ディグリーは導出値**として扱う。保存の本体はあくまでコード名と調(keyFifths)で、
+  // ディグリーはそこから計算して索引用に持つだけ。逆にディグリーを一次データに
+  // すると、A7 を VI7 と持つか bVII7 と持つかで綴りの情報が落ちて、
+  // 元のコード名に戻せなくなる。
+  //
+  // 度数の綴りはジャズで一般的な固定表記にする(索引が目的なので、
+  // 同じ音が毎回同じ文字列になることの方が、理論的な綴り分けより大事)。
+  const SCORE_DEGREE_NAMES = ['I', 'bII', 'II', 'bIII', 'III', 'IV',
+    '#IV', 'V', 'bVI', 'VI', 'bVII', 'VII'];
+
+  // コード名の1トークン("Dm7" "F#m7b5" 等)を { semitone, suffix } に分解する。
+  function scoreParseChordToken(token) {
+    const m = String(token).trim().match(/^([A-G])((?:##|bb|[#b♯♭])*)(.*)$/);
+    if (!m) return null;
+    const [, letter, accidentalsRaw, suffix] = m;
+    let alter = 0;
+    for (const ch of accidentalsRaw) {
+      if (ch === '#' || ch === '♯') alter += 1;
+      else if (ch === 'b' || ch === '♭') alter -= 1;
+    }
+    return {
+      semitone: (((SCORE_CHORD_ROOT_SEMITONE[letter] + alter) % 12) + 12) % 12,
+      suffix,
+    };
+  }
+
+  // コード名 → ディグリー表記。"Dm7"(キーC) → "IIm7"、"G7/B" → "V7/VII"
+  function scoreChordToDegree(chord, keyFifths) {
+    if (!chord) return null;
+    const tonic = SCORE_SEMITONE_BY_FIFTHS[String(keyFifths)] ?? 0;
+    const parts = String(chord).split('/');
+    const out = [];
+    for (const part of parts) {
+      const t = scoreParseChordToken(part);
+      if (!t) return null;
+      const deg = SCORE_DEGREE_NAMES[(((t.semitone - tonic) % 12) + 12) % 12];
+      out.push(deg + t.suffix);
+    }
+    return out.join('/');
+  }
+
+  // ディグリー表記 → コード名。"IIm7"(キーC) → "Dm7"
+  // 綴り(♯系/♭系)は移調と同じ規則に任せるので、キーに応じて自然な表記になる。
+  function scoreDegreeToChord(degree, keyFifths) {
+    if (!degree) return null;
+    const tonic = SCORE_SEMITONE_BY_FIFTHS[String(keyFifths)] ?? 0;
+    const parts = String(degree).split('/');
+    const out = [];
+    for (const part of parts) {
+      const m = String(part).trim().match(/^([#b]*)(VII|VI|IV|V|III|II|I)(.*)$/);
+      if (!m) return null;
+      const [, acc, roman, suffix] = m;
+      let idx = SCORE_DEGREE_NAMES.indexOf(roman);
+      if (idx < 0) return null;
+      for (const ch of acc) idx += (ch === '#' ? 1 : -1);
+      const semitone = (((tonic + idx) % 12) + 12) % 12;
+      const preferFlat = scorePreferFlatForPitchClass(semitone, keyFifths);
+      const name = (preferFlat ? SCORE_PITCH_NAME_FLAT : SCORE_PITCH_NAME_SHARP)[semitone];
+      out.push(name + suffix);
+    }
+    return out.join('/');
+  }
+
+  // 譜面に出てくるコード名を、出た順にディグリーの配列にする。
+  // 同じコードが続く場合もそのまま並べる(進行の形を保つため)。
+  function scorePhraseDegrees(elements, keyFifths) {
+    const out = [];
+    (elements || []).forEach((el) => {
+      if (el && el.type === 'note' && el.chord) {
+        const d = scoreChordToDegree(el.chord, keyFifths);
+        if (d) out.push(d);
+      }
+    });
+    return out;
+  }
+
+  // 検索用に正規化する。「2-5-1」「Ⅱm7 V7」「iim7 v7」などを
+  // 同じ土俵("IIM7 V7" のような大文字のディグリー列)に揃える。
+  const SCORE_DEGREE_BY_NUMBER = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+  function scoreNormalizeDegreeQuery(text) {
+    if (!text) return [];
+    return String(text)
+      .replace(/[Ⅰ]/g, 'I').replace(/[Ⅱ]/g, 'II').replace(/[Ⅲ]/g, 'III')
+      .replace(/[Ⅳ]/g, 'IV').replace(/[Ⅴ]/g, 'V').replace(/[Ⅵ]/g, 'VI').replace(/[Ⅶ]/g, 'VII')
+      .replace(/[♯]/g, '#').replace(/[♭]/g, 'b')
+      .split(/[\s\-–—,、]+/)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((t) => {
+        // 「2」「5」のような数字だけの指定は度数だけの指定とみなす
+        const num = t.match(/^([#b]*)([1-7])(.*)$/);
+        if (num) return num[1] + SCORE_DEGREE_BY_NUMBER[Number(num[2])] + num[3];
+        // ローマ数字の部分だけ大文字に揃える(品質はそのまま)
+        return t.replace(/^([#b]*)(vii|vi|iv|v|iii|ii|i)/i,
+          (all, a, r) => a + r.toUpperCase());
+      });
+  }
+  // 度数だけを取り出す(品質を無視した「2-5-1」検索用)
+  function scoreDegreeRootOnly(degree) {
+    const m = String(degree).match(/^([#b]*)(VII|VI|IV|V|III|II|I)/);
+    return m ? m[1] + m[2] : String(degree);
   }
 
   // 譜面全体を半音単位で転調する。音符の高さ・コード名・調号を一度に動かす。
@@ -8611,17 +8762,117 @@
     for (const t of tags) phraseTagFilterEl.appendChild(makeChip(t, t));
   }
 
+  // ==================================================
+  // フレーズの逆引き(2026-08-20〜)
+  // ==================================================
+  // 「今このコードが来た。何が弾ける?」を引くための仕組み。
+  // 索引の向きは ディグリー → フレーズ。出てきたフレーズは**選んだキーに移調して**
+  // 見せる(元のキーのまま出しても、その場では弾けないので意味がない)。
+  let phraseFindKeyFifths = 0;
+  let phraseFindQuery = '';
+
+  // 検索語(ディグリーの配列)がフレーズのディグリー列に含まれるか。
+  // 1つだけなら「どこかに含まれるか」、2つ以上なら「その順で連続しているか」。
+  // 品質を書かない指定(II / 2)は度数だけで照合する = 2-5-1検索。
+  function phraseMatchesDegrees(phraseDegrees, query) {
+    if (!query.length) return true;
+    const list = phraseDegrees || [];
+    const hit = (a, b) => {
+      // 検索語に品質が無ければ度数だけ見る。あれば前方一致(IIm で IIm7 も拾う)。
+      const qRoot = scoreDegreeRootOnly(b);
+      if (qRoot === b) return scoreDegreeRootOnly(a) === qRoot;
+      return a === b || a.indexOf(b) === 0;
+    };
+    for (let i = 0; i + query.length <= list.length; i++) {
+      let all = true;
+      for (let j = 0; j < query.length; j++) {
+        if (!hit(list[i + j], query[j])) { all = false; break; }
+      }
+      if (all) return true;
+    }
+    return false;
+  }
+
+  // 入力を検索語に変える。コード名("Dm7")で来たら、選んだキーで度数に直す。
+  function phraseParseFindInput(text, keyFifths) {
+    const raw = String(text || '').trim();
+    if (!raw) return [];
+    // まずコード名として読めるか試す(A〜Gで始まるものだけ)
+    const tokens = raw.split(/[\s\-–—,、]+/).filter(Boolean);
+    const asChords = tokens.map((t) => (/^[A-G]/.test(t) ? scoreChordToDegree(t, keyFifths) : null));
+    if (asChords.every((x) => x)) return asChords;
+    return scoreNormalizeDegreeQuery(raw);
+  }
+
+  // フレーズのコード名を、選んだキーへ移調した文字列で返す(結果の一覧に出す用)。
+  function phraseChordsInKey(item, keyFifths) {
+    return (item.degrees || []).map((d) => scoreDegreeToChord(d, keyFifths) || d);
+  }
+
+  function renderPhraseFindBar() {
+    if (!phraseFindKey.options.length) {
+      SCORE_KEY_OPTIONS.forEach((k) => {
+        const o = document.createElement('option');
+        o.value = String(k.fifths);
+        o.textContent = k.label;
+        phraseFindKey.appendChild(o);
+      });
+    }
+    phraseFindKey.value = String(phraseFindKeyFifths);
+    phraseFindInput.value = phraseFindQuery;
+    // よく使うディグリーをチップで出す。実際にフレーズに入っているものだけを、
+    // 出現回数の多い順に並べる(持っていない度数を押せても意味がない)。
+    const count = new Map();
+    (musicPhrases.items || []).forEach((it) => {
+      (it.degrees || []).forEach((d) => count.set(d, (count.get(d) || 0) + 1));
+    });
+    const top = Array.from(count.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14);
+    phraseFindChips.innerHTML = '';
+    top.forEach(([deg, n]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const chord = scoreDegreeToChord(deg, phraseFindKeyFifths);
+      b.textContent = `${deg} (${chord}) ${n}`;
+      b.className = phraseFindQuery.trim() === deg ? 'on' : '';
+      b.addEventListener('click', () => {
+        phraseFindQuery = phraseFindQuery.trim() === deg ? '' : deg;
+        renderPhraseFindBar();
+        renderPhraseList();
+      });
+      phraseFindChips.appendChild(b);
+    });
+  }
+
+  phraseFindKey.addEventListener('change', () => {
+    phraseFindKeyFifths = parseInt(phraseFindKey.value, 10) || 0;
+    renderPhraseFindBar();
+    renderPhraseList();
+  });
+  phraseFindInput.addEventListener('input', () => {
+    phraseFindQuery = phraseFindInput.value;
+    renderPhraseList();
+  });
+  btnPhraseFindClear.addEventListener('click', () => {
+    phraseFindQuery = '';
+    renderPhraseFindBar();
+    renderPhraseList();
+  });
+
   function renderPhraseList() {
     phraseListEl.innerHTML = '';
-    const shown = phraseTagFilter
-      ? musicPhrases.items.filter((p) => (p.tags || []).includes(phraseTagFilter))
-      : musicPhrases.items;
+    const query = phraseParseFindInput(phraseFindQuery, phraseFindKeyFifths);
+    const shown = musicPhrases.items.filter((p) => {
+      if (phraseTagFilter && !(p.tags || []).includes(phraseTagFilter)) return false;
+      return phraseMatchesDegrees(p.degrees, query);
+    });
     if (shown.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty';
       empty.textContent = musicPhrases.items.length === 0
         ? 'まだフレーズがありません。「＋ 新しいフレーズ」から作成してください。'
-        : 'このタグのフレーズはありません。';
+        : (query.length
+          ? `「${query.join(' ')}」で使えるフレーズはまだありません。`
+          : 'このタグのフレーズはありません。');
       phraseListEl.appendChild(empty);
       return;
     }
@@ -8651,6 +8902,22 @@
         openScoreEditor(null, null, { mode: 'phrase', phrase: item });
       });
       top.appendChild(btnEdit);
+
+      // 選んだキーに移調したコード進行。元のキーと違う時だけ「元: 〜」も添える。
+      if ((item.degrees || []).length) {
+        const hit = document.createElement('div');
+        hit.className = 'phraseHit';
+        const inKey = phraseChordsInKey(item, phraseFindKeyFifths).join(' - ');
+        hit.textContent = inKey;
+        if ((item.keyFifths || 0) !== phraseFindKeyFifths) {
+          const from = document.createElement('span');
+          from.className = 'phraseHitFrom';
+          const orig = SCORE_KEY_OPTIONS.find((k) => k.fifths === (item.keyFifths || 0));
+          from.textContent = `  (元: ${orig ? orig.label : 'C'})`;
+          hit.appendChild(from);
+        }
+        row.appendChild(hit);
+      }
 
       const btnRename = document.createElement('button');
       btnRename.textContent = '名前/タグ';
@@ -8752,12 +9019,15 @@
     await renderScoreCanvas();
     const preview = scoreEditorCanvas.toDataURL('image/png');
 
+    // ディグリーは索引用の導出値。保存のたびにコード名+調から作り直す
+    // (移調やコード名の書き換えがあっても必ず一致する)。
+    const degrees = scorePhraseDegrees(scoreElements, scoreKeyFifths);
     if (existing) {
       Object.assign(existing, {
         elements: cloneScoreElements(scoreElements),
         timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths, clef: scoreClef,
         pickupUnits: scorePickupUnits, staffType: scoreStaffType,
-        preview, updatedAt: Date.now(),
+        degrees, preview, updatedAt: Date.now(),
       });
     } else {
       musicPhrases.items.push({
@@ -8765,7 +9035,7 @@
         elements: cloneScoreElements(scoreElements),
         timeSigIdx: scoreTimeSigIdx, keyFifths: scoreKeyFifths, clef: scoreClef,
         pickupUnits: scorePickupUnits, staffType: scoreStaffType,
-        preview, createdAt: Date.now(), updatedAt: Date.now(),
+        degrees, preview, createdAt: Date.now(), updatedAt: Date.now(),
       });
     }
     await saveMusicPhrases();
@@ -8778,8 +9048,21 @@
   btnPhraseNew.addEventListener('click', () => {
     openScoreEditor(null, null, { mode: 'phrase' });
   });
+  // 以前に保存したフレーズには degrees が無いので、開いた時に一度だけ補完する。
+  // ディグリーは導出値なので、いつ作り直しても結果は同じ。
+  async function backfillPhraseDegrees() {
+    let changed = false;
+    (musicPhrases.items || []).forEach((it) => {
+      if (Array.isArray(it.degrees)) return;
+      it.degrees = scorePhraseDegrees(it.elements, it.keyFifths || 0);
+      changed = true;
+    });
+    if (changed) await saveMusicPhrases();
+  }
   btnGoPhrases.addEventListener('click', async () => {
     musicPhrases = await phraseGet();
+    await backfillPhraseDegrees();
+    renderPhraseFindBar();
     phraseTagFilter = null;
     renderPhraseTagFilter();
     renderPhraseList();
@@ -9798,7 +10081,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-2010';
+  const APP_BUILD = '20260820-2140';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -10936,6 +11219,8 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
+
 
 
 
