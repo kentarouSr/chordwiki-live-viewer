@@ -269,6 +269,42 @@
     background: #1c1c1c; color: #ccc; cursor: pointer;
   }
   .phraseTagChip.active { background: #6cf; color: #111; border-color: #6cf; font-weight: bold; }
+  /* --- フレーズの参考音源(2026-08-20) ---
+     YouTubeか、取り込み済みの曲の音源のどちらかを、開始秒つきで紐づける。
+     ボタン1つでその箇所から流せること、そして**繰り返しと速度変更**が目的。
+     楽譜を書き起こしている間、難所を0.5倍で無限に回したいので、
+     フレーズ集だけでなく楽譜エディタの上にも重ねられるようbody直下に置く。 */
+  #phrasePlayPanel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    background: rgba(24,24,26,0.98); border-top: 1px solid #3a3a3c;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  #phrasePlayPanel.hidden { display: none; }
+  #phrasePlayHead { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+  #phrasePlayTitle { flex: 1; font-size: 13px; color: #ddd; font-weight: bold; }
+  #btnPhrasePlayClose {
+    width: 32px; height: 32px; border-radius: 8px; border: none;
+    background: #3a3a3c; color: #eee; font-size: 16px; cursor: pointer;
+  }
+  #phrasePlayBody:not(:empty) { padding: 0 12px 8px; }
+  #phrasePlayBody iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; }
+  #phrasePlayTransport {
+    display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; flex-wrap: wrap;
+  }
+  #phrasePlayTransport button {
+    font-size: 14px; padding: 9px 13px; border-radius: 8px; border: none;
+    background: #3a3a3c; color: #eee; cursor: pointer;
+  }
+  #btnPhrasePlayToggle { background: #6cf; color: #111; font-weight: bold; }
+  #btnPhrasePlayLoop.active { background: #6cf; color: #111; font-weight: bold; }
+  #phrasePlayTransport label { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 4px; }
+  #phrasePlayRate {
+    font-size: 13px; padding: 6px 8px; border-radius: 6px;
+    border: 1px solid #444; background: #1c1c1c; color: #eee;
+  }
+  #phrasePlayTime { font-size: 13px; color: #bbb; font-variant-numeric: tabular-nums; }
+  .phraseComment { font-size: 12px; color: #bfd8bf; margin-top: 4px; white-space: pre-wrap; }
+  .phraseSrc { font-size: 11px; color: #888; margin-top: 3px; }
   /* --- フレーズの逆引き(2026-08-20) ---
      「このコードの時に何が使えるか」を引くための帯。コード名かディグリーを入れると、
      一致するフレーズが**選んだキーに移調された状態**で並ぶ。
@@ -1341,6 +1377,24 @@
       <button id="btnImagePickerChoose" type="button">📷 ファイルを選ぶ</button>
       <button id="btnImagePickerCancel" type="button">✕</button>
     </div>
+    <div id="phrasePlayPanel" class="hidden">
+      <div id="phrasePlayHead">
+        <span id="phrasePlayTitle"></span>
+        <button id="btnPhrasePlayClose" type="button">&times;</button>
+      </div>
+      <div id="phrasePlayBody"></div>
+      <div id="phrasePlayTransport">
+        <button id="btnPhrasePlayToggle" type="button">&#9654; 再生</button>
+        <button id="btnPhrasePlayRestart" type="button" title="開始位置に戻す">&#8630; 頭へ</button>
+        <button id="btnPhrasePlayLoop" type="button" title="開始〜終了を繰り返す">&#128257; リピート</button>
+        <label>速さ <select id="phrasePlayRate">
+          <option value="0.5">0.5x</option><option value="0.6">0.6x</option>
+          <option value="0.75">0.75x</option><option value="0.9">0.9x</option>
+          <option value="1" selected>1x</option><option value="1.25">1.25x</option>
+        </select></label>
+        <span id="phrasePlayTime">0:00</span>
+      </div>
+    </div>
     <div id="toolbarMorePanel" class="hidden">
       <div id="toolbarMoreHead">
         <span id="toolbarMoreTitle">その他のボタン</span>
@@ -1489,6 +1543,7 @@
       <h1>楽譜作成</h1>
       <button id="btnScoreRollMode" title="ピアノロールに切り替える(五線譜と同じデータを別の形で編集します)">&#127929; ピアノロール</button>
       <button id="btnScoreRecord" class="hidden" title="クリックに合わせてMIDIキーボードで弾くと、そのまま楽譜になります">&#9210; 録音</button>
+      <button id="btnScorePhraseSource" class="hidden" title="このフレーズの参考音源をその箇所から流す(繰り返し・速度変更つき)">&#9835; 参考</button>
       <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067; 使い方</a>
       <button id="btnScoreToolsToggle" title="ツールバーを開閉する(譜面を広く見たい時に)">&#9662; ツール</button>
       <button id="btnScoreShortcutToggle" title="キーボードショートカット一覧を表示/隠す">&#9000; キー</button>
@@ -1989,6 +2044,17 @@
   const phraseFindKey = document.getElementById('phraseFindKey');
   const phraseFindInput = document.getElementById('phraseFindInput');
   const phraseFindChips = document.getElementById('phraseFindChips');
+  const phrasePlayPanel = document.getElementById('phrasePlayPanel');
+  const phrasePlayTitle = document.getElementById('phrasePlayTitle');
+  const phrasePlayBody = document.getElementById('phrasePlayBody');
+  const phrasePlayTransport = document.getElementById('phrasePlayTransport');
+  const btnPhrasePlayToggle = document.getElementById('btnPhrasePlayToggle');
+  const btnPhrasePlayRestart = document.getElementById('btnPhrasePlayRestart');
+  const btnPhrasePlayLoop = document.getElementById('btnPhrasePlayLoop');
+  const phrasePlayRate = document.getElementById('phrasePlayRate');
+  const phrasePlayTime = document.getElementById('phrasePlayTime');
+  const btnPhrasePlayClose = document.getElementById('btnPhrasePlayClose');
+  const btnScorePhraseSource = document.getElementById('btnScorePhraseSource');
   const btnPhraseFindClear = document.getElementById('btnPhraseFindClear');
   const btnTodoBack = document.getElementById('btnTodoBack');
   const todoNewInput = document.getElementById('todoNewInput');
@@ -4515,6 +4581,7 @@
     btnScoreChordMode.innerHTML = '&#9834; 単音';
     setScoreInsertMode(false);
     setScoreRangeMode(false);
+    updateScorePhraseSourceButton();
     // コード略記は既定でオン(2026-08-20〜)。ChordWikiと同じ打ち方をそのまま使えるので、
     // 開くたびに押し直す方が手間だった。音の設定と同じく端末ごとに記憶する。
     btnScoreChordShortcut.classList.toggle('active', scoreChordShortcutOn);
@@ -4560,6 +4627,7 @@
     }
   }
   function closeScoreEditor() {
+    closePhrasePlay(); // 参考音源を鳴らしたまま閉じない
     // 録音したまま閉じるとクリックが鳴り続けるので必ず止める
     if (scoreRecState) scoreStopRecordingInternal();
     scoreRecordPanel.classList.add('hidden');
@@ -8858,6 +8926,243 @@
     renderPhraseList();
   });
 
+  // ==================================================
+  // フレーズの参考音源(2026-08-20〜)
+  // ==================================================
+  // フレーズに「YouTubeのURL+開始秒」か「取り込み済みの曲の音源+開始秒」を
+  // 紐づけ、ボタン1つでその箇所から流せるようにする。
+  // **区間の繰り返しと速度変更**まで用意するのは、楽譜に書き起こす時に
+  // 難所を0.5倍で何度も聴く使い方が本命だから。
+  //
+  // ビューアの動画/音源パネルは「今開いている曲」の状態に強く結びついているので
+  // 相乗りしない(相乗りすると、フレーズを聴いただけで曲側の再生位置が動く)。
+  // YouTubeは生のiframeではなくIFrame APIを使う。開始秒を渡すだけなら生でも
+  // 足りるが、**区間の繰り返しと速度変更**にはAPIの seekTo / setPlaybackRate が要る。
+  const phraseAudioEl = new Audio();
+  let phraseAudioUrl = null;
+  let phrasePlayingItem = null;
+  let phraseYtPlayer = null;
+  let phraseLoopTimer = null;
+  let phrasePlayLoop = true;
+
+  function parseTimeToSec(text) {
+    const t = String(text || '').trim();
+    if (!t) return 0;
+    if (/^\d+(\.\d+)?$/.test(t)) return Math.max(0, Math.round(Number(t)));
+    const parts = t.split(':').map((x) => Number(x));
+    if (parts.some((x) => !Number.isFinite(x))) return 0;
+    return Math.max(0, Math.round(parts.reduce((a, b) => a * 60 + b, 0)));
+  }
+  function formatSec(sec) {
+    const s = Math.max(0, Math.floor(sec || 0));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+  function phrasePlayRateValue() { return Number(phrasePlayRate.value) || 1; }
+
+  function releasePhraseAudio() {
+    try { phraseAudioEl.pause(); } catch (err) { /* 無視 */ }
+    phraseAudioEl.removeAttribute('src');
+    try { phraseAudioEl.load(); } catch (err) { /* 無視 */ }
+    if (phraseAudioUrl) { URL.revokeObjectURL(phraseAudioUrl); phraseAudioUrl = null; }
+  }
+  function closePhrasePlay() {
+    clearInterval(phraseLoopTimer);
+    phraseLoopTimer = null;
+    if (phraseYtPlayer) {
+      try { phraseYtPlayer.destroy(); } catch (err) { /* 無視 */ }
+      phraseYtPlayer = null;
+    }
+    phrasePlayPanel.classList.add('hidden');
+    phrasePlayBody.innerHTML = '';
+    releasePhraseAudio();
+    phrasePlayingItem = null;
+  }
+  btnPhrasePlayClose.addEventListener('click', closePhrasePlay);
+
+  function phraseSrcRange() {
+    const src = (phrasePlayingItem && phrasePlayingItem.source) || {};
+    return { start: src.startSec || 0, end: src.endSec || null };
+  }
+  function setPhrasePlayToggleLabel(playing) {
+    btnPhrasePlayToggle.innerHTML = playing ? '\u23F8 一時停止' : '\u25B6 再生';
+  }
+
+  // 区間の終わりに来たら頭へ戻す(リピートON)か止める(OFF)。
+  // 音源はtimeupdate、YouTubeは現在位置を定期的に見る(APIにイベントが無いため)。
+  function phraseHandlePosition(cur, seek, pause) {
+    phrasePlayTime.textContent = formatSec(cur);
+    const { start, end } = phraseSrcRange();
+    if (end && cur >= end) {
+      if (phrasePlayLoop) seek(start);
+      else { pause(); setPhrasePlayToggleLabel(false); }
+    }
+  }
+  phraseAudioEl.addEventListener('timeupdate', () => {
+    phraseHandlePosition(phraseAudioEl.currentTime,
+      (t) => { phraseAudioEl.currentTime = t; },
+      () => phraseAudioEl.pause());
+  });
+
+  btnPhrasePlayToggle.addEventListener('click', () => {
+    if (phraseYtPlayer) {
+      const st = phraseYtPlayer.getPlayerState && phraseYtPlayer.getPlayerState();
+      if (st === 1) { phraseYtPlayer.pauseVideo(); setPhrasePlayToggleLabel(false); }
+      else { phraseYtPlayer.playVideo(); setPhrasePlayToggleLabel(true); }
+      return;
+    }
+    if (phraseAudioEl.paused) phraseAudioEl.play(); else phraseAudioEl.pause();
+    setPhrasePlayToggleLabel(!phraseAudioEl.paused);
+  });
+  btnPhrasePlayRestart.addEventListener('click', () => {
+    const { start } = phraseSrcRange();
+    if (phraseYtPlayer) { phraseYtPlayer.seekTo(start, true); phraseYtPlayer.playVideo(); }
+    else { phraseAudioEl.currentTime = start; phraseAudioEl.play(); }
+    setPhrasePlayToggleLabel(true);
+  });
+  btnPhrasePlayLoop.addEventListener('click', () => {
+    phrasePlayLoop = !phrasePlayLoop;
+    btnPhrasePlayLoop.classList.toggle('active', phrasePlayLoop);
+  });
+  phrasePlayRate.addEventListener('change', () => {
+    const r = phrasePlayRateValue();
+    if (phraseYtPlayer && phraseYtPlayer.setPlaybackRate) phraseYtPlayer.setPlaybackRate(r);
+    phraseAudioEl.playbackRate = r;
+  });
+
+  async function playPhraseSource(item) {
+    const src = item && item.source;
+    if (!src || !src.kind) return;
+    closePhrasePlay();
+    phrasePlayingItem = item;
+    phrasePlayPanel.classList.remove('hidden');
+    btnPhrasePlayLoop.classList.toggle('active', phrasePlayLoop);
+    phrasePlayTitle.textContent = `${item.name} — ${formatSec(src.startSec)}`
+      + (src.endSec ? `〜${formatSec(src.endSec)}` : '〜');
+    setPhrasePlayToggleLabel(true);
+
+    if (src.kind === 'youtube') {
+      const vid = extractYoutubeId(src.url);
+      if (!vid) { alert('YouTubeのURLから動画IDを読み取れませんでした。'); closePhrasePlay(); return; }
+      const YT = await loadYoutubeApi();
+      // YT.Playerは渡した要素を置き換えるので、毎回使い捨ての子要素を作って渡す
+      phrasePlayBody.innerHTML = '';
+      const mount = document.createElement('div');
+      phrasePlayBody.appendChild(mount);
+      phraseYtPlayer = new YT.Player(mount, {
+        videoId: vid,
+        playerVars: { start: src.startSec || 0, autoplay: 1, rel: 0 },
+        events: {
+          onReady: (e) => {
+            e.target.setPlaybackRate(phrasePlayRateValue());
+            e.target.playVideo();
+          },
+        },
+      });
+      // 位置の監視はポーリング。YouTubeのAPIに「今何秒か」のイベントが無いため。
+      phraseLoopTimer = setInterval(() => {
+        if (!phraseYtPlayer || !phraseYtPlayer.getCurrentTime) return;
+        phraseHandlePosition(phraseYtPlayer.getCurrentTime(),
+          (t) => phraseYtPlayer.seekTo(t, true),
+          () => phraseYtPlayer.pauseVideo());
+      }, 250);
+      return;
+    }
+
+    const rec = await audioGet(src.songUuid);
+    if (!rec || !rec.data) {
+      alert('紐づけた曲の音源が見つかりませんでした(消された可能性があります)。');
+      closePhrasePlay();
+      return;
+    }
+    phraseAudioUrl = URL.createObjectURL(new Blob([rec.data], { type: rec.mimeType || 'audio/mpeg' }));
+    phraseAudioEl.src = phraseAudioUrl;
+    phraseAudioEl.playbackRate = phrasePlayRateValue();
+    phraseAudioEl.currentTime = src.startSec || 0;
+    phraseAudioEl.play().catch(() => setPhrasePlayToggleLabel(false));
+  }
+
+  // 音源を持っている曲の一覧(フレーズに紐づける先の候補)
+  async function songsWithAudio() {
+    const songs = await dbGetAll();
+    const out = [];
+    for (const song of songs) {
+      if (!song.uuid) continue;
+      const rec = await audioGet(song.uuid);
+      if (rec && rec.data) out.push({ uuid: song.uuid, name: song.name });
+    }
+    return out;
+  }
+
+  // フレーズの「メモ」と「参考音源」をまとめて設定する
+  async function editPhraseDetail(item) {
+    const comment = prompt('メモ(自由記述。使いどころ・出典など)', item.comment || '');
+    if (comment === null) return;
+    item.comment = comment.trim();
+
+    const cur = item.source || {};
+    const useYt = confirm('参考音源にYouTubeを使いますか?\n\n「OK」= YouTube\n「キャンセル」= 取り込み済みの曲の音源(または解除)');
+    const askRange = (next) => {
+      const start = prompt('開始位置(秒 または 1:23 の形式)', formatSec(cur.startSec || 0));
+      if (start === null) return null;
+      const end = prompt('終了位置(空ならなりゆき。入れるとその区間を繰り返せます)',
+        cur.endSec ? formatSec(cur.endSec) : '');
+      if (end === null) return null;
+      return Object.assign(next, { startSec: parseTimeToSec(start),
+        endSec: end.trim() ? parseTimeToSec(end) : null });
+    };
+    if (useYt) {
+      const url = prompt('YouTubeのURL', cur.url || '');
+      if (url === null) return;
+      if (!url.trim()) item.source = null;
+      else {
+        const src = askRange({ kind: 'youtube', url: url.trim() });
+        if (!src) return;
+        item.source = src;
+      }
+    } else {
+      const list = await songsWithAudio();
+      if (list.length === 0) {
+        if (cur.kind) {
+          if (confirm('音源を取り込んだ曲がありません。今の紐づけを解除しますか?')) item.source = null;
+        } else {
+          alert('音源を取り込んだ曲がありません。先に曲の画面で「🎵 音源」から取り込んでください。');
+          }
+      } else {
+        const menu = list.map((x, i) => `${i + 1}. ${x.name}`).join('\n');
+        const pick = prompt(`どの曲の音源を使いますか?(番号。0で解除)\n\n${menu}`, '1');
+        if (pick === null) return;
+        const idx = parseInt(pick, 10);
+        if (idx === 0) item.source = null;
+        else if (Number.isFinite(idx) && list[idx - 1]) {
+          const src = askRange({ kind: 'audio', songUuid: list[idx - 1].uuid,
+            songName: list[idx - 1].name });
+          if (!src) return;
+          item.source = src;
+        }
+      }
+    }
+    item.updatedAt = Date.now();
+    await saveMusicPhrases();
+    renderPhraseList();
+    updateScorePhraseSourceButton();
+  }
+
+  // 楽譜エディタからも同じパネルを開けるようにする。
+  // 書き起こしている最中に難所を繰り返し聴くのが本命の使い方。
+  function editingPhraseItem() {
+    if (!scoreEditingPhraseId) return null;
+    return (musicPhrases.items || []).find((x) => x.id === scoreEditingPhraseId) || null;
+  }
+  function updateScorePhraseSourceButton() {
+    const item = editingPhraseItem();
+    const has = !!(item && item.source && item.source.kind);
+    btnScorePhraseSource.classList.toggle('hidden', !has);
+  }
+  btnScorePhraseSource.addEventListener('click', () => {
+    const item = editingPhraseItem();
+    if (item) playPhraseSource(item);
+  });
+
   function renderPhraseList() {
     phraseListEl.innerHTML = '';
     const query = phraseParseFindInput(phraseFindQuery, phraseFindKeyFifths);
@@ -8904,6 +9209,21 @@
       top.appendChild(btnEdit);
 
       // 選んだキーに移調したコード進行。元のキーと違う時だけ「元: 〜」も添える。
+      if (item.comment) {
+        const c = document.createElement('div');
+        c.className = 'phraseComment';
+        c.textContent = item.comment;
+        row.appendChild(c);
+      }
+      if (item.source && item.source.kind) {
+        const sEl = document.createElement('div');
+        sEl.className = 'phraseSrc';
+        const range = formatSec(item.source.startSec)
+          + (item.source.endSec ? `〜${formatSec(item.source.endSec)}` : '〜');
+        sEl.textContent = item.source.kind === 'youtube'
+          ? `♪ YouTube ${range}` : `♪ ${item.source.songName || '曲の音源'} ${range}`;
+        row.appendChild(sEl);
+      }
       if ((item.degrees || []).length) {
         const hit = document.createElement('div');
         hit.className = 'phraseHit';
@@ -8935,6 +9255,20 @@
         renderPhraseList();
       });
       top.appendChild(btnRename);
+
+      const btnDetail = document.createElement('button');
+      btnDetail.textContent = '📝♪';
+      btnDetail.title = 'メモと参考音源(YouTube / 曲の音源)を設定';
+      btnDetail.addEventListener('click', () => editPhraseDetail(item));
+      top.appendChild(btnDetail);
+
+      if (item.source && item.source.kind) {
+        const btnPlay = document.createElement('button');
+        btnPlay.textContent = '▶';
+        btnPlay.title = '参考音源のその箇所から再生';
+        btnPlay.addEventListener('click', () => playPhraseSource(item));
+        top.appendChild(btnPlay);
+      }
 
       const btnTodo = document.createElement('button');
       btnTodo.textContent = '✅';
@@ -9069,6 +9403,7 @@
     showScreen(phraseListScreen);
   });
   btnPhraseBack.addEventListener('click', () => {
+    closePhrasePlay();
     showScreen(songListScreen);
     renderSongList();
   });
@@ -10081,7 +10416,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-2140';
+  const APP_BUILD = '20260820-2320';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -11219,6 +11554,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
