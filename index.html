@@ -282,12 +282,19 @@
   /* --- 不具合・要望の送信(2026-08-21) ---
      一般公開する予定なので、鍵(URLのパラメータ)を持たない人からも送れるようにする。
      送ったあとに何も起きないと届いたか分からないので、完了画面を必ず出す。 */
-  #feedbackOverlay {
+  #feedbackOverlay, #keyNoticeOverlay {
     position: fixed; inset: 0; z-index: 70; display: flex;
     align-items: center; justify-content: center; padding: 16px;
     background: rgba(0,0,0,0.6);
   }
-  #feedbackOverlay.hidden { display: none; }
+  #feedbackOverlay.hidden, #keyNoticeOverlay.hidden { display: none; }
+  /* URLは長いので折り返す。読めることより「これが鍵だ」と分かることが大事 */
+  #keyNoticeUrl {
+    font-size: 11px; color: #9ad; background: #111; border: 1px solid #333;
+    border-radius: 8px; padding: 8px; margin-bottom: 10px;
+    word-break: break-all; line-height: 1.5;
+  }
+  #feedbackButtons #btnKeyNoticeClose { background: #6cf; color: #111; font-weight: bold; }
   #feedbackBox {
     width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
     background: #1c1c1e; border: 1px solid #3a3a3c; border-radius: 14px;
@@ -1470,6 +1477,19 @@
     <div id="songPickerList"></div>
   </div>
 
+  <div id="keyNoticeOverlay" class="hidden">
+    <div id="feedbackBox">
+      <h2>&#128273; このURLがあなたのデータの鍵です</h2>
+      <p class="fbNote">いま作ったものは、この端末とクラウドの両方に保存されました。<strong>同じURLを開けば、他の端末でも同じ中身が出てきます。</strong></p>
+      <p class="fbNote"><strong>このURLを失くすと、クラウド側のデータには二度と入れません。</strong>ブックマークするか、ホーム画面に追加しておいてください。他の人には教えないでください。</p>
+      <div id="keyNoticeUrl"></div>
+      <div id="feedbackButtons">
+        <button id="btnKeyNoticeCopy" type="button">URLをコピー</button>
+        <button id="btnKeyNoticeClose" type="button">わかった</button>
+      </div>
+    </div>
+  </div>
+
   <div id="feedbackOverlay" class="hidden">
     <div id="feedbackBox">
       <div id="feedbackForm">
@@ -2157,6 +2177,10 @@
   const btnFeedbackSend = document.getElementById('btnFeedbackSend');
   const btnFeedbackCancel = document.getElementById('btnFeedbackCancel');
   const btnFeedbackClose = document.getElementById('btnFeedbackClose');
+  const keyNoticeOverlay = document.getElementById('keyNoticeOverlay');
+  const keyNoticeUrl = document.getElementById('keyNoticeUrl');
+  const btnKeyNoticeCopy = document.getElementById('btnKeyNoticeCopy');
+  const btnKeyNoticeClose = document.getElementById('btnKeyNoticeClose');
   const btnFootReset = document.getElementById('btnFootReset');
   const footGroup = document.getElementById('footGroup');
   const btnFootFold = document.getElementById('btnFootFold');
@@ -2579,7 +2603,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
       const req = tx.objectStore(STORE).add(song);
-      req.onsuccess = () => resolve(req.result); // 新規id
+      req.onsuccess = () => { markDataChanged(); resolve(req.result); }; // 新規id
       req.onerror = () => reject(req.error);
     });
   }
@@ -2589,7 +2613,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
       const req = tx.objectStore(STORE).put(song);
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => { markDataChanged(); resolve(req.result); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -2633,7 +2657,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
       const req = tx.objectStore(STORE).delete(id);
-      req.onsuccess = () => resolve();
+      req.onsuccess = () => { markDataChanged(); resolve(); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -2644,7 +2668,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(SETLIST_STORE, 'readwrite');
       const req = tx.objectStore(SETLIST_STORE).add(setlist);
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => { markDataChanged(); resolve(req.result); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -2653,7 +2677,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(SETLIST_STORE, 'readwrite');
       const req = tx.objectStore(SETLIST_STORE).put(setlist);
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => { markDataChanged(); resolve(req.result); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -2680,7 +2704,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(SETLIST_STORE, 'readwrite');
       const req = tx.objectStore(SETLIST_STORE).delete(id);
-      req.onsuccess = () => resolve();
+      req.onsuccess = () => { markDataChanged(); resolve(); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -2700,7 +2724,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(TODO_STORE, 'readwrite');
       const req = tx.objectStore(TODO_STORE).put(record);
-      req.onsuccess = () => resolve();
+      req.onsuccess = () => { markDataChanged(); resolve(); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -2720,7 +2744,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(LINK_STORE, 'readwrite');
       const req = tx.objectStore(LINK_STORE).put(record);
-      req.onsuccess = () => resolve();
+      req.onsuccess = () => { markDataChanged(); resolve(); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -2743,7 +2767,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(PHRASE_STORE, 'readwrite');
       const req = tx.objectStore(PHRASE_STORE).put(record);
-      req.onsuccess = () => resolve();
+      req.onsuccess = () => { markDataChanged(); resolve(); };
       req.onerror = () => reject(req.error);
     });
   }
@@ -11036,7 +11060,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-1355';
+  const APP_BUILD = '20260821-1520';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -11551,25 +11575,112 @@
   // そのままブックマークするため、ここで消してしまうと後から追加した時にキーが
   // 失われてしまう(実際に発生した不具合)。
   //
-  // URLにもlocalStorageにもキーが無い「真っさらな初回訪問」の場合だけ、その場で
-  // あなた用のURLへの切り替えを促す。以前は何もしないと設定画面の存在にすら気づきにくかった
-  // ため。「キャンセル」を選べばそのままローカル利用のみ続けられ、この確認は
-  // 端末ごとに一度きりにする(うるさくならないようフラグをlocalStorageに残す)。
-  const SYNC_PROMPT_SHOWN_KEY = 'cwlv_sync_prompt_shown';
+  // 真っさらな初回訪問では、**その場であなた用のURLを作ってアドレスバーに入れる。**
+  // 以前はここで confirm() を出していたが、アプリを一度も見ていない人に
+  // いきなり設定の話を突きつけていて、初見殺しになっていた。
+  //
+  // ただし作った時点では**まだサーバーに登録しない(仮の状態)**。
+  // 見に来ただけで帰る人がサーバー側に行を作らないようにするため。
+  // 実際に中身を変える操作をした時に初めて登録する(markDataChanged)。
+  //
+  // 先にURLを決めてしまうのは、**登録の前後でURLを変えないため**。
+  // 仮の状態でブックマークやホーム画面追加をした人も、そのまま使い続けられる。
+  const KEY_STATE_STORAGE = 'cwlv_key_state'; // 'provisional' | 'registered'
+
+  // base64url 32文字(=24バイト)。サーバー側の形式チェックと合わせてある。
+  function generateSpaceKey() {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    let bin = '';
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
   (() => {
     const params = new URLSearchParams(location.search);
     const keyFromUrl = params.get('key');
+    const stored = localStorage.getItem(SYNC_KEY_STORAGE);
+
     if (keyFromUrl) {
-      localStorage.setItem(SYNC_KEY_STORAGE, keyFromUrl);
+      // 同じキーで開き直しただけなら、仮かどうかの状態はそのまま残す。
+      // 別のキーが来た場合は、誰かからURLを渡されたということなので登録済み扱い。
+      if (keyFromUrl !== stored) {
+        localStorage.setItem(SYNC_KEY_STORAGE, keyFromUrl);
+        localStorage.setItem(KEY_STATE_STORAGE, 'registered');
+      } else if (!localStorage.getItem(KEY_STATE_STORAGE)) {
+        localStorage.setItem(KEY_STATE_STORAGE, 'registered');
+      }
       return;
     }
-    if (localStorage.getItem(SYNC_KEY_STORAGE)) return;
-    if (localStorage.getItem(SYNC_PROMPT_SHOWN_KEY)) return;
-    localStorage.setItem(SYNC_PROMPT_SHOWN_KEY, '1');
-    if (confirm('このURLは、まだあなた用のURLになっていません。\nあなた用のURLで開くと、データがクラウドにも保存され、同じURLを開いた他の端末とも中身がそろいます。\n今すぐ設定しますか？\n(「キャンセル」を選んでもこのままこの端末だけで使えます。後から「設定・バックアップ」内の「別のURLに切り替える」でいつでも設定できます)')) {
-      promptAndSetSyncKey('');
+
+    if (stored) {
+      // この仕組みより前から使っている端末。持ち主から渡されたキーなので登録済み。
+      if (!localStorage.getItem(KEY_STATE_STORAGE)) {
+        localStorage.setItem(KEY_STATE_STORAGE, 'registered');
+      }
+      saveSyncKey(stored); // ホーム画面追加に備えてURLにも入れ直す
+      return;
     }
+
+    saveSyncKey(generateSpaceKey());
+    localStorage.setItem(KEY_STATE_STORAGE, 'provisional');
   })();
+
+  function keyState() { return localStorage.getItem(KEY_STATE_STORAGE) || ''; }
+
+  // 仮のURLをサーバーに登録する。**中身を変える操作をした時にだけ呼ばれる。**
+  // 失敗しても黙って諦める: 登録できなくても端末の中では全機能が使えるので、
+  // ここでエラーを出しても利用者にできることが無い。次に何か変えた時に再挑戦する。
+  let spaceRegisterInFlight = false;
+  async function ensureSpaceRegistered() {
+    if (keyState() !== 'provisional') return;
+    if (spaceRegisterInFlight) return;
+    const key = localStorage.getItem(SYNC_KEY_STORAGE);
+    if (!key) return;
+    spaceRegisterInFlight = true;
+    try {
+      const res = await syncFetch(`${SYNC_API_URL}/api/space`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      });
+      if (!res.ok) return;
+      localStorage.setItem(KEY_STATE_STORAGE, 'registered');
+      showKeyNotice();
+      runSync({ silent: true });
+    } catch (err) {
+      console.error('あなた用のURLの登録に失敗(次に何か変えた時に再挑戦します)', err);
+    } finally {
+      spaceRegisterInFlight = false;
+    }
+  }
+
+  // 登録できた瞬間に一度だけ出す。
+  // このURLは自動で付いたものなので、放っておくと本人が「大事なもの」だと
+  // 気づかないまま閉じてしまう。そうなるとクラウド側のデータに二度と入れない。
+  function showKeyNotice() {
+    const key = localStorage.getItem(SYNC_KEY_STORAGE);
+    if (!key) return;
+    keyNoticeUrl.textContent = `${location.origin}${location.pathname}?key=${key}`;
+    keyNoticeOverlay.classList.remove('hidden');
+  }
+  btnKeyNoticeClose.addEventListener('click', () => keyNoticeOverlay.classList.add('hidden'));
+  keyNoticeOverlay.addEventListener('click', (e) => {
+    if (e.target === keyNoticeOverlay) keyNoticeOverlay.classList.add('hidden');
+  });
+  btnKeyNoticeCopy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(keyNoticeUrl.textContent);
+      btnKeyNoticeCopy.textContent = 'コピーしました';
+      setTimeout(() => { btnKeyNoticeCopy.textContent = 'URLをコピー'; }, 2000);
+    } catch (err) {
+      prompt('コピーしてください:', keyNoticeUrl.textContent);
+    }
+  });
+
+  // 中身を変える操作があったことを知らせる。IndexedDBへの書き込み口から呼ぶ。
+  function markDataChanged() {
+    if (keyState() === 'provisional') ensureSpaceRegistered();
+  }
 
   // 「あなた用のURL」の正体は、URLの末尾に付く ?key=... というパラメータ。
   // 保存すると同時にアドレスバーのURLにも反映する。
@@ -11601,10 +11712,12 @@
     const key = extractSyncKey(input);
     if (key === '') {
       localStorage.removeItem(SYNC_KEY_STORAGE);
+      localStorage.removeItem(KEY_STATE_STORAGE);
       alert('この端末だけの利用に戻しました。データは端末内に残っています。');
       return;
     }
     saveSyncKey(key);
+    localStorage.setItem(KEY_STATE_STORAGE, 'registered');
     alert('あなた用のURLに切り替えました。アドレスバーのURLにも反映したので、このままホーム画面に追加すれば次回からこのURLで開けます。');
   }
 
@@ -11613,7 +11726,10 @@
     if (!key) {
       const input = prompt('あなた用のURLを貼り付けてください');
       key = extractSyncKey(input);
-      if (key) saveSyncKey(key);
+      if (key) {
+        saveSyncKey(key);
+        localStorage.setItem(KEY_STATE_STORAGE, 'registered');
+      }
     }
     return key || null;
   }
@@ -11939,7 +12055,9 @@
   // 「毎回ボタンを押さなくても良いのでは」というフィードバックのため。
   // getSyncKey()は未設定時にprompt()を出してしまうので、ここでは直接
   // localStorageを見て「既にキーがある場合だけ」に限定している。
-  if (localStorage.getItem(SYNC_KEY_STORAGE)) {
+  // まだ仮のURL(=一度も中身を変えていない)の時は、サーバーに置き場所が無いので
+  // 同期しようとしても401になるだけ。無駄な通信をしないよう飛ばす。
+  if (localStorage.getItem(SYNC_KEY_STORAGE) && keyState() === 'registered') {
     runSync({ silent: true });
   }
 
@@ -11969,13 +12087,19 @@
   btnCopySetupLink.addEventListener('click', async () => {
     const key = localStorage.getItem(SYNC_KEY_STORAGE);
     if (!key) {
-      alert('このURLはまだあなた用のURLではありません。先に「今すぐ同期」を1回押して設定してください。');
+      alert('あなた用のURLがまだありません。この画面を再読み込みしてからお試しください。');
       return;
     }
     const url = `${location.origin}${location.pathname}?key=${encodeURIComponent(key)}`;
+    // 仮の状態(まだ何も作っていない)でも、URL自体は決まっているのでコピーできる。
+    // ただし他の端末で開いても今はまだ何も入っていないことを伝えておく。
+    const note = keyState() === 'provisional'
+      ? '\n\n(まだ何も作っていないので、他の端末で開いても中身は空です。'
+        + 'このURLで曲やメモを作ると、そこから中身がそろうようになります)'
+      : '';
     try {
       await navigator.clipboard.writeText(url);
-      alert('あなた用のURLをコピーしました。LINEやメモなどに貼り付けて、他の端末で開いてください。');
+      alert('あなた用のURLをコピーしました。LINEやメモなどに貼り付けて、他の端末で開いてください。' + note);
     } catch (err) {
       prompt('コピーしてください:', url);
     }

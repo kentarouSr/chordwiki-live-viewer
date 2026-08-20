@@ -4,6 +4,15 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, X-Sync-Key',
 };
 
+// 自動発行した置き場所(self_issued = 1)にかける上限。
+// R2の無料枠が10GBなので、数十人が使っても収まる大きさにしてある。
+// 持ち主が手で足したキーには一切かからない。
+const SPACE_MAX_SONGS = 150;
+const SPACE_MAX_BYTES = 200 * 1024 * 1024; // 200MB
+// 同じ回線から1日に発行できる数。1人が携帯・タブレット・PCで開くと
+// それぞれ別のURLになりうるので、少しだけ余裕を持たせている。
+const SPACE_ISSUE_PER_IP_PER_DAY = 5;
+
 // IPをそのまま保存せず、連投を数えるためだけのハッシュにする
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -53,14 +62,17 @@ export default {
       return row ? key : null;
     };
 
-    // base64url、24バイト(=32文字)のランダムな鍵を生成する。
-    // 「あなた用のURLを発行する」機能で使う予定(2026-08-21時点では未接続)。
-    // eslint-disable-next-line no-unused-vars
-    const generateSpaceKey = () => {
-      const bytes = crypto.getRandomValues(new Uint8Array(24));
-      let bin = '';
-      for (const b of bytes) bin += String.fromCharCode(b);
-      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    // あなた用のURLはアプリ側が作る(初回訪問した時点でアドレスバーに入れて
+    // しまい、あとから登録しても**URLが変わらない**ようにするため。
+    // サーバーが作ると、登録の瞬間にURLが変わってしまう)。
+    // ここでは形だけ確かめる: base64urlの32文字、つまり24バイトぶん。
+    const isValidSpaceKey = (k) => typeof k === 'string' && /^[A-Za-z0-9_-]{32}$/.test(k);
+
+    // この置き場所が自動発行された物かどうか。上限をかけるのはこちらだけ。
+    const isSelfIssued = async (key) => {
+      const row = await env.DB.prepare('SELECT self_issued FROM allowed_keys WHERE key = ?')
+        .bind(key).first();
+      return !!(row && row.self_issued);
     };
 
     const rowToSong = (row) => ({
@@ -139,20 +151,42 @@ export default {
         const owner = await env.DB.prepare('SELECT sync_key FROM songs WHERE uuid = ?').bind(uuid).first();
         if (owner && owner.sync_key !== key) return err('forbidden', 403);
 
+        // 自動発行された置き場所には上限をかける。
+        // 上書き(既にある曲の更新)は曲数を増やさないので、新規の時だけ数える。
+        const size = Number(file.size) || 0;
+        if (await isSelfIssued(key)) {
+          const used = await env.DB.prepare(
+            'SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS bytes'
+            + ' FROM songs WHERE sync_key = ? AND uuid <> ?'
+          ).bind(key, uuid).first();
+          const n = (used && used.n) || 0;
+          const bytes = (used && used.bytes) || 0;
+          if (!owner && n >= SPACE_MAX_SONGS) {
+            return err(`このURLに保存できる曲は${SPACE_MAX_SONGS}曲までです。`
+              + '不要な曲を削除するか、ZIPバックアップに移してください。', 413);
+          }
+          if (bytes + size > SPACE_MAX_BYTES) {
+            const mb = Math.round(SPACE_MAX_BYTES / 1024 / 1024);
+            return err(`このURLに保存できる容量(${mb}MB)を超えました。`
+              + '不要な曲を削除するか、ZIPバックアップに移してください。', 413);
+          }
+        }
+
         const r2Key = `songs/${uuid}`;
         await env.BUCKET.put(r2Key, file.stream(), {
           httpMetadata: { contentType: mimeType },
         });
 
         await env.DB.prepare(
-          `INSERT INTO songs (uuid, sync_key, name, bpm, speed, file_name, mime_type, r2_key, memos, youtube_url, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO songs (uuid, sync_key, name, bpm, speed, file_name, mime_type, r2_key, memos, youtube_url, size_bytes, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(uuid) DO UPDATE SET
              name = excluded.name, bpm = excluded.bpm, speed = excluded.speed,
              file_name = excluded.file_name, mime_type = excluded.mime_type,
              r2_key = excluded.r2_key, memos = excluded.memos, youtube_url = excluded.youtube_url,
+             size_bytes = excluded.size_bytes,
              updated_at = excluded.updated_at`
-        ).bind(uuid, key, name, bpm, speed || 20, fileName, mimeType, r2Key, memosRaw || '[]', youtubeUrlRaw || null, createdAt || Date.now(), updatedAt).run();
+        ).bind(uuid, key, name, bpm, speed || 20, fileName, mimeType, r2Key, memosRaw || '[]', youtubeUrlRaw || null, size, createdAt || Date.now(), updatedAt).run();
         // 過去に削除されていても、それより新しい更新なら復活とみなしtombstoneを消す
         await env.DB.prepare('DELETE FROM deleted_songs WHERE uuid = ? AND sync_key = ?').bind(uuid, key).run();
 
@@ -345,6 +379,45 @@ export default {
            ON CONFLICT(sync_key) DO UPDATE SET items_json = excluded.items_json, updated_at = excluded.updated_at`
         ).bind(key, JSON.stringify(items), updatedAt).run();
         return json({ ok: true });
+      }
+
+      // ------------------------------------------------------------------
+      // あなた用のURLの登録(2026-08-20)
+      // ------------------------------------------------------------------
+      // アプリは初回訪問した時点で自分でURLを作り、アドレスバーに入れる。
+      // ただしその時点では**まだ登録しない**。実際に中身を変える操作をした時に
+      // 初めてここへ来る。見に来ただけで帰る人がD1に行を作らないようにするため。
+      //
+      // 誰でも呼べるので、同じ回線からの1日あたりの発行数を制限する。
+      // 既に登録済みのキーが来た場合は、そのまま成功として返す
+      // (通信が途中で切れた時などに、アプリが安心して呼び直せるように)。
+      if (path === '/api/space' && request.method === 'POST') {
+        const payload = await request.json().catch(() => null);
+        if (!payload) return err('bad body');
+        const key = String(payload.key || '');
+        if (!isValidSpaceKey(key)) return err('bad key');
+
+        const existing = await env.DB.prepare('SELECT 1 FROM allowed_keys WHERE key = ?')
+          .bind(key).first();
+        if (existing) return json({ ok: true, alreadyRegistered: true });
+
+        const ipHash = await sha256Hex(
+          (request.headers.get('CF-Connecting-IP') || 'unknown') + '|cwlv-space'
+        );
+        const since = Date.now() - 24 * 60 * 60 * 1000;
+        const recent = await env.DB.prepare(
+          'SELECT COUNT(*) AS n FROM allowed_keys WHERE ip_hash = ? AND created_at > ?'
+        ).bind(ipHash, since).first();
+        if (recent && recent.n >= SPACE_ISSUE_PER_IP_PER_DAY) {
+          return err('しばらく待ってからお試しください(発行が多すぎます)。'
+            + 'このままでも、この端末の中だけでは今まで通り全機能が使えます。', 429);
+        }
+
+        await env.DB.prepare(
+          'INSERT INTO allowed_keys (key, label, created_at, self_issued, ip_hash)'
+          + ' VALUES (?, ?, ?, 1, ?)'
+        ).bind(key, 'self-issued', Date.now(), ipHash).run();
+        return json({ ok: true, maxSongs: SPACE_MAX_SONGS, maxBytes: SPACE_MAX_BYTES });
       }
 
       // ------------------------------------------------------------------

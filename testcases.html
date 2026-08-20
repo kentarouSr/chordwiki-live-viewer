@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>テスト項目 - ChordWiki Live Viewer</title>
+<meta name="theme-color" content="#1b1f2a">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #111; color: #eee;
+    font-family: system-ui, sans-serif; line-height: 1.7;
+    padding: 16px; padding-bottom: 100px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  a { color: #6cf; }
+  #backLink {
+    display: inline-block; margin-bottom: 16px; font-size: 14px;
+    color: #ccc; text-decoration: none; padding: 8px 14px;
+    background: #1c1c1c; border-radius: 8px;
+  }
+  h1 { font-size: 21px; margin: 0 0 6px; }
+  .subtitle { color: #999; font-size: 13px; margin-bottom: 18px; }
+  h2 {
+    font-size: 16px; margin: 30px 0 10px; padding-top: 12px;
+    border-top: 1px solid #2a2a2a; color: #6cf;
+  }
+  h2 .count { float: right; font-size: 12px; color: #777; font-weight: normal; }
+  code { background: #1c1c1c; padding: 1px 6px; border-radius: 4px; font-size: 0.9em; }
+
+  /* --- 進み具合 --- */
+  #progressBar {
+    position: sticky; top: 0; z-index: 10; margin: 0 -16px 16px;
+    padding: 10px 16px; background: #16181d; border-bottom: 1px solid #2a2a2a;
+  }
+  #progressText { font-size: 13px; color: #ccc; display: flex; justify-content: space-between; }
+  #progressTrack { height: 6px; background: #2a2a2a; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  #progressFill { height: 100%; width: 0; background: #6cf; transition: width 0.2s; }
+
+  /* --- 1項目 --- */
+  .case {
+    background: #1a1a1c; border: 1px solid #2a2a2a; border-radius: 10px;
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .caseHead {
+    display: flex; align-items: flex-start; gap: 10px; padding: 12px;
+    cursor: pointer; user-select: none;
+  }
+  .caseHead input[type=checkbox] {
+    flex: none; width: 24px; height: 24px; margin: 2px 0 0; accent-color: #4ade80;
+  }
+  .caseTitle { flex: 1; font-size: 14px; line-height: 1.6; }
+  .caseNo { color: #777; font-size: 11px; margin-right: 6px; }
+  .case.done { border-color: #2f5c3f; background: #16201a; }
+  .case.done .caseTitle { color: #8a9; }
+  .case.ng { border-color: #7a3a3a; background: #201616; }
+
+  .caseBody { padding: 0 12px 12px 46px; font-size: 13px; color: #aaa; }
+  .caseBody .expect { color: #ccc; }
+  .caseBody .expect b { color: #6cf; font-weight: normal; }
+  .ngRow { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .ngRow button {
+    font-size: 12px; padding: 6px 12px; border-radius: 8px; border: 1px solid #444;
+    background: #2c2c2e; color: #ccc; cursor: pointer;
+  }
+  .ngRow button.on { background: #b45; border-color: #b45; color: #fff; }
+  .noteInput {
+    width: 100%; margin-top: 8px; font-size: 13px; padding: 8px;
+    border-radius: 8px; border: 1px solid #444; background: #111; color: #eee;
+    font-family: inherit; line-height: 1.6; resize: vertical;
+  }
+  .noteInput.hidden { display: none; }
+
+  .lead {
+    background: #1c1c1c; border-radius: 10px; padding: 14px 16px;
+    margin-bottom: 18px; font-size: 13px; color: #bbd;
+  }
+  .lead b { color: #6cf; }
+  .lead ul { padding-left: 20px; margin: 8px 0 0; }
+
+  /* --- 下の操作 --- */
+  #footBar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: flex; gap: 8px; padding: 10px 16px;
+    background: #16181d; border-top: 1px solid #2a2a2a;
+  }
+  #footBar button {
+    flex: 1; font-size: 14px; padding: 12px; border-radius: 10px; border: none;
+    background: #2c2c2e; color: #eee; cursor: pointer;
+  }
+  #btnCopyResult { background: #6cf; color: #111; font-weight: bold; }
+  #saveNote { font-size: 11px; color: #777; text-align: center; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a id="backLink" href="./index.html">&larr; アプリに戻る</a>
+  <h1>テスト項目</h1>
+  <p class="subtitle">ChordWiki Live Viewer / スマホでそのまま進められます</p>
+
+  <div class="lead">
+    <b>進め方</b>
+    <ul>
+      <li>上から順に試して、<b>思った通りに動いたらチェック</b>を付けてください</li>
+      <li>おかしかったら「うまくいかない」を押して、<b>何が起きたか</b>を書いてください</li>
+      <li>チェックはこの端末に自動保存されます。<b>閉じても消えません</b></li>
+      <li>終わったら一番下の「結果をコピー」を押して、その内容を送ってください</li>
+      <li>途中で分からなくなったら、それ自体が結果です。「うまくいかない」に「何をすればいいか分からなかった」と書いてください</li>
+    </ul>
+  </div>
+
+  <div id="progressBar">
+    <div id="progressText"><span id="progressLabel">0 / 0</span><span id="progressNg"></span></div>
+    <div id="progressTrack"><div id="progressFill"></div></div>
+  </div>
+
+  <div id="cases"></div>
+
+  <p id="saveNote">チェックした内容はこの端末にだけ保存されます。サーバーには送られません。</p>
+</div>
+
+<div id="footBar">
+  <button id="btnReset" type="button">最初から</button>
+  <button id="btnCopyResult" type="button">結果をコピー</button>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // テスト項目。groupごとに並べる。
+  // title: 何をするか / expect: どうなれば正解か
+  // 「スマホだけで確認できること」に絞ってある(MIDIキーボードやペダルが要る物は外した)。
+  const GROUPS = [
+    {
+      name: '1. 初めて開いた時',
+      cases: [
+        { title: 'アプリのURLを開く',
+          expect: '<b>いきなり確認ダイアログが出ない。</b>曲一覧の画面がそのまま出る' },
+        { title: 'アドレスバーのURLを見る',
+          expect: 'URLの後ろに <code>?key=</code> と長い文字列が付いている(あなた専用のURLです)' },
+        { title: '画面に書いてあることを読んで、次に何をすればいいか分かるか',
+          expect: '「＋ 曲を追加」から始めればいいと分かる。<b>分からなければ、それを書いてください</b>' },
+      ],
+    },
+    {
+      name: '2. 曲を入れる',
+      cases: [
+        { title: 'ChordWikiでコード譜を開いて、スクリーンショットを撮る',
+          expect: '(準備です。うまく撮れれば次へ)' },
+        { title: '「＋ 曲を追加」を押して、撮った画像を選ぶ',
+          expect: '曲が一覧に出る。曲名は自分で入れられる' },
+        { title: '追加した曲を開く',
+          expect: '譜面が画面の幅いっぱいに出る' },
+        { title: 'PDFでも1曲追加してみる(手元にあれば)',
+          expect: '複数ページのPDFでも、続けて縦に読める' },
+      ],
+    },
+    {
+      name: '3. 自動スクロール(本番で一番使う)',
+      cases: [
+        { title: '曲を開いて「▶ 再生」を押す',
+          expect: '譜面がゆっくり上に流れ始める' },
+        { title: '「速度」の ＋ − を押す',
+          expect: '流れる速さがその場で変わる' },
+        { title: '流れている最中に、指で譜面を上下にスワイプする',
+          expect: '<b>自分でスクロールできる。</b>指を離すとまた自動で流れ出す' },
+        { title: 'もう一度「▶」(⏸)を押す',
+          expect: '止まる' },
+        { title: '曲を開いたまま1分ほど放置する',
+          expect: '<b>画面が暗くならない</b>(演奏中に消えると困るため)' },
+      ],
+    },
+    {
+      name: '4. 拡大・縮小',
+      cases: [
+        { title: '譜面の上で2本指を広げてみる(ピンチ)',
+          expect: '<b>拡大されない。</b>普通にスクロールできる(誤操作を防ぐため、既定では効きません)' },
+        { title: '「拡大」ボタンを押してから、2本指で広げる',
+          expect: '今度は拡大される' },
+        { title: '拡大した状態でスクロールする',
+          expect: '拡大したまま上下に動かせる' },
+      ],
+    },
+    {
+      name: '5. 譜面への書き込み',
+      cases: [
+        { title: '「編集モード」にしてから曲を開き、「＋ テキスト」を押して譜面をタップ',
+          expect: 'その位置に文字を書ける' },
+        { title: '書いた文字の右下をつまんで左右に動かす',
+          expect: '<b>文字の大きさが変わる。</b>まわりに余計な余白ができない' },
+        { title: '書いた文字を指で動かす',
+          expect: '好きな位置に置ける' },
+        { title: '「＋ スタンプ」を押して、出てきた絵柄を1つ選び、譜面をタップ',
+          expect: 'その絵柄が譜面に乗る' },
+        { title: '「ペン」を押して譜面に線を引く',
+          expect: '手書きできる。太さと色も変えられる' },
+        { title: '一度アプリを閉じて開き直し、同じ曲を見る',
+          expect: '<b>書いたものが全部残っている</b>' },
+      ],
+    },
+    {
+      name: '6. BPM・クリック',
+      cases: [
+        { title: '曲を開いて「BPM」に数字を入れる',
+          expect: '入れた値が残る' },
+        { title: '「🥁 クリック」を押す',
+          expect: '入れたBPMでカチカチ鳴る' },
+        { title: '「速度計算」を押す',
+          expect: 'そのBPMに合った自動スクロールの速さが入る' },
+      ],
+    },
+    {
+      name: '7. セットリスト',
+      cases: [
+        { title: '「セットリスト」→ 新規作成して、曲を2〜3曲入れる',
+          expect: '入れた順に並ぶ' },
+        { title: '曲順を入れ替える',
+          expect: '並べ替えられる' },
+        { title: 'セットリストから曲を開いて、最後までスクロールする',
+          expect: '<b>次の曲へ進める</b>(本番で使う流れです)' },
+      ],
+    },
+    {
+      name: '8. 楽譜エディター',
+      cases: [
+        { title: '曲を開いて「＋ 楽譜」を押す',
+          expect: '五線譜と鍵盤が出る' },
+        { title: '画面の鍵盤をタップして音符を並べる',
+          expect: '五線譜に音符が増えていく' },
+        { title: '音符の長さ(4分・8分など)を変えて入れる',
+          expect: '長さが変わる。<b>付点や休符も正しく出る</b>' },
+        { title: '「ピアノロール」に切り替える',
+          expect: '横向きの帯で音が見える。<b>左に音名(C, D, E...)が出ている</b>' },
+        { title: 'ピアノロールで音符をつまんで上下に動かす',
+          expect: '<b>つまんだ場所を持ったまま</b>動く(勝手に真ん中に飛ばない)' },
+        { title: '五線譜に戻して「保存」する',
+          expect: '譜面の上に楽譜が貼られる' },
+      ],
+    },
+    {
+      name: '9. フレーズ集',
+      cases: [
+        { title: '「フレーズ集」を開く',
+          expect: '一覧が出る(まだ空かもしれません)' },
+        { title: '楽譜エディターでフレーズを作って保存する',
+          expect: 'フレーズ集に絵付きで並ぶ' },
+        { title: 'コード名を付けて保存し、一覧で「ディグリー」の表示を見る',
+          expect: '<code>IIm7</code> <code>V7</code> のような度数が自動で付く' },
+        { title: '度数のボタンを2つ以上押して絞り込む',
+          expect: 'その度数を含むフレーズだけが残る' },
+      ],
+    },
+    {
+      name: '10. 練習ToDo・リンク集',
+      cases: [
+        { title: '「練習ToDo」に何か1つ足して、チェックを付ける',
+          expect: '足せる。チェックが残る' },
+        { title: '「リンク集」にYouTubeのURLを1つ足す',
+          expect: '足せる。押すと開く' },
+      ],
+    },
+    {
+      name: '11. 他の端末とそろえる',
+      cases: [
+        { title: '「⚙ 設定・バックアップ」を開く',
+          expect: '中身が出る。<b>「フットコントローラー」は畳まれていて1行だけ</b>' },
+        { title: '「あなた用のURLをコピー」を押す',
+          expect: 'コピーできた、と出る' },
+        { title: 'そのURLをPCや別のスマホで開く',
+          expect: '<b>同じ曲・セットリストが出てくる</b>' },
+        { title: '別の端末で曲名を変えてから、元の端末で「今すぐ同期」',
+          expect: '変えた方が反映される' },
+      ],
+    },
+    {
+      name: '12. オフライン・ホーム画面',
+      cases: [
+        { title: 'ブラウザのメニューから「ホーム画面に追加」する',
+          expect: 'アイコンができる' },
+        { title: 'そのアイコンから起動する',
+          expect: 'アドレスバーなしで開く。<b>曲がそのまま入っている</b>' },
+        { title: '機内モードにしてから、アイコンで起動する',
+          expect: '<b>電波が無くても曲が開ける</b>' },
+      ],
+    },
+    {
+      name: '13. バックアップ',
+      cases: [
+        { title: '「書き出す」を押す',
+          expect: 'ZIPファイルが保存される' },
+        { title: 'その ZIP を「読み込む」で戻す',
+          expect: '曲が消えたり増えたりしない' },
+      ],
+    },
+    {
+      name: '14. 不具合の報告',
+      cases: [
+        { title: '「💬 不具合・要望を送る」を押す',
+          expect: '入力画面が出る' },
+        { title: '「要望」を選んで何か書いて送信する',
+          expect: '<b>「送信しました」の画面が出る</b>' },
+      ],
+    },
+    {
+      name: '15. 使ってみた感想(自由記入)',
+      cases: [
+        { title: '本番で使えそうか',
+          expect: '思ったことを「うまくいかない」欄に自由に書いてください(チェックだけでもOK)' },
+        { title: '分かりにくかったところ',
+          expect: '「これどうやるの？」と思った場所を書いてください' },
+        { title: '欲しい機能',
+          expect: 'あれば書いてください' },
+      ],
+    },
+  ];
+
+  const STORAGE_KEY = 'cwlv_testcases_v1';
+  const casesEl = document.getElementById('cases');
+  const progressLabel = document.getElementById('progressLabel');
+  const progressNg = document.getElementById('progressNg');
+  const progressFill = document.getElementById('progressFill');
+
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch (e) { state = {}; }
+  const save = () => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* 保存できなくても進められる */ }
+  };
+
+  // 番号は「章.項目」。報告してもらう時に場所が一意に決まるようにする。
+  const rows = [];
+  GROUPS.forEach((g, gi) => {
+    const h = document.createElement('h2');
+    h.textContent = g.name;
+    const cnt = document.createElement('span');
+    cnt.className = 'count';
+    h.appendChild(cnt);
+    casesEl.appendChild(h);
+
+    g.cases.forEach((c, ci) => {
+      const no = (gi + 1) + '-' + (ci + 1);
+      const st = state[no] || (state[no] = { ok: false, ng: false, note: '' });
+
+      const box = document.createElement('div');
+      box.className = 'case';
+
+      const head = document.createElement('label');
+      head.className = 'caseHead';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!st.ok;
+      const title = document.createElement('div');
+      title.className = 'caseTitle';
+      const noEl = document.createElement('span');
+      noEl.className = 'caseNo';
+      noEl.textContent = no;
+      title.appendChild(noEl);
+      title.appendChild(document.createTextNode(c.title));
+      head.appendChild(cb);
+      head.appendChild(title);
+
+      const body = document.createElement('div');
+      body.className = 'caseBody';
+      const exp = document.createElement('div');
+      exp.className = 'expect';
+      // expect には <b> と <code> しか入れていない(このファイル内で書いた固定の文字列)
+      exp.innerHTML = '→ ' + c.expect;
+      body.appendChild(exp);
+
+      const ngRow = document.createElement('div');
+      ngRow.className = 'ngRow';
+      const ngBtn = document.createElement('button');
+      ngBtn.type = 'button';
+      ngBtn.textContent = 'うまくいかない';
+      ngRow.appendChild(ngBtn);
+      body.appendChild(ngRow);
+
+      const note = document.createElement('textarea');
+      note.className = 'noteInput';
+      note.rows = 3;
+      note.placeholder = '何が起きましたか？(例: ボタンを押しても何も起きない)';
+      note.value = st.note || '';
+      body.appendChild(note);
+
+      box.appendChild(head);
+      box.appendChild(body);
+      casesEl.appendChild(box);
+
+      const paint = () => {
+        box.classList.toggle('done', !!st.ok && !st.ng);
+        box.classList.toggle('ng', !!st.ng);
+        ngBtn.classList.toggle('on', !!st.ng);
+        note.classList.toggle('hidden', !st.ng);
+        cnt.textContent = g.cases.filter((_, i) => (state[(gi + 1) + '-' + (i + 1)] || {}).ok).length
+          + ' / ' + g.cases.length;
+        updateProgress();
+      };
+
+      cb.addEventListener('change', () => {
+        st.ok = cb.checked;
+        if (st.ok) st.ng = false;
+        save(); paint();
+      });
+      ngBtn.addEventListener('click', () => {
+        st.ng = !st.ng;
+        if (st.ng) { st.ok = false; cb.checked = false; }
+        save(); paint();
+        if (st.ng) note.focus();
+      });
+      note.addEventListener('input', () => { st.note = note.value; save(); });
+
+      rows.push({ no, group: g.name, title: c.title, st, paint, cb, note });
+      paint();
+    });
+  });
+
+  function updateProgress() {
+    const done = rows.filter((r) => r.st.ok).length;
+    const ng = rows.filter((r) => r.st.ng).length;
+    progressLabel.textContent = done + ' / ' + rows.length + ' 済み';
+    progressNg.textContent = ng ? ('うまくいかない: ' + ng + '件') : '';
+    progressNg.style.color = ng ? '#e88' : '#777';
+    progressFill.style.width = (rows.length ? (done / rows.length) * 100 : 0) + '%';
+  }
+  updateProgress();
+
+  // 結果は、そのまま貼って送れる形にする(スマホで書くのは大変なので)
+  function buildReport() {
+    const done = rows.filter((r) => r.st.ok).length;
+    const ngRows = rows.filter((r) => r.st.ng);
+    const untouched = rows.filter((r) => !r.st.ok && !r.st.ng);
+    const lines = [];
+    lines.push('■ ChordWiki Live Viewer テスト結果');
+    lines.push('端末: ' + navigator.userAgent);
+    lines.push('日時: ' + new Date().toLocaleString('ja-JP'));
+    lines.push('OK: ' + done + ' / ' + rows.length
+      + ' / NG: ' + ngRows.length + ' / 未実施: ' + untouched.length);
+    lines.push('');
+    if (ngRows.length) {
+      lines.push('▼ うまくいかなかったもの');
+      ngRows.forEach((r) => {
+        lines.push('[' + r.no + '] ' + r.title);
+        lines.push('   ' + (r.st.note.trim() || '(内容の記入なし)'));
+      });
+      lines.push('');
+    }
+    if (untouched.length) {
+      lines.push('▼ 未実施');
+      lines.push(untouched.map((r) => r.no).join(', '));
+    }
+    return lines.join('\n');
+  }
+
+  document.getElementById('btnCopyResult').addEventListener('click', async () => {
+    const text = buildReport();
+    const btn = document.getElementById('btnCopyResult');
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'コピーしました';
+      setTimeout(() => { btn.textContent = '結果をコピー'; }, 2000);
+    } catch (e) {
+      // クリップボードが使えない環境でも、選んでコピーはできるようにする
+      const ta = document.createElement('textarea');
+      ta.className = 'noteInput';
+      ta.rows = 12;
+      ta.value = text;
+      document.querySelector('.wrap').appendChild(ta);
+      ta.select();
+      btn.textContent = '下に出しました';
+    }
+  });
+
+  document.getElementById('btnReset').addEventListener('click', () => {
+    if (!confirm('チェックした内容を全部消して、最初からやり直しますか？')) return;
+    state = {};
+    save();
+    location.reload();
+  });
+})();
+</script>
+</body>
+</html>
