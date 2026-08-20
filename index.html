@@ -1659,6 +1659,7 @@
         <button id="btnPhrasePlayToggle" type="button">&#9654; 再生</button>
         <button id="btnPhrasePlayRestart" type="button" title="開始位置に戻す">&#8630; 頭へ</button>
         <button id="btnPhrasePlayLoop" type="button" title="開始〜終了を繰り返す">&#128257; リピート</button>
+        <button id="btnPhrasePlaySource" type="button" title="流す動画・開始位置を変える">&#128279; 変える</button>
         <label>速さ <select id="phrasePlayRate">
           <option value="0.5">0.5x</option><option value="0.6">0.6x</option>
           <option value="0.75">0.75x</option><option value="0.9">0.9x</option>
@@ -1815,7 +1816,7 @@
       <h1>楽譜作成</h1>
       <button id="btnScoreRollMode" title="ピアノロールに切り替える(五線譜と同じデータを別の形で編集します)">&#127929; ピアノロール</button>
       <button id="btnScoreRecord" class="hidden" title="クリックに合わせてMIDIキーボードで弾くと、そのまま楽譜になります">&#9210; 録音</button>
-      <button id="btnScorePhraseSource" class="hidden" title="このフレーズの参考音源をその箇所から流す(繰り返し・速度変更つき)">&#9835; 参考</button>
+      <button id="btnScorePhraseSource" title="書き起こしながら動画・音源を流す(繰り返し・速度変更つき)">&#9835; 参考</button>
       <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067; 使い方</a>
       <button id="btnScoreImportXml" title="他のアプリ(Audiveris・MuseScore等)で作ったMusicXMLを読み込みます">&#128228; 読み込む</button>
       <button id="btnScoreToolsToggle" title="ツールバーを開閉する(譜面を広く見たい時に)">&#9662; ツール</button>
@@ -2367,6 +2368,7 @@
   const btnPhrasePlayToggle = document.getElementById('btnPhrasePlayToggle');
   const btnPhrasePlayRestart = document.getElementById('btnPhrasePlayRestart');
   const btnPhrasePlayLoop = document.getElementById('btnPhrasePlayLoop');
+  const btnPhrasePlaySource = document.getElementById('btnPhrasePlaySource');
   const phrasePlayRate = document.getElementById('phrasePlayRate');
   const phrasePlayTime = document.getElementById('phrasePlayTime');
   const btnPhrasePlayClose = document.getElementById('btnPhrasePlayClose');
@@ -5103,6 +5105,7 @@
   }
   function closeScoreEditor() {
     closePhrasePlay(); // 参考音源を鳴らしたまま閉じない
+    scoreTempSource = null; // その場で指定した音源はこのエディタ限りにする
     // 録音したまま閉じるとクリックが鳴り続けるので必ず止める
     if (scoreRecState) scoreStopRecordingInternal();
     scoreRecordPanel.classList.add('hidden');
@@ -10594,19 +10597,100 @@
   }
 
   // 楽譜エディタからも同じパネルを開けるようにする。
-  // 書き起こしている最中に難所を繰り返し聴くのが本命の使い方。
+  // **書き起こしている最中に難所を繰り返し聴くのが本命の使い方**なので、
+  // 「保存済みのフレーズに音源が設定されている時だけ」では遅すぎる。
+  // まだ何も保存していない状態でも、その場でURLを入れて流せるようにする(2026-08-20)。
   function editingPhraseItem() {
     if (!scoreEditingPhraseId) return null;
     return (musicPhrases.items || []).find((x) => x.id === scoreEditingPhraseId) || null;
   }
   function updateScorePhraseSourceButton() {
-    const item = editingPhraseItem();
-    const has = !!(item && item.source && item.source.kind);
-    btnScorePhraseSource.classList.toggle('hidden', !has);
+    // 常に押せる。押した時に「何を流すか」を決める。
+    btnScorePhraseSource.classList.remove('hidden');
   }
-  btnScorePhraseSource.addEventListener('click', () => {
+
+  // 楽譜エディタで一時的に流している音源(まだどこにも保存していない状態)。
+  // エディタを閉じるまで覚えておく。
+  const SCORE_LAST_SOURCE_KEY = 'cwlv_score_last_source';
+  let scoreTempSource = null;
+
+  // 押した時に流す物を決める順番:
+  //   1. その場で指定した物(このエディタを開いている間の指定)
+  //   2. 編集中のフレーズに保存されている音源
+  //   3. **譜面メモを作っている時は、その曲に登録されている動画**
+  //      (曲の譜面に楽譜を書き足す時、聴きたいのはまずその曲なので)
+  //   4. 前回この画面で流した物
+  function scoreCurrentSource() {
+    if (scoreTempSource) return scoreTempSource;
     const item = editingPhraseItem();
-    if (item) playPhraseSource(item);
+    if (item && item.source && item.source.kind) return item.source;
+    if (scoreEditorMode !== 'phrase' && currentYoutubeUrl) {
+      return { kind: 'youtube', url: currentYoutubeUrl, startSec: 0, endSec: null };
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(SCORE_LAST_SOURCE_KEY) || 'null');
+      if (saved && saved.kind) return saved;
+    } catch (err) { /* 壊れていたら無視して聞き直す */ }
+    return null;
+  }
+
+  // 「1:23」でも「83」でも受け付ける。書き起こし中に手早く入れたいので。
+  function parseTimeText(text) {
+    const t = String(text || '').trim();
+    if (!t) return 0;
+    const m = t.match(/^(\d+):([0-5]?\d)(?:\.(\d+))?$/);
+    if (m) return Number(m[1]) * 60 + Number(m[2]) + (m[3] ? Number('0.' + m[3]) : 0);
+    const n = parseFloat(t);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+
+  // URLと開始位置を聞いて、その場で流す。
+  function askScoreSource() {
+    const cur = scoreCurrentSource();
+    const url = prompt('流したい動画のURLを貼り付けてください(YouTube)',
+      (cur && cur.kind === 'youtube' && cur.url) || '');
+    if (url === null) return false;
+    const trimmed = url.trim();
+    if (!trimmed) { scoreTempSource = null; closePhrasePlay(); return false; }
+    if (!extractYoutubeId(trimmed)) {
+      alert('YouTubeのURLとして読み取れませんでした。動画のURLをそのまま貼り付けてください。');
+      return false;
+    }
+    const startText = prompt('どこから流しますか？(「1:23」でも「83」でも大丈夫。空なら頭から)',
+      cur && cur.startSec ? formatSec(cur.startSec) : '');
+    if (startText === null) return false;
+    const endText = prompt('どこまで繰り返しますか？(空なら終わりを決めない)',
+      cur && cur.endSec ? formatSec(cur.endSec) : '');
+    if (endText === null) return false;
+    const startSec = parseTimeText(startText);
+    const endRaw = String(endText || '').trim();
+    const endSec = endRaw ? parseTimeText(endRaw) : null;
+    scoreTempSource = { kind: 'youtube', url: trimmed, startSec, endSec };
+    try {
+      localStorage.setItem(SCORE_LAST_SOURCE_KEY, JSON.stringify(scoreTempSource));
+    } catch (err) { /* 保存できなくても今回は流せる */ }
+    return true;
+  }
+
+  // 保存済みフレーズと同じ再生処理を使い回すため、item の形に合わせて渡す。
+  function playScoreSource() {
+    const src = scoreCurrentSource();
+    if (!src) return;
+    const item = editingPhraseItem();
+    playPhraseSource({
+      name: (item && item.name) || (scoreEditorMode === 'phrase' ? 'フレーズ' : (currentSongName || '参考')),
+      source: src,
+    });
+  }
+
+  btnScorePhraseSource.addEventListener('click', () => {
+    if (!scoreCurrentSource()) {
+      if (!askScoreSource()) return;
+    }
+    playScoreSource();
+  });
+  btnPhrasePlaySource.addEventListener('click', () => {
+    if (askScoreSource()) playScoreSource();
   });
 
   function renderPhraseList() {
@@ -11911,7 +11995,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260821-2110';
+  const APP_BUILD = '20260821-2250';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
