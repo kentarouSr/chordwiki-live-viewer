@@ -532,8 +532,35 @@
   }
   #btnToolbarMoreClose { width: 34px; padding: 7px 0; font-size: 16px; }
   #btnToolbarMoreCustomize.active { background: #6cf; color: #111; font-weight: bold; }
-  #toolbarMoreBody { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
-  #toolbarMoreBody .scoreEditorGroup { margin: 0; }
+  #toolbarMoreBody { padding: 4px 12px 10px; }
+  /* 今出していないボタンの控え場所。画面には出さないが、DOMからは外さない
+     (外すとイベントやselectの状態を持ち直すことになるため) */
+  #toolbarMoreStash { display: none; }
+  .tbMoreSection { margin-top: 10px; }
+  .tbMoreCat {
+    font-size: 10px; color: #8a8; font-weight: bold; letter-spacing: 0.5px;
+    padding-bottom: 4px; margin: 10px 0 6px; border-bottom: 1px solid #3a3a3c;
+  }
+  .tbMoreSection:first-child .tbMoreCat { margin-top: 2px; }
+  .tbMoreItems { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  /* ボタンの見た目はツールバーの中だけに効くCSSだったので、パネルへ移すと
+     素のボタン(白地)に戻ってしまっていた。同じ見た目をここにも当てる。 */
+  #toolbarMoreBody button {
+    font-size: 14px; padding: 9px 12px; border-radius: 8px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #toolbarMoreBody button.active { background: #6cf; color: #111; font-weight: bold; }
+  #toolbarMoreBody button:disabled { opacity: 0.35; cursor: default; }
+  #toolbarMoreBody label { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 4px; }
+  #toolbarMoreBody select {
+    font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid #444;
+    background: #1c1c1c; color: #eee;
+  }
+  #toolbarMoreBody input[type="text"] {
+    font-size: 14px; padding: 9px 10px; border-radius: 8px;
+    border: 1px solid #444; background: #1c1c1c; color: #eee;
+  }
+  #toolbarMoreBody span { font-size: 12px; color: #ccc; }
   #toolbarMoreCustom { padding: 4px 12px 12px; }
   #toolbarMoreCustom.hidden { display: none; }
   .tbCustomNote { font-size: 11px; color: #999; margin: 2px 0 8px; line-height: 1.5; }
@@ -543,10 +570,18 @@
     font-size: 12px; padding: 6px 12px; cursor: pointer;
   }
   .tbCustomList button.on { background: #6cf; border-color: #6cf; color: #111; font-weight: bold; }
-  #btnViewerMore, #btnScoreMore {
-    background: #48484a; color: #fff; font-weight: bold;
+  .tbEmptyGroup { display: none !important; }
+  /* 「⋯ その他」の入口。ツールバーの外に置いてあるのは、ツールバーを畳んでいる時も
+     押せるようにするため。浮いて見えないよう、ツールバーと同じ幅・同じ余白で敷く。 */
+  #scoreMoreBar {
+    display: flex; justify-content: flex-start; padding: 6px 14px;
+    border-top: 1px solid #2c2c2e;
   }
-  #scoreMoreBar { display: flex; justify-content: flex-end; padding: 0 14px 6px; }
+  #scoreMoreBar button, #btnViewerMore {
+    background: #48484a; color: #fff; font-weight: bold;
+    border: none; border-radius: 8px; cursor: pointer;
+    font-size: 13px; padding: 8px 14px;
+  }
   #scoreEditorOverlay.roll-mode #scoreMoreBar { display: none; }
   /* --- 画像スタンプのパレット(2026-08-20) ---
      画面上部に固定。スタンプは白い譜面の上に置くものなので、パレットの中でも
@@ -866,8 +901,20 @@
   /* --- ピアノロール(2026-08-20) ---
      五線譜と「切り替え」で表示する(同時表示にすると双方の高さが半分になり、
      スマホ・タブレットでどちらも操作しづらくなるため)。 */
+  /* 鍵盤は別のcanvasにして左に貼り付ける(2026-08-20)。
+     以前は1枚のcanvasの左端に描いていたが、譜面が画面幅より広いと
+     canvasWrapのjustify-content:centerで左側がはみ出して**戻れなくなり**、
+     鍵盤も音名も画面外に消えていた。どの高さの音か分からないと使い物にならない。 */
+  #scoreRollWrap { display: flex; align-items: flex-start; }
+  #scoreRollWrap.hidden { display: none; }
+  #scoreRollKeys {
+    display: block; position: sticky; left: 0; z-index: 2; flex-shrink: 0;
+    box-shadow: 2px 0 4px rgba(0,0,0,0.25);
+  }
   #scoreRollCanvas { display: block; touch-action: none; }
-  #scoreRollCanvas.hidden, #scoreEditorCanvas.hidden { display: none; }
+  #scoreEditorCanvas.hidden { display: none; }
+  /* ロール表示中は中央寄せをやめる(中央寄せだと左端に戻れなくなるため) */
+  #scoreEditorOverlay.roll-mode #scoreEditorCanvasWrap { justify-content: flex-start; }
   #scoreRollBar {
     display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
     padding: 6px 14px; background: #1c1c1c; border-top: 1px solid #333;
@@ -1259,12 +1306,13 @@
     </div>
     <div id="toolbarMorePanel" class="hidden">
       <div id="toolbarMoreHead">
-        <span id="toolbarMoreTitle">しまってあるボタン</span>
+        <span id="toolbarMoreTitle">その他のボタン</span>
         <button id="btnToolbarMoreCustomize" type="button">&#9881; 表示を選ぶ</button>
         <button id="btnToolbarMoreClose" type="button">&times;</button>
       </div>
       <div id="toolbarMoreBody"></div>
       <div id="toolbarMoreCustom" class="hidden"></div>
+      <div id="toolbarMoreStash"></div>
     </div>
     <div id="stampPalette" class="hidden">
       <div id="stampPaletteHead">
@@ -1391,7 +1439,7 @@
         <button id="btnSpeedUp5" data-tbu="v:speed5">+5</button>
         <button id="btnCalcSpeed" data-tbu="v:speedcalc" class="appModeEditOnly" title="曲の演奏時間から、最後までちょうど流れる速度を計算します">&#9201; 速度計算</button>
         <button id="btnPlay" data-tbu="v:play">&#9654; 再生</button>
-        <button id="btnViewerMore" title="しまってあるボタンを開く">&ctdot;</button>
+        <button id="btnViewerMore" title="その他のボタンを開く">&ctdot; その他</button>
       </div>
     </div>
     <input id="memoImageInput" type="file" accept="image/*">
@@ -1472,7 +1520,10 @@
     </div>
     <div id="scoreEditorCanvasWrap">
       <canvas id="scoreEditorCanvas"></canvas>
-      <canvas id="scoreRollCanvas" class="hidden"></canvas>
+      <div id="scoreRollWrap" class="hidden">
+        <canvas id="scoreRollKeys"></canvas>
+        <canvas id="scoreRollCanvas"></canvas>
+      </div>
       <div id="scoreSystemControls"></div>
     </div>
     <div id="scoreRollBar" class="hidden">
@@ -1489,7 +1540,7 @@
       </label>
       <span id="scoreRollHint">空きをタップ/右へ引いて音符 ・ 音符をタップで削除 ・ ドラッグで移動 ・ 右端を引いて長さ変更</span>
     </div>
-    <div id="scoreMoreBar"><button id="btnScoreMore" title="しまってあるボタンを開く">&ctdot; その他</button></div>
+    <div id="scoreMoreBar"><button id="btnScoreMore" title="その他のボタンを開く">&ctdot; その他</button></div>
     <div id="scoreEditorToolbar">
       <div class="scoreEditorGroup">
         <label data-tbu="s:timesig">拍子 <select id="scoreTimeSigSelect"></select></label>
@@ -1950,6 +2001,7 @@
   const toolbarMoreCustom = document.getElementById('toolbarMoreCustom');
   const btnToolbarMoreCustomize = document.getElementById('btnToolbarMoreCustomize');
   const btnToolbarMoreClose = document.getElementById('btnToolbarMoreClose');
+  const toolbarMoreStash = document.getElementById('toolbarMoreStash');
   const stampPalette = document.getElementById('stampPalette');
   const stampPaletteBody = document.getElementById('stampPaletteBody');
   const stampPaletteTabs = document.getElementById('stampPaletteTabs');
@@ -1993,6 +2045,8 @@
   const btnScoreRecord = document.getElementById('btnScoreRecord');
   const btnScoreRollMode = document.getElementById('btnScoreRollMode');
   const scoreRollCanvas = document.getElementById('scoreRollCanvas');
+  const scoreRollWrap = document.getElementById('scoreRollWrap');
+  const scoreRollKeys = document.getElementById('scoreRollKeys');
   const scoreRollBar = document.getElementById('scoreRollBar');
   const scoreSystemControls = document.getElementById('scoreSystemControls');
   const scoreRollGrid = document.getElementById('scoreRollGrid');
@@ -5873,19 +5927,53 @@
   //
   // 実装は「要素を実際に動かす」方式。複製して見た目だけ真似ると、押した時の
   // 動作やselectの選択状態を二重管理することになって必ず食い違う。
+  // まとまりの名前と、パネルの中で並べる分類。
+  // 平積みだと目的のボタンを探すのに時間がかかるので、意味で束ねて見出しを付ける。
   const TOOLBAR_UNITS = {
-    'v:play': '再生', 'v:click': 'クリック', 'v:speed': '速度', 'v:speed5': '速度 ±5',
-    'v:speedcalc': '速度計算', 'v:text': '+ テキスト', 'v:stamp': '+ スタンプ',
-    'v:pen': 'ペン', 'v:memo': 'メモ編集', 'v:video': '動画', 'v:audio': '音源',
-    'v:bpm': 'BPM', 'v:image': '+ 画像', 'v:score': '+ 楽譜', 'v:marker': '蛍光ペン',
-    's:dur': '音価(全〜64分)', 's:dot': '付点・3連', 's:rest': '休符',
-    's:linebreak': '改行', 's:undo': '取消・やり直し', 's:chordmode': '単音/和音',
-    's:insert': '挿入モード', 's:del': '直前を削除',
-    's:timesig': '拍子', 's:keysig': '調号', 's:clef': '音部', 's:clefkey': '冒頭記号',
-    's:stafftype': '譜表', 's:pickup': '弱起', 's:dynamic': '強弱', 's:articulation': '奏法',
-    's:transpose': '転調', 's:tie': 'タイ・スラー・8va', 's:repeat': '反復記号',
-    's:acc': '♯ ♭ ♮ 異名同音', 's:hand': 'L / R', 's:chord': 'コード名',
-    's:sound': '音あり', 's:clear': '全消去', 's:midi': 'MIDI入力',
+    'v:play': { name: '再生', cat: '再生・テンポ' },
+    'v:click': { name: 'クリック', cat: '再生・テンポ' },
+    'v:speed': { name: '速度', cat: '再生・テンポ' },
+    'v:speed5': { name: '速度 ±5', cat: '再生・テンポ' },
+    'v:speedcalc': { name: '速度計算', cat: '再生・テンポ' },
+    'v:bpm': { name: 'BPM', cat: '再生・テンポ' },
+    'v:text': { name: '+ テキスト', cat: 'メモ・書き込み' },
+    'v:stamp': { name: '+ スタンプ', cat: 'メモ・書き込み' },
+    'v:pen': { name: 'ペン', cat: 'メモ・書き込み' },
+    'v:marker': { name: '蛍光ペン', cat: 'メモ・書き込み' },
+    'v:image': { name: '+ 画像', cat: 'メモ・書き込み' },
+    'v:score': { name: '+ 楽譜', cat: 'メモ・書き込み' },
+    'v:memo': { name: 'メモ編集', cat: 'メモ・書き込み' },
+    'v:video': { name: '動画', cat: '音源・動画' },
+    'v:audio': { name: '音源', cat: '音源・動画' },
+    's:dur': { name: '音価(全〜64分)', cat: '音符' },
+    's:dot': { name: '付点・3連', cat: '音符' },
+    's:rest': { name: '休符', cat: '音符' },
+    's:linebreak': { name: '改行', cat: '音符' },
+    's:tie': { name: 'タイ・スラー・8va', cat: '記号' },
+    's:repeat': { name: '反復記号', cat: '記号' },
+    's:acc': { name: '♯ ♭ ♮ 異名同音', cat: '記号' },
+    's:dynamic': { name: '強弱', cat: '記号' },
+    's:articulation': { name: '奏法', cat: '記号' },
+    's:hand': { name: 'L / R', cat: '記号' },
+    's:undo': { name: '取消・やり直し', cat: '編集' },
+    's:del': { name: '直前を削除', cat: '編集' },
+    's:clear': { name: '全消去', cat: '編集' },
+    's:insert': { name: '挿入モード', cat: '編集' },
+    's:chordmode': { name: '単音/和音', cat: '編集' },
+    's:chord': { name: 'コード名', cat: 'コード' },
+    's:timesig': { name: '拍子', cat: '譜面の設定' },
+    's:keysig': { name: '調号', cat: '譜面の設定' },
+    's:clef': { name: '音部', cat: '譜面の設定' },
+    's:clefkey': { name: '冒頭記号', cat: '譜面の設定' },
+    's:stafftype': { name: '譜表', cat: '譜面の設定' },
+    's:pickup': { name: '弱起', cat: '譜面の設定' },
+    's:transpose': { name: '転調', cat: '譜面の設定' },
+    's:sound': { name: '音あり', cat: '入力' },
+    's:midi': { name: 'MIDI入力', cat: '入力' },
+  };
+  const TOOLBAR_CATS = {
+    v: ['再生・テンポ', 'メモ・書き込み', '音源・動画'],
+    s: ['音符', '記号', '編集', 'コード', '譜面の設定', '入力'],
   };
   // 既定で常時出すもの(ユーザーと相談して決めた組み合わせ)
   const TOOLBAR_DEFAULT_ON = [
@@ -5918,6 +6006,9 @@
   function toolbarUnitsInScope(scope) {
     return Object.keys(TOOLBAR_UNITS).filter((u) => u.charAt(0) === scope);
   }
+  function toolbarUnitsInCat(scope, cat) {
+    return toolbarUnitsInScope(scope).filter((u) => TOOLBAR_UNITS[u].cat === cat);
+  }
   // 畳むものはパネルへ、出すものは元の場所へ戻す
   function applyToolbarLayout() {
     rememberToolbarHomes();
@@ -5935,44 +6026,84 @@
               home.parent.appendChild(el);
             }
           }
-        } else if (el.parentElement !== toolbarMoreBody) {
+        } else if (!toolbarMorePanel.contains(el)) {
           stash.appendChild(el);
         }
       });
     });
-    if (stash.childNodes.length) toolbarMoreBody.appendChild(stash);
+    if (stash.childNodes.length) toolbarMoreStash.appendChild(stash);
+    // 中身を全部しまったグループは、空の丸い箱だけが残って邪魔なので消す
+    document.querySelectorAll('.scoreEditorGroup, .toolbarGroup').forEach((g) => {
+      const alive = Array.from(g.children).some((c) => getComputedStyle(c).display !== 'none');
+      g.classList.toggle('tbEmptyGroup', !alive);
+    });
     renderToolbarMore();
   }
-  // パネルの中身を「今開いている側」に絞って出す
+  // パネルの中身を「今開いている側」の、分類ごとの並びで出す。
+  // 要素そのものを動かしているので、見出しの箱(section)へ入れ直す形になる。
   function renderToolbarMore() {
     const on = loadToolbarVisible();
+    const scope = toolbarMoreScope;
+    toolbarMoreTitle.textContent = scope === 's' ? 'その他のボタン(楽譜)' : 'その他のボタン';
+    // いったん全部を控えの場所へ戻してから、分類ごとに並べ直す
     toolbarMoreBody.querySelectorAll('[data-tbu]').forEach((el) => {
-      const mine = el.dataset.tbu.charAt(0) === toolbarMoreScope;
-      el.style.display = mine ? '' : 'none';
+      toolbarMoreStash.appendChild(el);
     });
-    toolbarMoreTitle.textContent = toolbarMoreScope === 's'
-      ? 'しまってあるボタン(楽譜エディタ)' : 'しまってあるボタン';
+    toolbarMoreBody.innerHTML = '';
+    TOOLBAR_CATS[scope].forEach((cat) => {
+      const units = toolbarUnitsInCat(scope, cat).filter((u) => !on.has(u));
+      const els = [];
+      units.forEach((u) => {
+        toolbarMoreStash.querySelectorAll('[data-tbu="' + u + '"]').forEach((el) => els.push(el));
+      });
+      if (els.length === 0) return;
+      const sec = document.createElement('div');
+      sec.className = 'tbMoreSection';
+      const h = document.createElement('div');
+      h.className = 'tbMoreCat';
+      h.textContent = cat;
+      sec.appendChild(h);
+      const row = document.createElement('div');
+      row.className = 'tbMoreItems';
+      els.forEach((el) => { el.style.display = ''; row.appendChild(el); });
+      sec.appendChild(row);
+      toolbarMoreBody.appendChild(sec);
+    });
+    if (!toolbarMoreBody.childNodes.length) {
+      const empty = document.createElement('p');
+      empty.className = 'tbCustomNote';
+      empty.textContent = 'ここに入るボタンはありません(全部ツールバーに出ています)。';
+      toolbarMoreBody.appendChild(empty);
+    }
+    // ---- 表示のカスタマイズ ----
     toolbarMoreCustom.innerHTML = '';
     const note = document.createElement('p');
     note.className = 'tbCustomNote';
-    note.textContent = '押して光らせたものが、ツールバーに常時出ます。'
-      + '消したものはこの「⋯」の中に入ります。';
+    note.textContent = '光っているものがツールバーに常時出ます。消したものはこの中に入ります。';
     toolbarMoreCustom.appendChild(note);
-    const list = document.createElement('div');
-    list.className = 'tbCustomList';
-    toolbarUnitsInScope(toolbarMoreScope).forEach((unit) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = TOOLBAR_UNITS[unit];
-      b.className = on.has(unit) ? 'on' : '';
-      b.addEventListener('click', () => {
-        if (on.has(unit)) on.delete(unit); else on.add(unit);
-        saveToolbarVisible();
-        applyToolbarLayout();
+    TOOLBAR_CATS[scope].forEach((cat) => {
+      const units = toolbarUnitsInCat(scope, cat);
+      if (!units.length) return;
+      const h = document.createElement('div');
+      h.className = 'tbMoreCat';
+      h.textContent = cat;
+      toolbarMoreCustom.appendChild(h);
+      const list = document.createElement('div');
+      list.className = 'tbCustomList';
+      units.forEach((unit) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = TOOLBAR_UNITS[unit].name;
+        b.className = on.has(unit) ? 'on' : '';
+        b.addEventListener('click', () => {
+          if (on.has(unit)) on.delete(unit); else on.add(unit);
+          saveToolbarVisible();
+          applyToolbarLayout();
+        });
+        list.appendChild(b);
       });
-      list.appendChild(b);
+      toolbarMoreCustom.appendChild(list);
     });
-    toolbarMoreCustom.appendChild(list);
   }
   function openToolbarMore(scope) {
     toolbarMoreScope = scope;
@@ -6009,6 +6140,9 @@
   const ROLL_BEAT_W = 72;       // 拍子の下の数字ぶんの音符1つの横幅
   const ROLL_PAD_TOP = 8;
   const ROLL_BLACK = new Set([1, 3, 6, 8, 10]);
+  // オンスクリーン鍵盤と同じドレミ表記に揃える(英語名だと見比べる時に頭を使う)
+  const SCORE_ROLL_NOTE_NAMES = ['ド', 'ド#', 'レ', 'ミb', 'ミ', 'ファ',
+    'ファ#', 'ソ', 'ラb', 'ラ', 'シb', 'シ'];
   let scoreRollMode = false;
   let scoreRollLo = 48;
   let scoreRollHi = 72;
@@ -6157,8 +6291,8 @@
     const ts = scoreCurrentTimeSig();
     const beatUnits = 1 / ts.unit;
     const total = Math.max(scoreRollTotalUnits(), scoreMeasureCapacity() * 2);
-    const contentW = ROLL_KEY_W + (total / beatUnits) * ROLL_BEAT_W + ROLL_BEAT_W;
-    const cssW = Math.max(scoreSystemWidth, contentW);
+    const cssW = Math.max(scoreSystemWidth - ROLL_KEY_W,
+      (total / beatUnits) * ROLL_BEAT_W + ROLL_BEAT_W);
     const cssH = ROLL_PAD_TOP * 2 + rows * ROLL_ROW_H;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     scoreRollCanvas.width = Math.round(cssW * dpr);
@@ -6171,13 +6305,13 @@
     ctx.fillRect(0, 0, cssW, cssH);
 
     const yOf = (abs) => ROLL_PAD_TOP + (scoreRollHi - abs) * ROLL_ROW_H;
-    const xOf = (u) => ROLL_KEY_W + (u / beatUnits) * ROLL_BEAT_W;
+    const xOf = (u) => (u / beatUnits) * ROLL_BEAT_W;
 
     // 黒鍵の行に薄く色を敷く(どの高さかを目で追いやすくする)
     for (let a = scoreRollLo; a <= scoreRollHi; a++) {
       if (!ROLL_BLACK.has(((a % 12) + 12) % 12)) continue;
       ctx.fillStyle = '#f1f1f4';
-      ctx.fillRect(ROLL_KEY_W, yOf(a), cssW - ROLL_KEY_W, ROLL_ROW_H);
+      ctx.fillRect(0, yOf(a), cssW, ROLL_ROW_H);
     }
     // グリッド線。小節線を一番濃く、拍を中間に、細かいグリッドを一番薄く
     const grid = scoreRollGridInfo();
@@ -6193,18 +6327,28 @@
       ctx.lineTo(x, cssH - ROLL_PAD_TOP);
       ctx.stroke();
     }
-    // 左端の鍵盤
-    ctx.font = '9px sans-serif';
+    // 左の鍵盤は別canvas。横スクロールしても貼り付いたまま残る。
+    // 音名は全部の白鍵に書く(Cだけだと数えないと分からず、実際に使えなかった)。
+    scoreRollKeys.width = Math.round(ROLL_KEY_W * dpr);
+    scoreRollKeys.height = Math.round(cssH * dpr);
+    scoreRollKeys.style.width = ROLL_KEY_W + 'px';
+    scoreRollKeys.style.height = cssH + 'px';
+    const kctx = scoreRollKeys.getContext('2d');
+    kctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    kctx.fillStyle = '#fff';
+    kctx.fillRect(0, 0, ROLL_KEY_W, cssH);
+    kctx.font = 'bold 9px sans-serif';
+    kctx.textBaseline = 'middle';
     for (let a = scoreRollLo; a <= scoreRollHi; a++) {
-      const black = ROLL_BLACK.has(((a % 12) + 12) % 12);
-      ctx.fillStyle = black ? '#333' : '#fff';
-      ctx.fillRect(0, yOf(a), ROLL_KEY_W, ROLL_ROW_H);
-      ctx.strokeStyle = '#ccc';
-      ctx.strokeRect(0.5, yOf(a) + 0.5, ROLL_KEY_W - 1, ROLL_ROW_H - 1);
-      if (((a % 12) + 12) % 12 === 0) {
-        ctx.fillStyle = '#333';
-        ctx.fillText('C' + Math.floor(a / 12), 4, yOf(a) + ROLL_ROW_H - 3);
-      }
+      const pc = ((a % 12) + 12) % 12;
+      const black = ROLL_BLACK.has(pc);
+      kctx.fillStyle = black ? '#2a2a2a' : '#fff';
+      kctx.fillRect(0, yOf(a), ROLL_KEY_W, ROLL_ROW_H);
+      kctx.strokeStyle = '#bbb';
+      kctx.strokeRect(0.5, yOf(a) + 0.5, ROLL_KEY_W - 1, ROLL_ROW_H - 1);
+      kctx.fillStyle = black ? '#ddd' : '#333';
+      kctx.fillText(SCORE_ROLL_NOTE_NAMES[pc] + Math.floor(a / 12),
+        4, yOf(a) + ROLL_ROW_H / 2 + 0.5);
     }
     // 音符
     notes.forEach((n) => {
@@ -6234,7 +6378,7 @@
     const beatUnits = 1 / ts.unit;
     return {
       x: clientX - rect.left,
-      u: ((clientX - rect.left - ROLL_KEY_W) / ROLL_BEAT_W) * beatUnits,
+      u: ((clientX - rect.left) / ROLL_BEAT_W) * beatUnits,
       abs: scoreRollHi - Math.floor((clientY - rect.top - ROLL_PAD_TOP) / ROLL_ROW_H),
     };
   }
@@ -6248,7 +6392,7 @@
 
   scoreRollCanvas.addEventListener('pointerdown', (e) => {
     const pt = scoreRollPointToMusic(e.clientX, e.clientY);
-    if (pt.x < ROLL_KEY_W) return;          // 左端の鍵盤は今のところ表示だけ
+    // 鍵盤は別canvasになったので、ここに来る座標は必ず譜面側
     if (pt.abs < scoreRollLo || pt.abs > scoreRollHi) return;
     if (pt.u < -1e-9) return;
     e.preventDefault();
@@ -6331,7 +6475,7 @@
   function setScoreRollMode(on) {
     scoreRollMode = on;
     btnScoreRollMode.classList.toggle('active', on);
-    scoreRollCanvas.classList.toggle('hidden', !on);
+    scoreRollWrap.classList.toggle('hidden', !on);
     scoreEditorCanvas.classList.toggle('hidden', on);
     scoreRollBar.classList.toggle('hidden', !on);
     scoreEditorOverlay.classList.toggle('roll-mode', on);
@@ -9616,7 +9760,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-1520';
+  const APP_BUILD = '20260820-1640';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
