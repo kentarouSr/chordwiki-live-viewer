@@ -1553,6 +1553,7 @@
       <div class="scoreEditorGroup">
         <button id="btnScoreChordMode" data-tbu="s:chordmode">&#9834; 単音</button>
         <button id="btnScoreInsertMode" data-tbu="s:insert" title="選択中の音符の直前に挿し込む(オフだと末尾に追加)">&#8677; 挿入</button>
+        <button id="btnScoreRangeMode" data-tbu="s:range" title="範囲を選ぶ(始めの音符→終わりの音符の順にタップ)">&#9707; 範囲選択</button>
       </div>
       <div class="scoreEditorGroup">
         <button id="btnScoreHistUndo" data-tbu="s:undo" title="操作を取り消す (Ctrl+Z)">&#8630; 取消</button>
@@ -2039,6 +2040,7 @@
   const btnScoreUndo = document.getElementById('btnScoreUndo');
   const btnScoreClearAll = document.getElementById('btnScoreClearAll');
   const btnScoreMidi = document.getElementById('btnScoreMidi');
+  const btnScoreRangeMode = document.getElementById('btnScoreRangeMode');
   const btnScoreRecord = document.getElementById('btnScoreRecord');
   const btnScoreRollMode = document.getElementById('btnScoreRollMode');
   const scoreRollCanvas = document.getElementById('scoreRollCanvas');
@@ -4361,6 +4363,7 @@
     btnScoreChordMode.classList.remove('active');
     btnScoreChordMode.innerHTML = '&#9834; 単音';
     setScoreInsertMode(false);
+    setScoreRangeMode(false);
     // コード略記は既定でオン(2026-08-20〜)。ChordWikiと同じ打ち方をそのまま使えるので、
     // 開くたびに押し直す方が手間だった。音の設定と同じく端末ごとに記憶する。
     btnScoreChordShortcut.classList.toggle('active', scoreChordShortcutOn);
@@ -4641,6 +4644,22 @@
     updateScoreToolbarUI();
     renderScoreCanvas();
   });
+  // 範囲選択モード(2026-08-20〜)。オンの間、既に選んでいる音符と次にタップした
+  // 音符の間がまとめて選ばれる。Shiftキーの代わり。
+  let scoreRangeMode = false;
+  function setScoreRangeMode(on) {
+    scoreRangeMode = on;
+    btnScoreRangeMode.classList.toggle('active', on);
+    btnScoreRangeMode.textContent = on ? '終わりをタップ' : '\u25CB\u25CF 範囲選択';
+  }
+  btnScoreRangeMode.addEventListener('click', () => {
+    if (!scoreRangeMode && scoreSelectedIndex === null) {
+      alert('先に範囲の始めの音符をタップしてから、「範囲選択」を押してください。');
+      return;
+    }
+    setScoreRangeMode(!scoreRangeMode);
+  });
+
   btnScoreChordMode.addEventListener('click', () => {
     scoreChordMode = !scoreChordMode;
     btnScoreChordMode.classList.toggle('active', scoreChordMode);
@@ -4651,6 +4670,7 @@
     // 同時操作のような稀なケースへの防御、設計レビューで指摘された点)。
     scoreSetSelection(null);
     scorePitchDrag = null;
+    setScoreRangeMode(false);
     // 和音モードと挿入モードは"選択中"の意味を奪い合うので同時にオンにしない
     if (scoreChordMode) setScoreInsertMode(false);
     updateScoreToolbarUI();
@@ -5156,13 +5176,19 @@
       // ドラッグで音高を変えた後は、その音符を選択したまま残す
       // (続けて音価や♯♭も直せるように)
       scoreSetSelection(drag.srcIndex);
-    } else if (drag.shiftKey && scoreSelectedIndex !== null) {
-      // Shift+タップ: 主選択から今タップした音符までをまとめて選ぶ。
+    } else if ((drag.shiftKey || scoreRangeMode) && scoreSelectedIndex !== null
+      && drag.srcIndex !== scoreSelectedIndex) {
+      // 範囲選択。Shift+タップと、「範囲選択」ボタンをオンにした時のタップの両方。
+      // ボタン方式を足したのは、物理キーボードの無いスマホ・タブレットでは
+      // Shiftが押せず、範囲をまったく選べなかったため(2026-08-20)。
       // 主選択自体は動かさない(音価等の編集先が飛ばないように)。
       const a = Math.min(scoreSelectedIndex, drag.srcIndex);
       const b = Math.max(scoreSelectedIndex, drag.srcIndex);
       scoreSelectedRange = new Set();
       for (let i = a; i <= b; i++) scoreSelectedRange.add(i);
+      // 選び終わったらモードを自動で抜ける。付けっぱなしだと次の1音を選ぼうとして
+      // 意図しない範囲になるため(始点→終点の1往復で完結させる)。
+      if (scoreRangeMode) setScoreRangeMode(false);
     } else {
       // 指を動かさずに離した=タップ。従来どおり選択/選択解除のトグル
       scoreSetSelection(scoreSelectedIndex === drag.srcIndex ? null : drag.srcIndex);
@@ -5956,6 +5982,7 @@
     's:del': { name: '直前を削除', cat: '編集' },
     's:clear': { name: '全消去', cat: '編集' },
     's:insert': { name: '挿入モード', cat: '編集' },
+    's:range': { name: '範囲選択', cat: '編集' },
     's:chordmode': { name: '単音/和音', cat: '編集' },
     's:chord': { name: 'コード名', cat: 'コード' },
     's:timesig': { name: '拍子', cat: '譜面の設定' },
@@ -5975,7 +6002,8 @@
   // 既定で常時出すもの(ユーザーと相談して決めた組み合わせ)
   const TOOLBAR_DEFAULT_ON = [
     'v:play', 'v:click', 'v:speed', 'v:text', 'v:stamp', 'v:pen',
-    's:dur', 's:dot', 's:rest', 's:linebreak', 's:undo', 's:chordmode', 's:insert', 's:del',
+    's:dur', 's:dot', 's:rest', 's:linebreak', 's:undo', 's:chordmode', 's:insert',
+    's:range', 's:del',
   ];
   const TOOLBAR_VISIBLE_KEY = 'cwlv_toolbar_visible';
   let toolbarVisibleUnits = null;
@@ -9770,7 +9798,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260820-1900';
+  const APP_BUILD = '20260820-2010';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -10908,6 +10936,7 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
 
 
 
