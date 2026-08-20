@@ -509,6 +509,50 @@
   #btnImagePickerChoose { background: #6cf; color: #111; font-weight: bold; }
   #btnImagePickerCancel { background: #333; color: #eee; }
 
+  /* --- 画像スタンプのパレット(2026-08-20) ---
+     画面上部に固定。スタンプは白い譜面の上に置くものなので、パレットの中でも
+     実物と同じ白地の升目に並べて、貼った時の見た目とズレないようにしている。 */
+  #stampPalette {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 21;
+    max-height: 46vh; overflow-y: auto;
+    background: rgba(17,17,17,0.96); backdrop-filter: blur(4px);
+    padding-top: max(6px, env(safe-area-inset-top));
+    border-bottom: 1px solid #333;
+  }
+  #stampPalette.hidden { display: none; }
+  #stampPaletteHead {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    position: sticky; top: 0; background: inherit;
+  }
+  #stampPaletteHint { flex: 1; font-size: 12px; color: #bbb; }
+  #btnStampPaletteClose {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+    border: none; background: #333; color: #eee; font-size: 15px; cursor: pointer;
+  }
+  #stampPaletteBody { padding: 0 12px 12px; }
+  .stampGroup { margin-top: 8px; }
+  .stampGroupName {
+    font-size: 10px; color: #8a8; font-weight: bold; letter-spacing: 0.5px;
+    padding-bottom: 3px; border-bottom: 1px solid #383838; margin-bottom: 6px;
+  }
+  .stampGroupItems { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stampChoice {
+    background: #fff; border: 1px solid #ccc; border-radius: 8px;
+    padding: 5px 7px; cursor: pointer; line-height: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stampChoice svg { width: auto; height: 30px; display: block; }
+  .stampChoice.selected { outline: 3px solid #6cf; border-color: #6cf; }
+  /* 譜面に貼られたスタンプ本体。背景を持たせず、記号そのものが浮いて見えるようにする
+     (譜面の線が透けた方が、どの小節に掛かっているか分かりやすい) */
+  .memo-stamp-image { background: none; box-shadow: none; padding: 0; }
+  .memo-stamp-image svg {
+    width: 100%; height: auto; display: block;
+    /* 譜面の線の上に重なっても記号が沈まないよう、白い薄縁を回して浮かせる */
+    filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9))
+            drop-shadow(0 0 1px rgba(255,255,255,0.9));
+  }
+
   #memoImageInput { display: none; }
   .memoEditOnly { display: none; }
   #viewer.memo-edit-mode .memoEditOnly { display: inline-block; }
@@ -567,6 +611,9 @@
     background: #333; color: #eee; cursor: pointer; line-height: 1;
   }
   #zoomFloat button:active { background: #555; }
+  /* ピンチズームの有効/無効トグル。ONの時だけ2本指でズームできる。
+     OFFが既定(2本指をズームに取られてスクロールが暴れるため。2026-08-19) */
+  #btnPinchToggle.active { background: #4a8; color: #111; }
   #zoomLabel { font-size: 12px; color: #ccc; min-width: 38px; text-align: center; }
   /* 演奏モードでは .appModeEditOnly が消えるので、この指定だけで両立する */
 
@@ -695,8 +742,21 @@
   #scoreEditorHeader {
     display: flex; align-items: center; gap: 10px; padding: 14px 16px;
     padding-top: max(14px, env(safe-area-inset-top));
+    flex-wrap: wrap;
   }
   #scoreEditorHeader h1 { font-size: 16px; margin: 0; flex: 1; text-align: center; }
+  /* 「録音」「ロール」はヘッダーに置く(2026-08-20)。ツールバーの中にあると、
+     ツールバーを畳んだ時に display:none で丸ごと消えて辿り着けなくなるため。
+     どちらも「表示や入力の切り替え」であって音符を置く道具ではないので、
+     道具箱(ツールバー)ではなくヘッダーの方が置き場所として素直でもある。 */
+  #scoreEditorHeader #btnScoreRollMode,
+  #scoreEditorHeader #btnScoreRecord { flex-shrink: 0; }
+  @media (max-width: 560px) {
+    /* 狭い画面ではタイトルを畳んでボタンを優先する */
+    #scoreEditorHeader h1 { display: none; }
+    #scoreEditorHeader { gap: 6px; padding: 10px 10px; }
+    #scoreEditorHeader button, #scoreEditorHeader a { font-size: 13px; padding: 8px 10px; }
+  }
   #scoreEditorHeader button {
     font-size: 14px; padding: 9px 14px; border-radius: 8px; border: none;
     background: #333; color: #eee; cursor: pointer;
@@ -744,11 +804,45 @@
   #scoreShortcutTable { border-collapse: collapse; font-size: 11px; margin: 4px 8px 8px; }
   #scoreShortcutTable td { padding: 2px 6px 2px 0; color: #ddd; white-space: nowrap; }
   #scoreShortcutTable td:first-child { color: #6cf; font-weight: bold; padding-right: 12px; }
+  /* 「左手だけで押せる」「その他」の見出し行。MIDIで右手が鍵盤から離せない時に
+     どれが使えるか一目で分かるように区切る(2026-08-20) */
+  #scoreShortcutTable tr.scoreShortcutHead td {
+    color: #8a8; font-weight: bold; font-size: 10px; letter-spacing: 0.5px;
+    padding-top: 7px; border-bottom: 1px solid #444;
+  }
+  #scoreShortcutTable tr.scoreShortcutHead:first-child td { padding-top: 0; }
   #scoreEditorCanvasWrap {
     flex: 1; overflow-x: auto; overflow-y: auto; background: #fff;
     display: flex; align-items: flex-start; justify-content: center;
   }
   #scoreEditorCanvas { display: block; touch-action: none; }
+  /* --- ピアノロール(2026-08-20) ---
+     五線譜と「切り替え」で表示する(同時表示にすると双方の高さが半分になり、
+     スマホ・タブレットでどちらも操作しづらくなるため)。 */
+  #scoreRollCanvas { display: block; touch-action: none; }
+  #scoreRollCanvas.hidden, #scoreEditorCanvas.hidden { display: none; }
+  #scoreRollBar {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    padding: 6px 14px; background: #1c1c1c; border-top: 1px solid #333;
+    font-size: 12px; color: #bbb;
+  }
+  #scoreRollBar.hidden { display: none; }
+  #scoreRollHint { color: #888; }
+  #btnScoreRollMode.active { background: #6cf; color: #111; font-weight: bold; }
+  /* 段の切れ目に出す「＋」「−」(2026-08-20)。譜面の右端に沿えて置く。
+     canvasの上に重ねるので、譜面そのものの描画には手を入れずに済む。 */
+  #scoreEditorCanvasWrap { position: relative; }
+  #scoreSystemControls { position: absolute; top: 0; left: 0; width: 0; height: 0; }
+  .scoreSysCtl {
+    position: absolute; display: flex; gap: 3px;
+    background: rgba(255,255,255,0.9); border-radius: 11px; padding: 2px;
+  }
+  .scoreSysCtl button {
+    width: 22px; height: 22px; border-radius: 50%; border: 1px solid #bbb;
+    background: #f4f4f4; color: #333; font-size: 13px; line-height: 1; cursor: pointer;
+    padding: 0;
+  }
+  .scoreSysCtl button:disabled { opacity: 0.3; cursor: default; }
   #scoreEditorToolbar {
     display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px;
   }
@@ -831,6 +925,31 @@
   .scorePianoWhiteKey.tapped { background: #9fd8f7; }
   .scorePianoBlackKey.tapped { background: #2b6cb0; }
   #btnScoreEnharmonic.mode-sharp, #btnScoreEnharmonic.mode-flat { background: #6cf; color: #111; font-weight: bold; }
+  /* --- 録音記譜パネル(2026-08-20) ---
+     ツールバーの上に帯で出す。録音中は赤くして、今どの状態か(カウントイン中か
+     本番か)が視界の端でも分かるようにする。 */
+  #scoreRecordPanel {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 8px 14px; background: #1c1c1c; border-top: 1px solid #333;
+    font-size: 13px; color: #ddd;
+  }
+  #scoreRecordPanel.hidden { display: none; }
+  #scoreRecordPanel.recording { background: #3a1414; border-top-color: #a33; }
+  #scoreRecordSetup, #scoreRecordLive { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  #scoreRecordSetup.hidden, #scoreRecordLive.hidden { display: none; }
+  #scoreRecordPanel label { display: flex; gap: 5px; align-items: center; }
+  #scoreRecBpm { width: 62px; }
+  #scoreRecordPanel button {
+    font-size: 13px; padding: 6px 12px; border-radius: 13px; border: none;
+    background: #333; color: #eee; cursor: pointer;
+  }
+  #btnScoreRecStart { background: #c0392b; color: #fff; font-weight: bold; }
+  #btnScoreRecStop { background: #eee; color: #111; font-weight: bold; }
+  #scoreRecStatus { font-weight: bold; }
+  #scoreRecCounter { font-variant-numeric: tabular-nums; color: #f88; min-width: 92px; }
+  #btnScoreRecord.recording { background: #c0392b; color: #fff; font-weight: bold; }
+  #btnScoreRecord.hidden { display: none; }
+
   #btnScoreMidi.hidden { display: none; }
   #btnScoreMidi.on { background: #2ecc71; color: #111; font-weight: bold; }
 
@@ -868,7 +987,7 @@
   #toolbar button:disabled { opacity: 0.35; cursor: default; }
   #btnMetronome.active { background: #6cf; color: #111; }
   /* 配置待ち中(alert()での案内をやめた代わりの目印)。もう一度押すとキャンセルできる */
-  #btnAddTextMemo.pending, #btnAddImageMemo.pending { background: #6cf; color: #111; }
+  #btnAddTextMemo.pending, #btnAddImageMemo.pending, #btnAddStampMemo.pending { background: #6cf; color: #111; }
   #btnPlay { min-width: 84px; font-weight: bold; }
   #speedLabel { min-width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
   #setlistPositionLabel { font-size: 13px; color: #999; font-variant-numeric: tabular-nums; }
@@ -1084,6 +1203,13 @@
       <button id="btnImagePickerChoose" type="button">📷 ファイルを選ぶ</button>
       <button id="btnImagePickerCancel" type="button">✕</button>
     </div>
+    <div id="stampPalette" class="hidden">
+      <div id="stampPaletteHead">
+        <span id="stampPaletteHint">スタンプを選んでから、譜面の置きたい場所をタップ</span>
+        <button id="btnStampPaletteClose" type="button">✕</button>
+      </div>
+      <div id="stampPaletteBody"></div>
+    </div>
     <div id="scrollWrap">
       <div id="tileContainer"></div>
       <svg id="strokeLayer"></svg>
@@ -1095,6 +1221,7 @@
       <button id="btnZoomOut" title="縮小">&minus;</button>
       <span id="zoomLabel">100%</span>
       <button id="btnZoomIn" title="拡大">+</button>
+      <button id="btnPinchToggle" title="ピンチズームを使う">&#10530;</button>
     </div>
     <div id="audioPanel" class="hidden">
       <div id="audioPanelHeader">
@@ -1172,6 +1299,7 @@
         <!-- テキストメモとペンは使用頻度が段違いに高いので、メモ編集モードに
              入らなくても直接押せるようここに出す(押すと自動でモードに入る)。 -->
         <button id="btnAddTextMemo" class="appModeEditOnly">+ テキスト</button>
+        <button id="btnAddStampMemo" class="appModeEditOnly">+ スタンプ</button>
         <button id="btnDrawPen" class="appModeEditOnly">&#9998; ペン</button>
         <button id="btnMemoEdit" class="appModeEditOnly">&#128221; メモ</button>
         <button id="btnToggleYoutube" class="appModeEditOnly">&#127909; 動画</button>
@@ -1209,6 +1337,8 @@
     <div id="scoreEditorHeader">
       <button id="btnScoreCancel">キャンセル</button>
       <h1>楽譜作成</h1>
+      <button id="btnScoreRollMode" title="ピアノロールに切り替える(五線譜と同じデータを別の形で編集します)">&#9638; ロール</button>
+      <button id="btnScoreRecord" class="hidden" title="クリックに合わせてMIDIキーボードで弾くと、そのまま楽譜になります">&#9210; 録音</button>
       <a id="btnScoreHelp" href="./manual.html#score" target="_blank" rel="noopener" title="使い方(別タブで開きます。作成中の内容は消えません)">&#10067; 使い方</a>
       <button id="btnScoreToolsToggle" title="ツールバーを開閉する(譜面を広く見たい時に)">&#9662; ツール</button>
       <button id="btnScoreShortcutToggle" title="キーボードショートカット一覧を表示/隠す">&#9000; キー</button>
@@ -1220,22 +1350,79 @@
         <button id="btnScoreShortcutClose" title="閉じる">&times;</button>
       </div>
       <table id="scoreShortcutTable">
-        <tr><td>A〜G</td><td>音符を追加</td></tr>
-        <tr><td>1〜7</td><td>音価(全〜64分)</td></tr>
-        <tr><td>.</td><td>付点</td></tr>
-        <tr><td>- = 0</td><td>♭ ♯ ♮</td></tr>
-        <tr><td>← →</td><td>音符を選択</td></tr>
+        <tr class="scoreShortcutHead"><td colspan="2">左手だけで押せる</td></tr>
+        <tr><td>1〜5</td><td>音価(全〜16分)</td></tr>
+        <tr><td>Q</td><td>付点</td></tr>
+        <tr><td>W</td><td>3連符</td></tr>
+        <tr><td>R</td><td>休符を追加</td></tr>
+        <tr><td>T</td><td>1つ前とタイ</td></tr>
+        <tr><td>Z X V</td><td>♭ ♯ ♮</td></tr>
+        <tr><td>S</td><td>挿入モード</td></tr>
+        <tr><td>Tab</td><td>次の音符へ</td></tr>
+        <tr><td>Shift+Tab</td><td>前の音符へ</td></tr>
+        <tr><td>&#96;</td><td>削除</td></tr>
+        <tr><td>Ctrl+Z / Y</td><td>取消 / やり直し</td></tr>
+        <tr><td>Esc</td><td>選択解除</td></tr>
+        <tr class="scoreShortcutHead"><td colspan="2">その他</td></tr>
+        <tr><td>A〜G</td><td>音符を追加(音名)</td></tr>
+        <tr><td>6 7</td><td>32分 / 64分</td></tr>
         <tr><td>↑ ↓</td><td>半音</td></tr>
         <tr><td>Shift+↑↓</td><td>オクターブ</td></tr>
         <tr><td>Home / End</td><td>最初 / 最後</td></tr>
-        <tr><td>Delete</td><td>削除</td></tr>
-        <tr><td>Ctrl+Z / Y</td><td>取消 / やり直し</td></tr>
-        <tr><td>I</td><td>挿入モード</td></tr>
-        <tr><td>Esc</td><td>選択解除</td></tr>
       </table>
+    </div>
+    <div id="scoreRecordPanel" class="hidden">
+      <div id="scoreRecordSetup">
+        <label>BPM <input id="scoreRecBpm" type="number" min="30" max="300" step="1" value="100"></label>
+        <label>カウントイン
+          <select id="scoreRecCountIn">
+            <option value="0">なし</option>
+            <option value="1" selected>1小節</option>
+            <option value="2">2小節</option>
+          </select>
+        </label>
+        <label>量子化
+          <select id="scoreRecQuantize">
+            <option value="quarter">4分</option>
+            <option value="eighth">8分</option>
+            <option value="sixteenth" selected>16分</option>
+            <option value="thirtysecond">32分</option>
+          </select>
+        </label>
+        <label>入れ方
+          <select id="scoreRecMode">
+            <option value="append" selected>末尾に追記</option>
+            <option value="replace">全部置き換え</option>
+          </select>
+        </label>
+        <button id="btnScoreRecStart" type="button">&#9210; 録音開始</button>
+        <button id="btnScoreRecClose" type="button">閉じる</button>
+      </div>
+      <div id="scoreRecordLive" class="hidden">
+        <span id="scoreRecStatus">準備中</span>
+        <span id="scoreRecCounter">--</span>
+        <button id="btnScoreRecStop" type="button">&#9209; 停止して記譜</button>
+        <button id="btnScoreRecCancel" type="button">中止</button>
+      </div>
     </div>
     <div id="scoreEditorCanvasWrap">
       <canvas id="scoreEditorCanvas"></canvas>
+      <canvas id="scoreRollCanvas" class="hidden"></canvas>
+      <div id="scoreSystemControls"></div>
+    </div>
+    <div id="scoreRollBar" class="hidden">
+      <span>ピアノロール</span>
+      <label>グリッド
+        <select id="scoreRollGrid">
+          <option value="0.25">4分</option>
+          <option value="0.125">8分</option>
+          <option value="0.0625" selected>16分</option>
+          <option value="0.03125">32分</option>
+          <option value="T3">8分3連</option>
+          <option value="T6">16分3連</option>
+        </select>
+      </label>
+      <span id="scoreRollHint">空きをタップ/右へ引いて音符 ・ 音符をタップで削除 ・ ドラッグで移動 ・ 右端を引いて長さ変更</span>
     </div>
     <div id="scoreEditorToolbar">
       <div class="scoreEditorGroup">
@@ -1277,6 +1464,7 @@
         <button id="btnScoreTriplet">3連</button>
         <button id="btnScoreTie">&#8899; タイ</button>
         <button id="btnScoreSlur" title="選択中の音符と次の音符をスラーで結ぶ">&#8995; スラー</button>
+        <button id="btnScore8va" title="選択中の範囲をオクターブ記号で書く(押すたび 8va→8vb→解除)">8va</button>
         <button id="btnScoreRepeatStart" title="選択中の音符が入っている小節から反復を始める">&#124;: 反復開始</button>
         <button id="btnScoreRepeatEnd" title="選択中の音符が入っている小節で反復を終える">:&#124; 反復終了</button>
         <button id="btnScoreLineBreak" title="選択中の音符が入っている小節の後ろで段を変える">&#8629; 改行</button>
@@ -1367,6 +1555,10 @@
   const ZOOM_MIN = 0.5;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
+  // 未指定の曲を開いた時の倍率。ZOOM_MIN が 1 だった頃の名残で ZOOM_MIN を
+  // 既定にしていたため、0.5 に下げた時に初期表示が 50% になってしまっていた。
+  const ZOOM_DEFAULT = 1;
+  const PINCH_ZOOM_KEY = 'cwlv_pinch_zoom';
   const DPR = Math.min(window.devicePixelRatio || 1, 2); // メモリ/性能のため上限2
 
   // メモのスタンプ初期セット。ユーザーと相談して決めた、実際の楽譜記法に
@@ -1374,6 +1566,196 @@
   // 無い状態(初回起動、または全部消してしまった後)の時だけ、1回きりで
   // 自動投入する(localStorageのフラグで、二度と勝手に復活させない)。
   const DEFAULT_STAMPS = ['p', 'mp', 'mf', 'f', 'ff', 'cresc.', 'dim.', '〜', '✂', '♪3', 'Shuffle'];
+
+  // ==================================================
+  // 譜面に貼る画像スタンプ(2026-08-20〜)
+  // ==================================================
+  // 上の DEFAULT_STAMPS は「テキストメモの中に文言を挿入する」ためのもので、
+  // こちらは「譜面の好きな場所に記号そのものを置く」別機能。
+  //
+  // 見た目は意味で2系統に分けてある:
+  //   - **記譜の記号**(強弱・白玉): 黒インク+セリフ体、背景なし。譜面の一部に見せる
+  //   - **進行/編成の指示**(MC・beat・Oct・楽器): 色付きバッジ+サンセリフ体。
+  //     楽譜そのものではなく「上に貼った注釈」だと一目で分かるようにする
+  // ライブ中に一瞬見るものなので、パッと見て「音の弾き方の話か / 進行の話か」が
+  // 区別できることを最優先にした。
+  //
+  // PNGではなくSVGで持つ理由: データがただのIDなので同期が一瞬で終わり、
+  // 拡大しても輪郭がぼけない(譜面を200%で見ることがあるため)。
+  const STAMP_DEFAULT_WIDTH = 68;  // 貼った直後の幅(px)。強弱記号が譜面の文字と同じくらいに見える大きさ
+  const STAMP_MIN_WIDTH = 28;
+  const STAMP_MAX_WIDTH = 320;
+  const STAMP_INK = '#141414';        // 記譜の記号(墨)
+  const STAMP_C_SECTION = '#c2410c';  // 進行(MC/TC) 焦げた橙
+  const STAMP_C_BEAT = '#0f766e';     // ノリ(8beat等) 深い青緑
+  const STAMP_C_OCT = '#1d4ed8';      // 音域(Oct) 藍
+  const STAMP_C_INST = '#15803d';     // 楽器 苔緑
+  const STAMP_C_PLAY = '#6d28d9';     // 奏法の指示(Fill/Break/Stop) 紫
+  const SHEET_STAMP_GROUPS = [
+    { name: '強弱', items: [
+      { id: 'dyn-pp', kind: 'ink', label: 'pp' },
+      { id: 'dyn-p', kind: 'ink', label: 'p' },
+      { id: 'dyn-mp', kind: 'ink', label: 'mp' },
+      { id: 'dyn-mf', kind: 'ink', label: 'mf' },
+      { id: 'dyn-f', kind: 'ink', label: 'f' },
+      { id: 'dyn-ff', kind: 'ink', label: 'ff' },
+      { id: 'dyn-fff', kind: 'ink', label: 'fff' },
+      { id: 'dyn-sfz', kind: 'ink', label: 'sfz' },
+      { id: 'dyn-fp', kind: 'ink', label: 'fp' },
+      { id: 'dyn-cresc', kind: 'ink', label: 'cresc.', plain: true },
+      { id: 'dyn-dim', kind: 'ink', label: 'dim.', plain: true },
+    ] },
+    // 「放る」= 白玉。実際の記譜と同じ、傾いた白抜きの符頭で表す
+    { name: '奏法', items: [
+      { id: 'hold', kind: 'notehead', label: '放る' },
+      { id: 'fermata', kind: 'fermata', label: 'フェルマータ' },
+      { id: 'breath', kind: 'breath', label: 'ブレス' },
+      { id: 'play-fill', kind: 'badge', label: 'Fill', color: STAMP_C_PLAY },
+      { id: 'play-break', kind: 'badge', label: 'Break', color: STAMP_C_PLAY },
+      { id: 'play-stop', kind: 'badge', label: 'Stop', color: STAMP_C_PLAY },
+    ] },
+    { name: '進行', items: [
+      { id: 'sec-mc', kind: 'badge', label: 'MC', color: STAMP_C_SECTION },
+      { id: 'sec-tc', kind: 'badge', label: 'TC', color: STAMP_C_SECTION },
+      { id: 'sec-mctc', kind: 'badge', label: 'MC/TC', color: STAMP_C_SECTION },
+      { id: 'sec-intro', kind: 'badge', label: 'Intro', color: STAMP_C_SECTION },
+      { id: 'sec-a', kind: 'badge', label: 'A', color: STAMP_C_SECTION },
+      { id: 'sec-b', kind: 'badge', label: 'B', color: STAMP_C_SECTION },
+      { id: 'sec-sabi', kind: 'badge', label: 'サビ', color: STAMP_C_SECTION },
+      { id: 'sec-solo', kind: 'badge', label: 'Solo', color: STAMP_C_SECTION },
+      { id: 'sec-outro', kind: 'badge', label: 'Outro', color: STAMP_C_SECTION },
+    ] },
+    // 反復記号は「注釈」ではなく記譜の記号そのものなので、札にせず黒インクで書く
+    { name: '反復', items: [
+      { id: 'rep-ds', kind: 'ink', label: 'D.S.', plain: true },
+      { id: 'rep-dc', kind: 'ink', label: 'D.C.', plain: true },
+      { id: 'rep-coda', kind: 'coda', label: 'Coda' },
+      { id: 'rep-segno', kind: 'segno', label: 'Segno' },
+      { id: 'rep-fine', kind: 'ink', label: 'Fine', plain: true },
+    ] },
+    // Octと同じ2段組にしてある。「8 beat」のように横1行だと札が長くなりすぎて、
+    // 譜面の小節を覆ってしまうため。
+    { name: 'ノリ', items: [
+      { id: 'beat-4', kind: 'stack', sub: 'Beat', label: '4', color: STAMP_C_BEAT },
+      { id: 'beat-8', kind: 'stack', sub: 'Beat', label: '8', color: STAMP_C_BEAT },
+      { id: 'beat-16', kind: 'stack', sub: 'Beat', label: '16', color: STAMP_C_BEAT },
+      { id: 'beat-half', kind: 'stack', sub: 'Beat', label: 'Half', color: STAMP_C_BEAT },
+      { id: 'feel-shuffle', kind: 'badge', label: 'Shuffle', color: STAMP_C_BEAT },
+      { id: 'feel-swing', kind: 'badge', label: 'Swing', color: STAMP_C_BEAT },
+      { id: 'feel-bossa', kind: 'badge', label: 'Bossa', color: STAMP_C_BEAT },
+    ] },
+    { name: '音域', items: [4, 5, 6, 7, 8].map((n) => (
+      { id: 'oct-' + n, kind: 'stack', sub: 'Oct', label: String(n), color: STAMP_C_OCT }
+    )) },
+    // only(その楽器だけ)は塗りつぶし、in(そこから入る)は白抜き。
+    // 「他が抜ける=濃い」「加わる=軽い」という重みの差を見た目に持たせている。
+    { name: '楽器 only', items: ['Gt', 'Ba', 'Key', 'Dr', 'Vo', 'Cho', 'Syn', 'Per'].map((n) => (
+      { id: 'only-' + n, kind: 'stack', label: n, sub: 'only', color: STAMP_C_INST }
+    )) },
+    { name: '楽器 in', items: ['Gt', 'Ba', 'Key', 'Dr', 'Vo', 'Cho', 'Syn', 'Per'].map((n) => (
+      { id: 'in-' + n, kind: 'stackOutline', label: n, sub: 'in', color: STAMP_C_INST }
+    )) },
+  ];
+  // スタンプを増やす時は、上の SHEET_STAMP_GROUPS に1行足すだけでよい
+  // (パレット・描画・同期は全部このテーブルから自動で作られる)。
+  // idは譜面のメモに保存されるので、**一度出したidは変えない/使い回さない**こと。
+  const SHEET_STAMP_BY_ID = new Map();
+  SHEET_STAMP_GROUPS.forEach((g) => g.items.forEach((it) => SHEET_STAMP_BY_ID.set(it.id, it)));
+  // 定義が見つからないidのスタンプ(将来テーブルから消した/別端末の新しい版で
+  // 作られた等)でも、貼った位置と何だったかは失わずに残す。
+  function sheetStampDef(stampId) {
+    return SHEET_STAMP_BY_ID.get(stampId)
+      || { id: stampId, kind: 'badge', label: String(stampId || '?'), color: '#6b7280' };
+  }
+
+  // スタンプ1つぶんのSVG文字列を組み立てる。
+  // 文字幅はフォントに依存して測れないので、textLength+lengthAdjustで
+  // 「必ずこの幅に収める」よう指定する(環境によって字がはみ出さない)。
+  // 文字列のだいたいの表示幅(px)。SVGの中では文字を実測できないので、
+  // 文字種ごとの経験的な比率で見積もる。全角は1文字ぶん(1.0em)、英大文字・数字は
+  // 0.62em、小文字は0.52em、記号類は細い、という内訳。
+  function stampTextWidth(str, fontSize) {
+    let em = 0;
+    for (const ch of String(str)) {
+      if (/[　-ヿ㐀-鿿！-｠]/.test(ch)) em += 1.0;
+      else if (/[.,/'`]/.test(ch)) em += 0.3;
+      else if (/[A-Z0-9]/.test(ch)) em += 0.62;
+      else if (/[ilj]/.test(ch)) em += 0.28;
+      else em += 0.52;
+    }
+    return em * fontSize;
+  }
+  // 大きさはCSS側(.memo-stamp-image svg / .stampChoice svg)で決めるので、
+  // ここではviewBoxだけを持たせる(貼った譜面上とパレットで別のサイズにしたいため)。
+  function buildSheetStampSvg(def) {
+    const H = 46;
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // textLengthで幅を強制するのはやめた(2026-08-20)。全角文字の幅を見積もれて
+    // おらず、「サビ」のような日本語ラベルが1文字ぶんに潰れて読めなくなっていた。
+    // 代わりに文字種ごとに幅を見積もり、その結果から札の大きさを決める。
+    // 見積もりが多少ズレても、余白が数px増減するだけで字は歪まない。
+    const txt = (x, y, size, fill, family, style, s) =>
+      `<text x="${x}" y="${y}" font-family="${family}" font-size="${size}" font-weight="bold"`
+      + ` font-style="${style}" fill="${fill}" text-anchor="middle" dy=".34em"`
+      + `>${esc(s)}</text>`;
+    let W; let body;
+    if (def.kind === 'ink') {
+      // 楽譜の強弱記号と同じ「太い斜体のセリフ体」。背景は付けない。
+      // textLengthを使わないのは、字形が伸び縮みすると記号として読めなくなるため
+      // (太斜体の p / f は形そのものが意味を持つ)。
+      const size = def.plain ? 24 : 34;
+      // 太斜体のセリフ体は右へ大きく張り出すうえ、m や f の実幅が見積もりより広い
+      // (mp / mf の右端が切れていた)。1.35倍してから余白を足す。
+      W = Math.max(34, Math.round(stampTextWidth(def.label, size) * 1.35) + 12);
+      body = txt(W / 2, H / 2, size, STAMP_INK, 'serif', 'italic', def.label);
+    } else if (def.kind === 'notehead') {
+      // 白玉(2分音符・全音符の符頭)。実際の記譜どおり少し傾けた楕円の輪。
+      W = 56;
+      body = `<ellipse cx="${W / 2}" cy="${H / 2}" rx="17" ry="12" fill="none"`
+        + ` stroke="${STAMP_INK}" stroke-width="5" transform="rotate(-20 ${W / 2} ${H / 2})"/>`;
+    } else if (def.kind === 'fermata') {
+      // フェルマータ: 半円の弧の下に点。実際の記譜どおりの形。
+      W = 52;
+      body = `<path d="M 10 30 A 16 16 0 0 1 42 30" fill="none" stroke="${STAMP_INK}" stroke-width="4" stroke-linecap="round"/>`
+        + `<circle cx="26" cy="29" r="4" fill="${STAMP_INK}"/>`;
+    } else if (def.kind === 'breath') {
+      // ブレス記号(コンマ状)。息継ぎの位置を示す。
+      W = 34;
+      body = `<path d="M 20 12 C 22 20, 20 26, 13 34" fill="none" stroke="${STAMP_INK}"`
+        + ` stroke-width="5" stroke-linecap="round"/>`;
+    } else if (def.kind === 'coda') {
+      // コーダ記号(丸に十字)
+      W = 52;
+      body = `<circle cx="26" cy="23" r="13" fill="none" stroke="${STAMP_INK}" stroke-width="4"/>`
+        + `<line x1="26" y1="4" x2="26" y2="42" stroke="${STAMP_INK}" stroke-width="4" stroke-linecap="round"/>`
+        + `<line x1="7" y1="23" x2="45" y2="23" stroke="${STAMP_INK}" stroke-width="4" stroke-linecap="round"/>`;
+    } else if (def.kind === 'segno') {
+      // セーニョ記号。正確なグリフは複雑なので、S字+斜線+2点で読み取れる形にした。
+      W = 46;
+      body = `<path d="M 30 9 C 18 5, 11 15, 18 20 C 25 26, 30 30, 22 37 C 16 41, 10 38, 9 33"`
+        + ` fill="none" stroke="${STAMP_INK}" stroke-width="4" stroke-linecap="round"/>`
+        + `<line x1="9" y1="34" x2="31" y2="10" stroke="${STAMP_INK}" stroke-width="3"/>`
+        + `<circle cx="33" cy="30" r="3" fill="${STAMP_INK}"/>`
+        + `<circle cx="8" cy="15" r="3" fill="${STAMP_INK}"/>`;
+    } else if (def.kind === 'badge') {
+      W = Math.max(46, Math.round(stampTextWidth(def.label, 21)) + 26);
+      body = `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="10" fill="${def.color}"/>`
+        + txt(W / 2, H / 2, 21, '#fff', 'sans-serif', 'normal', def.label);
+    } else {
+      // stack / stackOutline: 小さい語(sub)の下に大きい語(label)を積む
+      const outline = def.kind === 'stackOutline';
+      const bigW = stampTextWidth(def.label, 21);
+      const subW = stampTextWidth(def.sub, 11);
+      W = Math.max(46, Math.round(Math.max(bigW, subW)) + 22);
+      const fg = outline ? def.color : '#fff';
+      body = outline
+        ? `<rect x="2" y="2" width="${W - 4}" height="${H - 4}" rx="10" fill="#fff" stroke="${def.color}" stroke-width="3"/>`
+        : `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="10" fill="${def.color}"/>`;
+      body += txt(W / 2, 14, 11, fg, 'sans-serif', 'normal', def.sub);
+      body += txt(W / 2, 31, 21, fg, 'sans-serif', 'normal', def.label);
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${body}</svg>`;
+  }
   const STAMPS_SEEDED_KEY = 'cwlv_stamps_seeded';
   async function ensureDefaultStamps() {
     if (localStorage.getItem(STAMPS_SEEDED_KEY)) return;
@@ -1486,6 +1868,10 @@
   const btnMemoEdit = document.getElementById('btnMemoEdit');
   const btnAddTextMemo = document.getElementById('btnAddTextMemo');
   const btnAddImageMemo = document.getElementById('btnAddImageMemo');
+  const btnAddStampMemo = document.getElementById('btnAddStampMemo');
+  const stampPalette = document.getElementById('stampPalette');
+  const stampPaletteBody = document.getElementById('stampPaletteBody');
+  const btnStampPaletteClose = document.getElementById('btnStampPaletteClose');
   const btnAddScoreMemo = document.getElementById('btnAddScoreMemo');
   const scoreEditorOverlay = document.getElementById('scoreEditorOverlay');
   const scoreEditorCanvas = document.getElementById('scoreEditorCanvas');
@@ -1495,6 +1881,7 @@
   const btnScoreTriplet = document.getElementById('btnScoreTriplet');
   const btnScoreTie = document.getElementById('btnScoreTie');
   const btnScoreSlur = document.getElementById('btnScoreSlur');
+  const btnScore8va = document.getElementById('btnScore8va');
   const btnScoreRepeatStart = document.getElementById('btnScoreRepeatStart');
   const btnScoreRepeatEnd = document.getElementById('btnScoreRepeatEnd');
   const btnScoreLineBreak = document.getElementById('btnScoreLineBreak');
@@ -1521,6 +1908,26 @@
   const btnScoreUndo = document.getElementById('btnScoreUndo');
   const btnScoreClearAll = document.getElementById('btnScoreClearAll');
   const btnScoreMidi = document.getElementById('btnScoreMidi');
+  const btnScoreRecord = document.getElementById('btnScoreRecord');
+  const btnScoreRollMode = document.getElementById('btnScoreRollMode');
+  const scoreRollCanvas = document.getElementById('scoreRollCanvas');
+  const scoreRollBar = document.getElementById('scoreRollBar');
+  const scoreSystemControls = document.getElementById('scoreSystemControls');
+  const scoreRollGrid = document.getElementById('scoreRollGrid');
+  const scoreRollHint = document.getElementById('scoreRollHint');
+  const scoreRecordPanel = document.getElementById('scoreRecordPanel');
+  const scoreRecordSetup = document.getElementById('scoreRecordSetup');
+  const scoreRecordLive = document.getElementById('scoreRecordLive');
+  const scoreRecBpm = document.getElementById('scoreRecBpm');
+  const scoreRecCountIn = document.getElementById('scoreRecCountIn');
+  const scoreRecQuantize = document.getElementById('scoreRecQuantize');
+  const scoreRecMode = document.getElementById('scoreRecMode');
+  const btnScoreRecStart = document.getElementById('btnScoreRecStart');
+  const btnScoreRecClose = document.getElementById('btnScoreRecClose');
+  const btnScoreRecStop = document.getElementById('btnScoreRecStop');
+  const btnScoreRecCancel = document.getElementById('btnScoreRecCancel');
+  const scoreRecStatus = document.getElementById('scoreRecStatus');
+  const scoreRecCounter = document.getElementById('scoreRecCounter');
   const btnScoreChordMode = document.getElementById('btnScoreChordMode');
   const btnScoreInsertMode = document.getElementById('btnScoreInsertMode');
   const btnScoreHistUndo = document.getElementById('btnScoreHistUndo');
@@ -1561,6 +1968,7 @@
   const btnZoomIn = document.getElementById('btnZoomIn');
   const btnZoomOut = document.getElementById('btnZoomOut');
   const zoomLabel = document.getElementById('zoomLabel');
+  const btnPinchToggle = document.getElementById('btnPinchToggle');
   const btnToggleYoutube = document.getElementById('btnToggleYoutube');
   const btnToggleAudio = document.getElementById('btnToggleAudio');
   const audioPanel = document.getElementById('audioPanel');
@@ -1627,7 +2035,8 @@
   let ytPlayer = null;          // YT.Playerインスタンス(パネルを開いた時だけ生成)
   let ytApiLoadPromise = null;
   let memoEditMode = false;
-  let pendingMemoType = null;   // 'text' | 'image' | 'score' | null。配置待ちの種類
+  let pendingMemoType = null;   // 'text' | 'image' | 'score' | 'stamp' | null。配置待ちの種類
+  let pendingStampId = null;    // 'stamp'の時に、どのスタンプを置くか
   // 配置待ち状態をalert()で毎回案内するとタップ回数が増えて面倒なので、
   // 代わりに該当ボタンをハイライト+ラベル変更することで「配置待ち中」を示す。
   // ラベルを変えるのは、alert()を無くした結果「次に何をすればいいか」が
@@ -1640,6 +2049,13 @@
     btnAddTextMemo.textContent = type === 'text' ? '譜面をタップ' : '+ テキスト';
     btnAddImageMemo.textContent = type === 'image' ? '譜面をタップ' : '+ 画像';
     btnAddScoreMemo.textContent = type === 'score' ? '譜面をタップ' : '+ 楽譜';
+    btnAddStampMemo.classList.toggle('pending', type === 'stamp');
+    btnAddStampMemo.textContent = type === 'stamp' ? '譜面をタップ' : '+ スタンプ';
+    // スタンプ以外の配置に切り替わったら、パレットの選択も外す
+    if (type !== 'stamp' && pendingStampId) {
+      pendingStampId = null;
+      if (!stampPalette.classList.contains('hidden')) renderStampPalette();
+    }
   }
   let pendingMemoPlacement = null; // 画像配置のタップ位置(貼り付け用に保持)
   let drawMode = false;         // 手書き(ペン/蛍光ペン)モード中か
@@ -1727,10 +2143,51 @@
           db.createObjectStore(AUDIO_STORE, { keyPath: 'songUuid' });
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      // 別のタブ/ホーム画面のPWAが古いバージョンでDBを開いたままだと、
+      // ここでバージョンを上げられず`blocked`になる。以前はハンドラが無かったため
+      // Promiseが永久に決まらず、保存操作が黙って固まる(エラー扱いにも見える)
+      // 状態になっていた。原因が分かる文言を出して再読み込みを促す(2026-08-20)。
+      req.onblocked = () => {
+        alert('このアプリを開いている他のタブ(またはホーム画面のアプリ)があるため、'
+          + 'データの準備ができません。\n他のタブをすべて閉じてから、この画面を再読み込みしてください。');
+      };
+      req.onsuccess = () => {
+        const db = req.result;
+        // 逆に「こちらが古いまま開きっぱなし」で他のタブの更新を妨げる側にも
+        // なりうる。その時は接続を閉じて譲り、こちらは再読み込みを促す。
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+          alert('別のタブでアプリが更新されました。この画面を再読み込みしてください。');
+        };
+        // 接続が予期せず閉じた時は、次のアクセスで開き直せるようにしておく
+        // (閉じた接続を使い続けると InvalidStateError になる)。
+        db.onclose = () => { dbPromise = null; };
+        resolve(db);
+      };
+      req.onerror = () => {
+        dbPromise = null; // 一度の失敗で以後ずっと失敗し続けないように捨てる
+        reject(req.error);
+      };
     });
     return dbPromise;
+  }
+  // 保存系の失敗をユーザーに伝える時の共通の文言。DOMException名(QuotaExceededError,
+  // InvalidStateError等)をそのまま見せる。「パーミッションエラーのようなものが出た」
+  // という報告があった時に、実際どれなのかを切り分けられるようにするため(2026-08-20)。
+  function describeDbError(err) {
+    const name = (err && err.name) || 'UnknownError';
+    const msg = (err && err.message) || '';
+    if (name === 'QuotaExceededError') {
+      return '端末の保存容量が足りません(' + name + ')。\n'
+        + '取り込んだ音源ファイルや使わない曲を削除すると空きが作れます。';
+    }
+    if (name === 'InvalidStateError') {
+      return 'データベースの接続が切れています(' + name + ')。\n'
+        + 'この画面を再読み込みしてから、もう一度お試しください。';
+    }
+    return '保存に失敗しました(' + name + ')。\n' + msg
+      + '\nこの画面を再読み込みしても直らない場合は、この文言をそのままお知らせください。';
   }
 
   async function dbAdd(song) {
@@ -2258,14 +2715,19 @@
   // 拡大されるのを避けるため)。そのぶん2本指のイベントは全部こちらに来るので、
   // 自前でピンチを実装できる。
   //
-  // 「右上のボタンでモードに入る」案もあったが、1本指=スクロール・2本指=ズームで
-  // 操作が競合しないため、モードを挟まず直接ピンチできるようにした(タップ数が減る)。
-  // 演奏モードでは従来どおりズーム自体が禁止なので、誤操作で倍率が変わる心配もない。
+  // 当初は「1本指=スクロール・2本指=ズームで競合しない」と考えてモードなしで
+  // 常時ピンチ可能にしていたが、実機ではまともにスクロールできなくなった
+  // (譜面をなぞる時に指が2本触れやすく、そのたびにスクロールが打ち切られて
+  //  倍率が動く)。そのため**右上の⤢ボタンでONにした時だけ**ピンチが効く
+  // 方式に改めた(2026-08-19)。既定はOFF。設定は端末に保存する。
   //
   // 拡大のたびに再タイル化(rebuildCurrentSource)が走ると重いので、既存の+/-ボタンと
   // 同じ0.25刻みに丸め、段が変わった時だけ実際のズームを走らせる。
   const pinchPointers = new Map();
   let pinching = false, pinchStartDist = 0, pinchStartZoom = 1;
+  // スクロールのドラッグを始めた指のID。2本目の指を離した時に
+  // 1本目のドラッグまで打ち切られないよう、区別するために持つ。
+  let dragPointerId = null;
   function pinchDistance() {
     const pts = Array.from(pinchPointers.values());
     if (pts.length < 2) return 0;
@@ -2273,9 +2735,25 @@
   }
   function zoomAllowed() { return !viewer.classList.contains('app-mode-perform'); }
 
+  let pinchZoomEnabled = localStorage.getItem(PINCH_ZOOM_KEY) === '1';
+  function updatePinchToggleUI() {
+    btnPinchToggle.classList.toggle('active', pinchZoomEnabled);
+    btnPinchToggle.title = pinchZoomEnabled
+      ? 'ピンチズーム: ON(2本指で拡大縮小)'
+      : 'ピンチズーム: OFF(2本指を無視してスクロール優先)';
+  }
+  btnPinchToggle.addEventListener('click', () => {
+    pinchZoomEnabled = !pinchZoomEnabled;
+    localStorage.setItem(PINCH_ZOOM_KEY, pinchZoomEnabled ? '1' : '0');
+    // 切り替えた瞬間にピンチ中だった場合に中途半端な状態が残らないようにする
+    pinching = false;
+    updatePinchToggleUI();
+  });
+  updatePinchToggleUI();
+
   scrollWrap.addEventListener('pointerdown', (e) => {
     pinchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pinchPointers.size === 2 && zoomAllowed()) {
+    if (pinchPointers.size === 2 && pinchZoomEnabled && zoomAllowed()) {
       // 2本目が触れた時点でスクロールのドラッグは打ち切り、ピンチに切り替える
       pinching = true;
       dragging = false;
@@ -2291,6 +2769,7 @@
     dragStartY = e.clientY;
     dragStartScrollX = scrollX;
     dragStartScrollY = scrollY;
+    dragPointerId = e.pointerId;
     wasPlayingBeforeDrag = playing;
     if (playing) stopPlayback();
     showToolbar();
@@ -2326,11 +2805,16 @@
     if (pinching) {
       // 指が1本でも離れたらピンチ終了。残った指でそのままスクロールが始まると
       // 譜面が飛ぶので、次に触り直すまでドラッグは開始しない。
-      if (pinchPointers.size < 2) { pinching = false; dragging = false; }
+      if (pinchPointers.size < 2) { pinching = false; dragging = false; dragPointerId = null; }
       return;
     }
+    // ドラッグしている指とは別の指(2本目以降)が離れただけなら、スクロールは続行する。
+    // これを見ていないと、譜面をなぞっている最中に添えた指を離した瞬間に
+    // スクロールが打ち切られてしまう。
+    if (e && dragPointerId !== null && e.pointerId !== dragPointerId) return;
     if (!dragging) return;
     dragging = false;
+    dragPointerId = null;
     const moved = e ? Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY) : 999;
     // メモ編集モードで種類を選択済みなら、ほぼ動いていないタップを配置操作として扱う
     if (memoEditMode && pendingMemoType && moved < 8 && e) {
@@ -2407,7 +2891,8 @@
       const memoScale = memo.baseWidth ? cssWidth / memo.baseWidth : 1;
 
       const el = document.createElement('div');
-      el.className = memo.type === 'text' ? 'memo memo-text' : 'memo memo-image';
+      el.className = memo.type === 'text' ? 'memo memo-text'
+        : (memo.type === 'stamp' ? 'memo memo-image memo-stamp-image' : 'memo memo-image');
       el.dataset.memoId = memo.id; // ToDoからジャンプしてきた時にハイライトする対象を探すため
       el.style.left = Math.round(memo.x * cssWidth) + 'px';
       el.style.top = Math.round(memo.y * contentHeight) + 'px';
@@ -2427,13 +2912,25 @@
         const actualFont = clamp(desiredFont, MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE);
         const widthScale = memoScale * (desiredFont > 0 ? actualFont / desiredFont : 1);
         el.style.fontSize = Math.round(actualFont) + 'px';
-        if (memo.width) {
-          // 未設定なら内容に応じた自動幅のまま。MEMO_TEXT_MIN_WIDTH/600はリサイズハンドルの可動域と揃えてある。
-          el.style.width = Math.round(clamp(memo.width * widthScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
-        } else {
-          el.style.maxWidth = Math.round(clamp(600 * widthScale, MEMO_TEXT_MIN_WIDTH, 600)) + 'px';
-        }
+        // memo.widthは「箱の幅」ではなく**折り返し幅の上限**として扱う(2026-08-19)。
+        // 固定幅にすると、文字数の少ないメモを縮めた時に箱と文字が同じ比率で
+        // 小さくなるだけで、右側の余白がいつまでも消えなかった(実測: 「Db」を
+        // 下限の80pxまで縮めても56pxの余白が残っていた)。
+        // 最大幅だけ指定すれば、短い文字は内容に合わせて縮み、長い文字は
+        // これまでどおりその幅で折り返す。
+        const wrapWidth = memo.width
+          ? clamp(memo.width * widthScale, MEMO_TEXT_MIN_WIDTH, 600)
+          : clamp(600 * widthScale, MEMO_TEXT_MIN_WIDTH, 600);
+        el.style.maxWidth = Math.round(wrapWidth) + 'px';
         el.appendChild(makeResizeHandle(memo, el, MEMO_TEXT_MIN_WIDTH, 600, MEMO_TEXT_DEFAULT_FONT_SIZE, cssWidth));
+      } else if (memo.type === 'stamp') {
+        // SVGなので拡大しても輪郭がぼけない。幅だけ指定して高さは比率で決まる。
+        const holder = document.createElement('div');
+        holder.innerHTML = buildSheetStampSvg(sheetStampDef(memo.stampId));
+        holder.style.width = Math.round(clamp((memo.width || STAMP_DEFAULT_WIDTH) * memoScale,
+          STAMP_MIN_WIDTH, STAMP_MAX_WIDTH)) + 'px';
+        el.appendChild(holder);
+        el.appendChild(makeResizeHandle(memo, holder, STAMP_MIN_WIDTH, STAMP_MAX_WIDTH, null, cssWidth));
       } else {
         const img = document.createElement('img');
         const url = URL.createObjectURL(new Blob([memo.data], { type: memo.mimeType }));
@@ -2599,6 +3096,9 @@
       handle.setPointerCapture(e.pointerId);
       const startClientX = e.clientX;
       const scale = memo.baseWidth ? cssWidth / memo.baseWidth : 1;
+      // テキストは「今の箱の見た目の幅」ではなく、指定済みの折り返し幅を基準にする
+      // (短い文字だと箱が内容まで縮んでいるので、見た目の幅を基準にすると
+      //  ハンドルを掴んだ瞬間に折り返し幅が勝手に縮んでしまう)。
       const startWidth = (memo.width != null ? memo.width * scale : null)
         || targetEl.getBoundingClientRect().width || minWidth;
       // 一度もリサイズされていない短いテキスト(例:「Db」)は内容に合わせて
@@ -2609,24 +3109,43 @@
       // 狭ければ、その幅自体を下限にすることでこのジャンプを防ぐ。
       const effectiveMinWidth = Math.min(minWidth, startWidth);
 
+      // テキストは「箱の幅」ではなく**文字サイズ**を直接変える(2026-08-20)。
+      //
+      // それまでは箱の幅を変え、その幅の比率で文字サイズを決めていたが、この連動が
+      // 余白バグの元だった。短い文字の箱は内容に吸い付くので、幅をいくら動かしても
+      // 見た目が変わらない(または箱だけ広がって右に余白が出る)うえ、
+      // 「幅の比率で文字サイズ」の基準が既定幅220px固定だったので、
+      // 一度もリサイズしていないメモを掴むと文字サイズが突然飛ぶ問題もあった。
+      //
+      // 文字サイズだけを動かし、箱は常に内容ぴったりに任せる方が、
+      // 「文字までで最小サイズ」というそのままの挙動になる。
+      const startFont = baseFontSize
+        ? (parseFloat(getComputedStyle(targetEl).fontSize) || baseFontSize) : 0;
+      // ドラッグ120pxで約2倍。細かく詰めやすく、かつ端まで振れば十分大きくなる幅。
+      const FONT_DRAG_SPAN = 120;
       const onMove = (ev) => {
         const dx = ev.clientX - startClientX;
-        const newWidth = clamp(startWidth + dx, effectiveMinWidth, maxWidth);
-        targetEl.style.width = newWidth + 'px';
         if (baseFontSize) {
-          const fontSize = clamp(
-            baseFontSize * (newWidth / MEMO_TEXT_DEFAULT_WIDTH),
-            MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE
-          );
-          targetEl.style.fontSize = fontSize + 'px';
+          targetEl.style.fontSize =
+            clamp(startFont * (1 + dx / FONT_DRAG_SPAN),
+              MEMO_TEXT_MIN_FONT_SIZE, MEMO_TEXT_MAX_FONT_SIZE) + 'px';
+          return;
         }
+        targetEl.style.width = clamp(startWidth + dx, effectiveMinWidth, maxWidth) + 'px';
       };
       const onUp = async () => {
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onUp);
         handle.removeEventListener('pointercancel', onUp);
-        memo.width = parseFloat(targetEl.style.width);
-        if (baseFontSize) memo.fontSize = parseFloat(targetEl.style.fontSize);
+        if (baseFontSize) {
+          // 保存するのは文字サイズだけ。memo.widthは長文の折り返し幅としてだけ
+          // 使うので、リサイズでは触らない(短文の箱は常に内容ぴったりになる)。
+          // baseWidthを今の画面幅に更新するので、描画時のmemoScaleは1になる。
+          // よって「今見えている大きさ」をそのまま保存すればよい。
+          memo.fontSize = parseFloat(targetEl.style.fontSize);
+        } else {
+          memo.width = parseFloat(targetEl.style.width);
+        }
         memo.baseWidth = cssWidth;
         memo.updatedAt = Date.now();
         await saveCurrentMemos();
@@ -2837,6 +3356,14 @@
       openTextMemoEditor(null, x, y);
     } else if (type === 'score') {
       openScoreEditor(x, y);
+    } else if (type === 'stamp') {
+      if (!pendingStampId) return;
+      // パレットの選択は解除しない。同じ記号を続けて何度も貼れるようにするため。
+      addMemo({
+        id: crypto.randomUUID(), type: 'stamp', stampId: pendingStampId, x, y,
+        width: STAMP_DEFAULT_WIDTH, baseWidth: contentWidthCss(),
+        createdAt: Date.now(), updatedAt: Date.now(),
+      });
     } else {
       memoImageInput.dataset.pendingX = String(x);
       memoImageInput.dataset.pendingY = String(y);
@@ -2890,7 +3417,10 @@
     memo.scoreData = scoreData;
     memo.updatedAt = Date.now();
     // 幅は元のまま保つ(再編集のたびに大きさが変わると位置合わせが崩れるため)
-    await saveMemos();
+    // 関数名が saveMemos(存在しない)になっていて、楽譜メモを開き直して「更新」する
+    // たびに ReferenceError で失敗していた(2026-08-20修正)。
+    // 「更新するとパーミッションエラーのようなものが出る」という報告の正体はこれ。
+    await saveCurrentMemos();
     renderMemos();
     return true;
   }
@@ -2976,9 +3506,48 @@
   // 強弱記号は五線の下に描かれるため、通常の下余白だけではキャンバス下端で
   // 見切れてしまう(実測で確認)。強弱記号が1つでもある譜面の時だけ余白を足す
   // (常に足すと、強弱を使わない普通の譜面まで無駄に縦長になるため)。
+  // 五線からのはみ出し量(五線の外に出る段位置の数)。上下それぞれ返す。
+  // 五線は「音部記号の下第1線」を0として段位置0〜8の範囲(5本線)を占める。
+  // オクターブ記号が付いている音符は、実際に**書かれる**位置(1オクターブ=7段)で数える。
+  function scoreStaffOvershoot() {
+    const base = scoreClefBottomStep();
+    let above = 0, below = 0;
+    if (scoreStaffType !== 'rhythm') {
+      scoreElements.forEach((el) => {
+        if (el.type !== 'note' || !el.pitches) return;
+        const shift = el.oct8 === 'up' ? -7 : (el.oct8 === 'down' ? 7 : 0);
+        el.pitches.forEach((p) => {
+          const rel = p.step + shift - base;
+          if (rel > 8) above = Math.max(above, rel - 8);
+          if (rel < 0) below = Math.max(below, -rel);
+        });
+      });
+    }
+    return { above, below };
+  }
+  // 五線の上に要る追加の余白。加線だらけの高音や、五線の上に引く8vaの括弧が
+  // canvasの上端で切れていたため、実際に書かれる位置から必要量を計算する
+  // (2026-08-20。それまではSCORE_TOP_MARGIN固定で、高い音は問答無用で切れていた)。
+  function scoreExtraTopRoom() {
+    const over = scoreStaffOvershoot().above;
+    // 段位置1つ = 線間の半分。符幹の飛び出しぶんに1線間ぶん足す。
+    let room = over > 0 ? (over / 2 + 1) * SCORE_STAVE_LINE_SPACING : 0;
+    // 8vaの括弧は五線の上に引かれるので、その文字ぶんの高さも確保する
+    if (scoreElements.some((el) => el.type === 'note' && el.oct8 === 'up')) {
+      room = Math.max(room, SCORE_STAVE_LINE_SPACING * 2.5);
+    }
+    return room;
+  }
   function scoreExtraBottomRoom() {
-    return scoreElements.some((el) => el.type === 'note' && el.dynamic)
+    let room = scoreElements.some((el) => el.type === 'note' && el.dynamic)
       ? SCORE_STAVE_LINE_SPACING * 2.5 : 0;
+    const over = scoreStaffOvershoot().below;
+    if (over > 0) room = Math.max(room, (over / 2 + 1) * SCORE_STAVE_LINE_SPACING);
+    // 8vbの括弧は五線の下に引くので、その文字ぶんも要る
+    if (scoreElements.some((el) => el.type === 'note' && el.oct8 === 'down')) {
+      room = Math.max(room, SCORE_STAVE_LINE_SPACING * 2.5);
+    }
+    return room;
   }
   // 拍子ごとの音価計算(全音符=1単位)。1小節の容量は beats/unit。
   const SCORE_DURATION_UNITS = {
@@ -3250,13 +3819,24 @@
       const el = scoreElements[srcIndex];
       const units = scoreElementDurationUnits(el);
       const frags = [];
-      if (units <= remaining + EPS) {
+      // 3連符は音価が3分の2倍という記譜可能な音価に無い長さなので、分割すると
+      // scoreDecomposeToNotatableが半端な断片の山に化けてしまう。分割対象外にする。
+      const beatLimit = el.triplet
+        ? Infinity
+        : scoreBeatChunkLimit(measureIdx, scoreCapacityForMeasure(measureIdx) - remaining, units);
+      if (units <= remaining + EPS && units <= beatLimit + EPS) {
         frags.push({ duration: el.duration, dotted: el.dotted });
         remaining -= units;
       } else {
         let left = units;
         while (left > EPS) {
-          const chunk = Math.min(left, remaining);
+          const cap = scoreCapacityForMeasure(measureIdx);
+          // 小節の残りと「次の拍の境界まで」の短い方で切る。前者だけを見ていた頃は
+          // 拍をまたぐ8分・16分がそのまま置かれ、連桁が拍のまとまりを壊していた。
+          const limit = el.triplet
+            ? remaining
+            : Math.min(remaining, scoreBeatChunkLimit(measureIdx, cap - remaining, units));
+          const chunk = Math.min(left, limit);
           scoreDecomposeToNotatable(chunk).forEach((p) => frags.push(p));
           left -= chunk;
           remaining -= chunk;
@@ -3279,6 +3859,9 @@
           dynamic: fi === 0 ? (el.dynamic || null) : null,
           hand: fi === 0 ? (el.hand || null) : null,
           articulation: fi === 0 ? (el.articulation || null) : null,
+          // オクターブ記号は分割された断片すべてに引き継ぐ(範囲の途中で括弧が
+          // 途切れないように)。描画位置のずらしにも範囲の判定にも使う。
+          oct8: el.type === 'note' ? (el.oct8 || null) : null,
           triplet: el.triplet, tripletGroup: el.tripletGroup,
           tripletFirst: fi === 0 ? el.tripletFirst : false,
           // tieToNext/tiedFromPrevは2つの由来がある: ①小節に収まらず自動分割された
@@ -3333,15 +3916,58 @@
     boundaries.push(capacity);
     return boundaries;
   }
-  // 連桁のグループ化に使う「拍のまとまり」をVexFlowのFraction配列として返す
-  // (単純拍子は1拍ごと、複合拍子は付点4分ごと。上のscoreBeatBoundariesと同じ規則)。
-  function scoreVexBeamGroups(VF) {
+  // 拍のまとまり1つぶんの長さ(全音符=1単位)。scoreBeatBoundariesと同じ規則。
+  function scoreBeatStep() {
     const ts = scoreCurrentTimeSig();
     const isCompound = ts.unit === 8 && ts.beats % 3 === 0;
-    if (isCompound) {
-      return Array(ts.beats / 3).fill(null).map(() => new VF.Fraction(3, 8));
-    }
-    return Array(ts.beats).fill(null).map(() => new VF.Fraction(1, ts.unit));
+    return isCompound ? 3 / 8 : 1 / ts.unit;
+  }
+  // 指定した小節の中での拍の境界(小節先頭からの累積)。
+  // 弱起の小節は「小節の**後ろ**が本来の小節の終わりに揃う」ので、
+  // 満杯の小節の境界を左へずらして切り出す(頭から数えると拍がずれる)。
+  function scoreMeasureBeatBoundaries(measureIndex) {
+    const cap = scoreCapacityForMeasure(measureIndex);
+    const full = scoreMeasureCapacity();
+    const EPS = 1e-9;
+    if (Math.abs(cap - full) < EPS) return scoreBeatBoundaries();
+    const offset = full - cap;
+    const out = scoreBeatBoundaries()
+      .filter((b) => b > offset + EPS && b < full - EPS)
+      .map((b) => b - offset);
+    return [0, ...out, cap];
+  }
+  // タイで分割してでも音符をまたがせてはいけない「強い境界」。
+  //
+  // 2026-08-20の初版では**拍の境界すべて**で分割していたが、それは記譜法として
+  // 厳しすぎた。付点8分を4つ並べただけで付点が2つ消えて `16分~8分` のタイに化け、
+  // 「付点の処理が残念」という状態になった(ユーザー報告)。
+  // 実際の記譜では、短い音符が普通の拍をまたぐこと自体はごく普通に許される
+  // (8分+付点8分+16分... のようなシンコペーションは、そのまま書くのが読みやすい)。
+  //
+  // 本当に分割すべきなのは、またぐと小節の骨格が見えなくなる位置だけ:
+  //   - 小節線(これは従来から分割している)
+  //   - **小節の真ん中**(4/4の3拍目、6/8の後半など)
+  // 4/4で3拍目を隠す音符は読みにくいというのが記譜法の定番の禁則で、
+  // 逆に言えばそれ以外の拍はまたいでよい。
+  //
+  // 3/4・9/8のように2等分が拍の境界に来ない拍子では、内側の強い境界は無し
+  // (小節線だけで区切る)。
+  function scoreStrongSplitBoundary(measureIndex) {
+    const EPS = 1e-9;
+    const cap = scoreCapacityForMeasure(measureIndex);
+    const mid = cap / 2;
+    const found = scoreMeasureBeatBoundaries(measureIndex)
+      .find((b) => Math.abs(b - mid) < EPS);
+    return found === undefined ? null : found;
+  }
+  // 分割のための「今の位置から切って良い最大の長さ」。
+  // 1拍以上の音符(4分・付点4分・2分など)は元々またいでよいので対象外。
+  function scoreBeatChunkLimit(measureIndex, posInMeasure, noteUnits) {
+    const EPS = 1e-6;
+    if (noteUnits >= scoreBeatStep() - EPS) return Infinity;
+    const strong = scoreStrongSplitBoundary(measureIndex);
+    if (strong === null || strong <= posInMeasure + EPS) return Infinity;
+    return strong - posInMeasure;
   }
 
   // { type:'note', pitches:[{step,accidental}], duration, dotted, triplet, tripletGroup, chord } | { type:'rest', ... }
@@ -3598,8 +4224,9 @@
     btnScoreChordMode.classList.remove('active');
     btnScoreChordMode.innerHTML = '&#9834; 単音';
     setScoreInsertMode(false);
-    scoreChordShortcutOn = false;
-    btnScoreChordShortcut.classList.remove('active');
+    // コード略記は既定でオン(2026-08-20〜)。ChordWikiと同じ打ち方をそのまま使えるので、
+    // 開くたびに押し直す方が手間だった。音の設定と同じく端末ごとに記憶する。
+    btnScoreChordShortcut.classList.toggle('active', scoreChordShortcutOn);
     // 音のオン/オフは端末ごとの設定なので、開くたびにリセットせず記憶した値を反映する。
     btnScoreSound.textContent = scoreSoundOn ? '\u{1F50A} 音あり' : '\u{1F507} 音なし';
     btnScoreSound.classList.toggle('active', scoreSoundOn);
@@ -3637,11 +4264,14 @@
     // 前回MIDIをオンにしていた場合、静かに再接続を試みる(既に許可済みなら
     // ブラウザの許可ダイアログは再表示されない。button自体がAPI非対応環境では
     // 'hidden'のままなので、対応ブラウザでのみ実行される)。
-    if (localStorage.getItem(SCORE_MIDI_ENABLED_KEY) === '1' && typeof navigator.requestMIDIAccess === 'function') {
-      scoreEnableMidi();
+    if (scoreMidiWantedByUser() && typeof navigator.requestMIDIAccess === 'function') {
+      scoreEnableMidi(true);
     }
   }
   function closeScoreEditor() {
+    // 録音したまま閉じるとクリックが鳴り続けるので必ず止める
+    if (scoreRecState) scoreStopRecordingInternal();
+    scoreRecordPanel.classList.add('hidden');
     scoreEditorOverlay.classList.add('hidden');
     scorePlacementXY = null;
     // 閉じた後に届いたMIDIノートオンが、既に捨てられるはずの古いscoreElementsを
@@ -3661,8 +4291,12 @@
     });
     btnScoreDot.classList.toggle('active', sel ? !!sel.dotted : scorePendingDot);
     btnScoreTriplet.classList.toggle('active', scorePendingTripletCount > 0);
-    btnScoreTie.classList.toggle('active', !!(sel && sel.tiedToNext));
+    // タイは「選択中の音符と1つ前」を結ぶので、点灯判定も前の音符のフラグを見る
+    btnScoreTie.classList.toggle('active', !!(sel && scoreSelectedIndex > 0
+      && scoreElements[scoreSelectedIndex - 1].tiedToNext));
     btnScoreSlur.classList.toggle('active', !!(sel && sel.slurToNext));
+    btnScore8va.classList.toggle('active', !!(sel && sel.oct8));
+    btnScore8va.textContent = sel && sel.oct8 === 'down' ? '8vb' : '8va';
     btnScoreRepeatStart.classList.toggle('active', !!(sel && sel.repeatStart));
     btnScoreRepeatEnd.classList.toggle('active', !!(sel && sel.repeatEnd));
     btnScoreLineBreak.classList.toggle('active', !!(sel && sel.lineBreak));
@@ -3717,16 +4351,18 @@
     scorePendingTripletCount = scorePendingTripletCount > 0 ? 0 : 3;
     updateScoreToolbarUI();
   });
-  // 選択中の音符と、その直後の音符(scoreElements上で1つ後ろ)をタイでつなぐ
-  // (2026-08-17〜)。この単一選択の編集モデルでは2音符を同時に選べないため、
-  // 「選択中の音符→次の音符」という決め打ちの組にしている。タイは同じ高さの
-  // 音どうしにしか音楽的な意味が無いので、声部数とstepが完全一致する時だけ許可する。
-  function scoreCanTieToNext(index) {
+  // 選択中の音符と、その**1つ前**の音符をタイでつなぐ(2026-08-20に向きを反転)。
+  // 当初は「選択中の音符→次の音符」だったが、打ち込みは左から右へ進むので、
+  // 音を置いた直後の「今の音を前の音とつなぐ」という流れの方が自然で、
+  // わざわざ前の音を選び直す手間が無くなる。
+  // データの持ち方(前の音符のel.tiedToNextを立てる)は変えていない。タイは同じ
+  // 高さの音どうしにしか音楽的な意味が無いので、声部数とstepが完全一致する時だけ許可する。
+  function scoreCanTieToPrev(index) {
     const el = scoreElements[index];
-    const next = scoreElements[index + 1];
-    if (!el || el.type !== 'note' || !next || next.type !== 'note') return false;
-    if (el.pitches.length !== next.pitches.length) return false;
-    return el.pitches.every((p, i) => p.step === next.pitches[i].step);
+    const prev = scoreElements[index - 1];
+    if (!el || el.type !== 'note' || !prev || prev.type !== 'note') return false;
+    if (el.pitches.length !== prev.pitches.length) return false;
+    return el.pitches.every((p, i) => p.step === prev.pitches[i].step);
   }
   // スラー: タイと違い「同じ高さ」の制約は無い(フレーズのまとまりを示すもので、
   // 音の継続を示すものではないため)。次に音符があれば結べる。
@@ -3750,6 +4386,35 @@
     el.slurToNext = true;
     updateScoreToolbarUI();
     renderScoreCanvas();
+  });
+
+  // オクターブ記号(8va / 8vb、2026-08-20〜)。加線だらけで読みにくい高音・低音を
+  // 「1オクターブずらして書き、記号でそのぶんを示す」記譜法。
+  //
+  // 元データ(pitches)は実際に鳴る高さのまま変えない。ずらすのは**描画だけ**なので、
+  // 音を鳴らす機能も移調も従来どおり正しく動く。
+  // 範囲は要素ごとの el.oct8 で持つ。「開始/終了に印を付ける」方式にしなかったのは、
+  // 途中の音符を削除・挿入した時に印の対応が壊れるため。同じ値が連続している
+  // ところを1つの範囲とみなして描画時に括弧を引く。
+  function scoreApply8va(value) {
+    const targets = scoreSelectedRange.size > 0
+      ? Array.from(scoreSelectedRange)
+      : (scoreSelectedIndex !== null ? [scoreSelectedIndex] : []);
+    const notes = targets.filter((i) => scoreElements[i] && scoreElements[i].type === 'note');
+    if (notes.length === 0) {
+      alert('オクターブ記号を付ける音符を選んでください(Shiftを押しながらで範囲選択)。');
+      return;
+    }
+    pushScoreUndoSnapshot();
+    notes.forEach((i) => { scoreElements[i].oct8 = value; });
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+  btnScore8va.addEventListener('click', () => {
+    const sel = scoreSelectedIndex !== null ? scoreElements[scoreSelectedIndex] : null;
+    const cur = sel ? (sel.oct8 || null) : null;
+    // 押すたび 8va(上) → 8vb(下) → 解除 と一巡する
+    scoreApply8va(cur === null ? 'up' : (cur === 'up' ? 'down' : null));
   });
 
   // 反復記号: 実際には「小節」に付くものだが、このエディタが選択できるのは音符なので
@@ -3819,21 +4484,23 @@
     if (scoreSelectedIndex === null) return;
     const el = scoreElements[scoreSelectedIndex];
     if (el.type !== 'note') return;
-    if (el.tiedToNext) {
-      // 既につながっている状態を解除するだけなので、次の音符との整合性チェックは不要
-      // (削除等で相手が既に無くなっていても問題なく解除できる)。
+    // つなぐ相手は1つ前の音符。フラグは前の音符側(tiedToNext)に立てる。
+    const prev = scoreElements[scoreSelectedIndex - 1];
+    if (prev && prev.tiedToNext) {
+      // 既につながっている状態を解除するだけなので、高さの整合性チェックは不要
+      // (音高を変えた後などでも問題なく解除できる)。
       pushScoreUndoSnapshot();
-      el.tiedToNext = false;
+      prev.tiedToNext = false;
       updateScoreToolbarUI();
       renderScoreCanvas();
       return;
     }
-    if (!scoreCanTieToNext(scoreSelectedIndex)) {
-      alert('タイでつなぐには、次に同じ高さの音符が必要です。');
+    if (!scoreCanTieToPrev(scoreSelectedIndex)) {
+      alert('タイでつなぐには、1つ前に同じ高さの音符が必要です。');
       return;
     }
     pushScoreUndoSnapshot();
-    el.tiedToNext = true;
+    prev.tiedToNext = true;
     updateScoreToolbarUI();
     renderScoreCanvas();
   });
@@ -3919,7 +4586,10 @@
     w: '#', f: 'b', x: '##', v: 'bb', l: 'aug', h: 'dim', j: 'M7',
     r: 'm7', k: 'm7-5', z: 'sus', y: 'add', q: 'omit', p: '+',
   };
-  let scoreChordShortcutOn = false;
+  // 端末ごとに記憶し、既定はオン(2026-08-20〜)。ChordWikiエディタと同じ打ち方を
+  // そのまま使えるので、開くたびに押し直す方が手間だった。
+  const SCORE_CHORD_SHORTCUT_KEY = 'cwlv_score_chord_shortcut';
+  let scoreChordShortcutOn = localStorage.getItem(SCORE_CHORD_SHORTCUT_KEY) !== '0';
 
   // カーソル位置が「音名を期待する位置」か判定する。直前の非空白文字が無い(先頭)か
   // "/"(分数コードのベース音)なら音名の位置。
@@ -3960,6 +4630,7 @@
 
   btnScoreChordShortcut.addEventListener('click', () => {
     scoreChordShortcutOn = !scoreChordShortcutOn;
+    localStorage.setItem(SCORE_CHORD_SHORTCUT_KEY, scoreChordShortcutOn ? '1' : '0');
     btnScoreChordShortcut.classList.toggle('active', scoreChordShortcutOn);
     scoreChordInput.focus();
   });
@@ -4190,6 +4861,10 @@
   // 最後に描画した各段(システム)のVexFlow Staveオブジェクト。タップ入力の
   // Y座標→音高変換や「今タップが効く段」の判定に使う。
   let scoreLastStaves = [];
+  // 段の構成(「＋/−」で段の小節数を増減するために使う)
+  let scoreLastSystems = [];
+  let scoreLastMeasures = [];
+  let scoreLastQueue = [];
   // 最後に描画した各音符(scoreElementsのインデックス基準)の画面X座標+所属する段。
   // タップして既存の音符を選択・編集する機能の当たり判定に使う。
   let scoreLastNotePositions = new Map();
@@ -4782,19 +5457,37 @@
       if (btn) btn.click();
       return;
     }
-    if (key === '-') { e.preventDefault(); btnScoreFlat.click(); return; }
-    if (key === '=') { e.preventDefault(); btnScoreSharp.click(); return; }
-    if (key === '0') { e.preventDefault(); btnScoreNatural.click(); return; }
-    if (key === '.') { e.preventDefault(); btnScoreDot.click(); return; }
-    // Flat.ioと同じ割り当て。A〜Gと衝突しない文字なのでそのまま使える。
-    if (key === 'i' || key === 'I') { e.preventDefault(); btnScoreInsertMode.click(); return; }
+    // ---- 左手だけで完結するショートカット(2026-08-20〜) ----
+    // MIDIキーボードでステップ入力する時は右手が鍵盤に乗りっぱなしになるので、
+    // 編集操作は全部キーボード左側だけで届く位置にまとめてある。
+    // 音名キーA〜Gと重ならない左手キー(Q W S Z X V R T + Tab)だけを使っている。
+    // 従来の割り当て(. - = 0 I ←→)も、慣れている人向けにそのまま残す。
+    const lower = key.length === 1 ? key.toLowerCase() : key;
+    if (lower === 'q' || key === '.') { e.preventDefault(); btnScoreDot.click(); return; }
+    if (lower === 'w') { e.preventDefault(); btnScoreTriplet.click(); return; }
+    if (lower === 'z' || key === '-') { e.preventDefault(); btnScoreFlat.click(); return; }
+    if (lower === 'x' || key === '=') { e.preventDefault(); btnScoreSharp.click(); return; }
+    if (lower === 'v' || key === '0') { e.preventDefault(); btnScoreNatural.click(); return; }
+    // Flat.ioと同じI、および左手で押せるSの両方を挿入モードに割り当てる。
+    if (lower === 's' || lower === 'i') { e.preventDefault(); btnScoreInsertMode.click(); return; }
+    // R=休符(Rest)、T=タイ(Tie)。どちらも音名A〜Gと衝突しない(2026-08-20)。
+    if (lower === 'r') { e.preventDefault(); btnScoreRest.click(); return; }
+    if (lower === 't') { e.preventDefault(); btnScoreTie.click(); return; }
+    // Tabで音符の選択を前後に動かす(←→の左手版)。ブラウザ標準のフォーカス移動は
+    // 楽譜編集中には要らないので止める。入力欄にフォーカスがある時は上で除外済み。
+    if (key === 'Tab') {
+      e.preventDefault();
+      scoreSelectRelative(e.shiftKey ? -1 : 1);
+      return;
+    }
     if (key === 'ArrowLeft') { e.preventDefault(); scoreSelectRelative(-1); return; }
     if (key === 'ArrowRight') { e.preventDefault(); scoreSelectRelative(1); return; }
     if (key === 'ArrowUp') { e.preventDefault(); scoreShiftSelectedPitch(e.shiftKey ? 12 : 1); return; }
     if (key === 'ArrowDown') { e.preventDefault(); scoreShiftSelectedPitch(e.shiftKey ? -12 : -1); return; }
     if (key === 'Home') { e.preventDefault(); scoreSelectEdge(true); return; }
     if (key === 'End') { e.preventDefault(); scoreSelectEdge(false); return; }
-    if (key === 'Delete' || key === 'Backspace') {
+    // Delete/Backspaceは右手側なので、左手で届く「`」(キーボード左上の角)も同じ動作にする
+    if (key === 'Delete' || key === 'Backspace' || key === '`') {
       e.preventDefault();
       // 複数選んでいる時はまとめて削除。1つ以下なら従来どおりのボタン動作
       if (scoreSelectedRange.size > 1) scoreDeleteSelected(); else btnScoreUndo.click();
@@ -4957,6 +5650,13 @@
     const velocity = data.length > 2 ? data[2] : 0;
     if (status === 0x90 && velocity > 0) {
       scoreMidiHeldNotes.add(note);
+      // 録音中は「弾いたら即入力」ではなく、時刻つきで記録するだけにする
+      // (量子化して一括で譜面にするため)。鍵盤のハイライトは通常どおり更新する。
+      if (scoreRecState) {
+        scoreRecHandleNoteOn(note, ev.timeStamp);
+        renderScorePianoKeyboard();
+        return;
+      }
       // MIDIノート番号→このアプリの絶対半音は-12(MIDI60=ミドルC=このアプリの
       // C4=絶対半音48であることを確認済み)。物理鍵盤は実際にオンスクリーン鍵盤の
       // 表示範囲(C3〜C6)の外も弾けるため、文字キー入力と違いオクターブを
@@ -4966,6 +5666,11 @@
       renderScorePianoKeyboard();
     } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
       scoreMidiHeldNotes.delete(note);
+      if (scoreRecState) {
+        scoreRecHandleNoteOff(note, ev.timeStamp);
+        renderScorePianoKeyboard();
+        return;
+      }
       // 和音モード中、MIDIキーボードで弾いた和音の鍵盤を全部離した瞬間に自動で
       // 選択解除する(次に弾く和音が別の新しい音符として始まるように)。マウス/
       // 文字キー入力にはこれに相当する「離した」シグナルが無いのでMIDI限定
@@ -4979,6 +5684,773 @@
       }
     }
   }
+  // ==================================================
+  // 段に入る小節数の調整(「＋」「−」、2026-08-20〜)
+  // ==================================================
+  // 自動折り返しだけだと「2段目だけ極端に短い」ような座りの悪い組み方になることが
+  // ある。段の切れ目に出る「＋」「−」で、その段に入る小節数を手で増減できるようにした。
+  //
+  // 実体は小節に持たせた2つの目印:
+  //   - lineBreak : この小節の**後ろ**で必ず改行する(既存)
+  //   - pullUp    : この小節の**前**では改行しない = 前の段に引き上げる(今回追加)
+  // 自動折り返しはそのまま残してあるので、指定していない段は今までどおり動く。
+  function scoreMeasureFirstSrcIndex(measureIdx) {
+    const measure = scoreLastMeasures[measureIdx];
+    if (!measure || !measure.length) return null;
+    const src = scoreLastQueue[measure[0]].srcIndex;
+    return src === null || src === undefined ? null : src;
+  }
+  function scoreSetMeasureFlag(measureIdx, field, value) {
+    const measure = scoreLastMeasures[measureIdx];
+    if (!measure) return;
+    // 立てる時は先頭の要素だけ、降ろす時は取りこぼさないよう全要素から消す
+    if (value) {
+      const src = scoreMeasureFirstSrcIndex(measureIdx);
+      if (src !== null && scoreElements[src]) scoreElements[src][field] = true;
+      return;
+    }
+    measure.forEach((qi) => {
+      const src = scoreLastQueue[qi].srcIndex;
+      if (src !== null && scoreElements[src]) delete scoreElements[src][field];
+    });
+  }
+  // その段の最後の小節を次の段へ送る
+  function scoreShrinkSystem(sysIdx) {
+    const sys = scoreLastSystems[sysIdx];
+    if (!sys || sys.length < 2) return false;
+    const last = sys[sys.length - 1];
+    pushScoreUndoSnapshot();
+    scoreSetMeasureFlag(last, 'pullUp', false);       // 引き上げ指定があれば外す
+    scoreSetMeasureFlag(sys[sys.length - 2], 'lineBreak', true);
+    renderScoreCanvas();
+    return true;
+  }
+  // 次の段の最初の小節をこの段へ引き上げる
+  function scoreGrowSystem(sysIdx) {
+    const sys = scoreLastSystems[sysIdx];
+    const next = scoreLastSystems[sysIdx + 1];
+    if (!sys || !next || !next.length) return false;
+    pushScoreUndoSnapshot();
+    // この段の末尾に「ここで改行」が立っていると引き上げられないので外す
+    sys.forEach((m) => scoreSetMeasureFlag(m, 'lineBreak', false));
+    scoreSetMeasureFlag(next[0], 'pullUp', true);
+    renderScoreCanvas();
+    return true;
+  }
+  // 段の切れ目に出す「＋」「−」。canvasの上に重ねて置く。
+  function renderScoreSystemControls() {
+    scoreSystemControls.innerHTML = '';
+    if (scoreRollMode) return;                 // ピアノロール表示中は関係ない
+    if (scoreLastSystems.length < 1) return;
+    const rowH = SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP;
+    scoreLastSystems.forEach((sys, i) => {
+      if (!sys || !sys.length) return;
+      const canGrow = i + 1 < scoreLastSystems.length && scoreLastSystems[i + 1].length > 0;
+      const canShrink = sys.length > 1;
+      if (!canGrow && !canShrink) return;
+      const box = document.createElement('div');
+      box.className = 'scoreSysCtl';
+      // その段の五線の**すぐ下**(実際に改行が起きる位置)、**左端**に置く。
+      // 右端に置かない理由が2つある:
+      //   - PCのショートカット一覧パネルが右上に出るので重なる
+      //   - 譜面が画面幅より広い時、右端は横スクロールしないと見えない
+      // 左端なら常に見えるうえ、五線の下なのでどの段のものかも迷わない。
+      // 段と段の隙間の真ん中に置く。五線のすぐ下だとト音記号の下側の巻きと重なる。
+      box.style.top = (SCORE_TOP_MARGIN + scoreExtraTopRoom() + i * rowH
+        + SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP / 2 - 11) + 'px';
+      box.style.left = (scoreEditorCanvas.offsetLeft + 2) + 'px';
+      const mk = (label, title, enabled, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.title = title;
+        b.disabled = !enabled;
+        b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+        box.appendChild(b);
+      };
+      mk('\u2212', 'この段の最後の小節を次の段へ送る', canShrink, () => scoreShrinkSystem(i));
+      mk('\uFF0B', '次の段の最初の小節をこの段へ引き上げる', canGrow, () => scoreGrowSystem(i));
+      scoreSystemControls.appendChild(box);
+    });
+  }
+
+  // ==================================================
+  // ピアノロール(2026-08-20〜)
+  // ==================================================
+  // 五線譜と**切り替え**で表示する(同時表示にすると双方の高さが半分になり、
+  // スマホ・タブレットでどちらも操作しづらくなるため)。
+  //
+  // 専用のデータは持たず、`scoreElements` と双方向に変換する。2つの真実を
+  // 持つと必ず食い違うため、ロールは常に「今のscoreElementsの別の見え方」でしかない。
+  const ROLL_ROW_H = 14;        // 半音1つぶんの高さ
+  const ROLL_KEY_W = 42;        // 左端の鍵盤の幅
+  const ROLL_BEAT_W = 72;       // 拍子の下の数字ぶんの音符1つの横幅
+  const ROLL_PAD_TOP = 8;
+  const ROLL_BLACK = new Set([1, 3, 6, 8, 10]);
+  let scoreRollMode = false;
+  let scoreRollLo = 48;
+  let scoreRollHi = 72;
+
+  // 選んでいるグリッドの幅(全音符=1単位)。3連は「拍を3等分/6等分」なので
+  // 拍の長さから決まる(拍子によって変わる)。
+  function scoreRollGridInfo() {
+    const v = scoreRollGrid.value;
+    if (v === 'T3') return { step: scoreBeatStep() / 3, triplet: true };
+    if (v === 'T6') return { step: scoreBeatStep() / 6, triplet: true };
+    return { step: parseFloat(v), triplet: false };
+  }
+
+  // scoreElements -> ロール上の音符。休符は「音符が無い区間」として現れるので出さない。
+  function scoreRollNotes() {
+    const notes = [];
+    let pos = 0;
+    // タイでつながれた音符は**1つの音**として扱う。
+    // 小節線や拍をまたぐ音・3連符の分割で、譜面上は複数の音符に割れていても
+    // 鳴っているのは1つの音なので、ロールで分断して見せると
+    // 「長い音を置いたのに切れて見える」「片方だけ動かせてタイが壊れる」ことになる。
+    const sameChord = (a, b) => a.pitches.length === b.pitches.length
+      && a.pitches.every((q, i) => q.step === b.pitches[i].step
+        && (q.accidental || null) === (b.pitches[i].accidental || null));
+    for (let idx = 0; idx < scoreElements.length; idx++) {
+      const el = scoreElements[idx];
+      let len = scoreElementDurationUnits(el);
+      if (el.type === 'note') {
+        // つながっている先を全部たどって長さを足す
+        let j = idx;
+        while (scoreElements[j].tiedToNext
+          && scoreElements[j + 1]
+          && scoreElements[j + 1].type === 'note'
+          && sameChord(scoreElements[j], scoreElements[j + 1])) {
+          j += 1;
+          len += scoreElementDurationUnits(scoreElements[j]);
+        }
+        el.pitches.forEach((pt) => {
+          notes.push({ srcIndex: idx, start: pos, len,
+            abs: scoreAbsoluteSemitone(pt.step, pt.accidental) });
+        });
+        pos += len;
+        idx = j; // まとめたぶんは読み飛ばす
+        continue;
+      }
+      pos += len;
+    }
+    return notes;
+  }
+  function scoreRollTotalUnits() {
+    return scoreElements.reduce((a, el) => a + scoreElementDurationUnits(el), 0);
+  }
+
+  // ロール -> scoreElements。時間順に並べ、隙間を休符で埋め、同時発音を和音にする。
+  function scoreRollToElements(notes) {
+    const EPS = 1e-6;
+    if (notes.length === 0) return [];
+    const byStart = new Map();
+    notes.forEach((n) => {
+      const key = n.start.toFixed(6);
+      if (!byStart.has(key)) byStart.set(key, { start: n.start, end: n.start + n.len, abs: [] });
+      const g = byStart.get(key);
+      g.abs.push(n.abs);
+      g.end = Math.max(g.end, n.start + n.len);
+    });
+    const groups = Array.from(byStart.values()).sort((a, b) => a.start - b.start);
+    for (let i = 0; i < groups.length - 1; i++) {
+      groups[i].end = Math.min(groups[i].end, groups[i + 1].start);
+    }
+    const out = [];
+    let tripletSeq = 0;
+    const toPitches = (absList) => {
+      const ps = absList.slice().sort((a, b) => a - b).map((a) => scoreResolveFromSemitone(a));
+      ps.sort((a, b) => a.step - b.step);
+      return ps;
+    };
+    const push = (units, absList) => {
+      if (units <= EPS) return;
+      // 拍の3等分(またはその整数倍)ちょうどで、かつ普通の音価では書けない長さなら3連符
+      const third = scoreBeatStep() / 3;
+      const sixth = scoreBeatStep() / 6;
+      const fitsThird = Math.abs(units / third - Math.round(units / third)) < 1e-4;
+      const plainOk = scoreDecomposeToNotatable(units).length === 1;
+      let unit = null;
+      if (!plainOk && fitsThird) unit = third;
+      else if (!plainOk && Math.abs(units / sixth - Math.round(units / sixth)) < 1e-4) unit = sixth;
+      if (unit) {
+        const n = Math.max(1, Math.round(units / unit));
+        const baseUnits = unit * 1.5;
+        const dur = Object.keys(SCORE_DURATION_UNITS)
+          .find((k) => Math.abs(SCORE_DURATION_UNITS[k] - baseUnits) < 1e-9);
+        if (dur) {
+          const gid = ++tripletSeq + 1000;
+          for (let i = 0; i < n; i++) {
+            const el = { duration: dur, dotted: false, triplet: true,
+              tripletGroup: gid, tripletFirst: i === 0 };
+            if (absList) {
+              el.type = 'note';
+              el.pitches = toPitches(absList);
+              el.tiedToNext = i < n - 1;
+            } else { el.type = 'rest'; }
+            out.push(el);
+          }
+          return;
+        }
+      }
+      const parts = scoreDecomposeToNotatable(units);
+      parts.forEach((part, i) => {
+        if (absList) {
+          out.push({ type: 'note', pitches: toPitches(absList),
+            duration: part.duration, dotted: part.dotted, tiedToNext: i < parts.length - 1 });
+        } else {
+          out.push({ type: 'rest', duration: part.duration, dotted: part.dotted });
+        }
+      });
+    };
+    let cursor = 0;
+    for (const g of groups) {
+      if (g.start - cursor > EPS) push(g.start - cursor, null);
+      push(g.end - g.start, g.abs);
+      cursor = g.end;
+    }
+    return out;
+  }
+
+  // 表示する音域。入っている音を全部含めつつ、最低2オクターブは見せる。
+  function scoreRollComputeRange(notes) {
+    let lo = 60 - 12;
+    let hi = 60 + 12;
+    if (notes.length) {
+      lo = Math.min.apply(null, notes.map(function (n) { return n.abs; }));
+      hi = Math.max.apply(null, notes.map(function (n) { return n.abs; }));
+    }
+    lo -= 2; hi += 2;
+    while (hi - lo < 24) { hi += 1; lo -= 1; }
+    scoreRollLo = lo;
+    scoreRollHi = hi;
+  }
+
+  function renderScoreRoll(overrideNotes) {
+    // ドラッグ中は scoreElements をまだ書き換えず、作業用の配列をそのまま描く
+    // (1回動かすたびに譜面を組み直すと重いうえ、途中経過が履歴に残ってしまう)。
+    const notes = overrideNotes || scoreRollNotes();
+    scoreRollComputeRange(notes);
+    const rows = scoreRollHi - scoreRollLo + 1;
+    const ts = scoreCurrentTimeSig();
+    const beatUnits = 1 / ts.unit;
+    const total = Math.max(scoreRollTotalUnits(), scoreMeasureCapacity() * 2);
+    const contentW = ROLL_KEY_W + (total / beatUnits) * ROLL_BEAT_W + ROLL_BEAT_W;
+    const cssW = Math.max(scoreSystemWidth, contentW);
+    const cssH = ROLL_PAD_TOP * 2 + rows * ROLL_ROW_H;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    scoreRollCanvas.width = Math.round(cssW * dpr);
+    scoreRollCanvas.height = Math.round(cssH * dpr);
+    scoreRollCanvas.style.width = cssW + 'px';
+    scoreRollCanvas.style.height = cssH + 'px';
+    const ctx = scoreRollCanvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cssW, cssH);
+
+    const yOf = (abs) => ROLL_PAD_TOP + (scoreRollHi - abs) * ROLL_ROW_H;
+    const xOf = (u) => ROLL_KEY_W + (u / beatUnits) * ROLL_BEAT_W;
+
+    // 黒鍵の行に薄く色を敷く(どの高さかを目で追いやすくする)
+    for (let a = scoreRollLo; a <= scoreRollHi; a++) {
+      if (!ROLL_BLACK.has(((a % 12) + 12) % 12)) continue;
+      ctx.fillStyle = '#f1f1f4';
+      ctx.fillRect(ROLL_KEY_W, yOf(a), cssW - ROLL_KEY_W, ROLL_ROW_H);
+    }
+    // グリッド線。小節線を一番濃く、拍を中間に、細かいグリッドを一番薄く
+    const grid = scoreRollGridInfo();
+    ctx.lineWidth = 1;
+    const cap = scoreMeasureCapacity();
+    for (let u = 0; u <= total + 1e-9; u += grid.step) {
+      const x = Math.round(xOf(u)) + 0.5;
+      const onBar = Math.abs(u / cap - Math.round(u / cap)) < 1e-6;
+      const onBeat = Math.abs(u / scoreBeatStep() - Math.round(u / scoreBeatStep())) < 1e-6;
+      ctx.strokeStyle = onBar ? '#777' : (onBeat ? '#bbb' : '#e8e8e8');
+      ctx.beginPath();
+      ctx.moveTo(x, ROLL_PAD_TOP);
+      ctx.lineTo(x, cssH - ROLL_PAD_TOP);
+      ctx.stroke();
+    }
+    // 左端の鍵盤
+    ctx.font = '9px sans-serif';
+    for (let a = scoreRollLo; a <= scoreRollHi; a++) {
+      const black = ROLL_BLACK.has(((a % 12) + 12) % 12);
+      ctx.fillStyle = black ? '#333' : '#fff';
+      ctx.fillRect(0, yOf(a), ROLL_KEY_W, ROLL_ROW_H);
+      ctx.strokeStyle = '#ccc';
+      ctx.strokeRect(0.5, yOf(a) + 0.5, ROLL_KEY_W - 1, ROLL_ROW_H - 1);
+      if (((a % 12) + 12) % 12 === 0) {
+        ctx.fillStyle = '#333';
+        ctx.fillText('C' + Math.floor(a / 12), 4, yOf(a) + ROLL_ROW_H - 3);
+      }
+    }
+    // 音符
+    notes.forEach((n) => {
+      const x = xOf(n.start);
+      const w = Math.max(6, (n.len / beatUnits) * ROLL_BEAT_W - 2);
+      ctx.fillStyle = scoreSelectedRange.has(n.srcIndex) ? '#2b6cb0' : '#e07020';
+      ctx.fillRect(x + 1, yOf(n.abs) + 1, w, ROLL_ROW_H - 2);
+      ctx.strokeStyle = '#7a3a00';
+      ctx.strokeRect(x + 1.5, yOf(n.abs) + 1.5, w - 1, ROLL_ROW_H - 3);
+    });
+  }
+
+  // ロール上の操作(2026-08-20)
+  //   - 空きをタップ      : その位置に音符を置く。そのまま右へ引けば長さを決められる
+  //   - 音符をタップ      : 消す
+  //   - 音符をドラッグ    : 時間と高さを動かす
+  //   - 音符の右端をドラッグ: 長さを変える
+  // ドラッグ中は scoreElements を書き換えず、作業用の配列だけを描く。
+  // 確定(指を離した時)に初めて譜面へ反映する。
+  const ROLL_EDGE_PX = 10;   // 右端とみなす幅
+  const ROLL_DRAG_SLOP = 4;  // これ以下の動きは「タップ」扱い
+  let scoreRollDrag = null;
+
+  function scoreRollPointToMusic(clientX, clientY) {
+    const rect = scoreRollCanvas.getBoundingClientRect();
+    const ts = scoreCurrentTimeSig();
+    const beatUnits = 1 / ts.unit;
+    return {
+      x: clientX - rect.left,
+      u: ((clientX - rect.left - ROLL_KEY_W) / ROLL_BEAT_W) * beatUnits,
+      abs: scoreRollHi - Math.floor((clientY - rect.top - ROLL_PAD_TOP) / ROLL_ROW_H),
+    };
+  }
+  function scoreRollCommit(notes) {
+    scoreElements = scoreRollToElements(notes);
+    scoreSetSelection(null);
+    updateScoreToolbarUI();
+    renderScoreRoll();
+    renderScoreCanvas();
+  }
+
+  scoreRollCanvas.addEventListener('pointerdown', (e) => {
+    const pt = scoreRollPointToMusic(e.clientX, e.clientY);
+    if (pt.x < ROLL_KEY_W) return;          // 左端の鍵盤は今のところ表示だけ
+    if (pt.abs < scoreRollLo || pt.abs > scoreRollHi) return;
+    if (pt.u < -1e-9) return;
+    e.preventDefault();
+    scoreRollCanvas.setPointerCapture(e.pointerId);
+
+    const grid = scoreRollGridInfo();
+    const notes = scoreRollNotes();
+    const hitIdx = notes.findIndex((n) => n.abs === pt.abs
+      && pt.u >= n.start - 1e-9 && pt.u < n.start + n.len - 1e-9);
+
+    if (hitIdx < 0) {
+      // 空き: その場に置いて、そのまま長さを引き出せる状態にする
+      const start = Math.max(0, Math.round(pt.u / grid.step) * grid.step);
+      notes.push({ start, len: grid.step, abs: pt.abs });
+      scorePlayPitches([scoreResolveFromSemitone(pt.abs)]);
+      scoreRollDrag = { notes, idx: notes.length - 1, mode: 'resize',
+        startX: e.clientX, startY: e.clientY, moved: false, created: true };
+      renderScoreRoll(notes);
+      return;
+    }
+    const n = notes[hitIdx];
+    const rightEdgeU = n.start + n.len;
+    const ts = scoreCurrentTimeSig();
+    const edgePx = (rightEdgeU - pt.u) / (1 / ts.unit) * ROLL_BEAT_W;
+    scoreRollDrag = {
+      notes, idx: hitIdx,
+      mode: edgePx <= ROLL_EDGE_PX ? 'resize' : 'move',
+      grabOffset: pt.u - n.start,
+      startX: e.clientX, startY: e.clientY, moved: false, created: false,
+    };
+  });
+
+  scoreRollCanvas.addEventListener('pointermove', (e) => {
+    const d = scoreRollDrag;
+    if (!d) return;
+    if (!d.moved
+      && Math.abs(e.clientX - d.startX) < ROLL_DRAG_SLOP
+      && Math.abs(e.clientY - d.startY) < ROLL_DRAG_SLOP) return;
+    d.moved = true;
+    const pt = scoreRollPointToMusic(e.clientX, e.clientY);
+    const grid = scoreRollGridInfo();
+    const n = d.notes[d.idx];
+    if (d.mode === 'resize') {
+      // 右端を掴んで長さを変える。最短でもグリッド1つは残す。
+      const end = Math.round(pt.u / grid.step) * grid.step;
+      n.len = Math.max(grid.step, end - n.start);
+    } else {
+      const start = Math.max(0, Math.round((pt.u - d.grabOffset) / grid.step) * grid.step);
+      const abs = clamp(pt.abs, scoreRollLo, scoreRollHi);
+      if (abs !== n.abs) scorePlayPitches([scoreResolveFromSemitone(abs)]);
+      n.start = start;
+      n.abs = abs;
+    }
+    renderScoreRoll(d.notes);
+  });
+
+  function scoreRollEndDrag(e) {
+    const d = scoreRollDrag;
+    if (!d) return;
+    scoreRollDrag = null;
+    if (e && scoreRollCanvas.hasPointerCapture(e.pointerId)) {
+      scoreRollCanvas.releasePointerCapture(e.pointerId);
+    }
+    if (!d.moved && !d.created) {
+      // 動かさずに既存の音符を押しただけ = 削除
+      pushScoreUndoSnapshot();
+      const n = d.notes[d.idx];
+      scoreRollCommit(d.notes.filter((x, i) => i !== d.idx
+        || !(x.abs === n.abs && Math.abs(x.start - n.start) < 1e-9)));
+      return;
+    }
+    pushScoreUndoSnapshot();
+    scoreRollCommit(d.notes);
+  }
+  scoreRollCanvas.addEventListener('pointerup', scoreRollEndDrag);
+  scoreRollCanvas.addEventListener('pointercancel', scoreRollEndDrag);
+  scoreRollGrid.addEventListener('change', () => renderScoreRoll());
+
+  function setScoreRollMode(on) {
+    scoreRollMode = on;
+    btnScoreRollMode.classList.toggle('active', on);
+    scoreRollCanvas.classList.toggle('hidden', !on);
+    scoreEditorCanvas.classList.toggle('hidden', on);
+    scoreRollBar.classList.toggle('hidden', !on);
+    if (on) renderScoreRoll();
+    renderScoreSystemControls(); // ロール表示中は「＋」「−」を出さない
+  }
+  btnScoreRollMode.addEventListener('click', () => setScoreRollMode(!scoreRollMode));
+
+  // ==================================================
+  // リアルタイム録音記譜(2026-08-20〜)
+  // ==================================================
+  // クリックに合わせてMIDIキーボードで弾くと、そのまま楽譜になる機能。
+  //
+  // 音源からの自動採譜と違い、MIDIは**音高もタイミングも誤差ゼロ**で届くので、
+  // やることは「打鍵の時刻を拍に直してグリッドに吸着させる」だけで済む。
+  //
+  // ここで一番気を遣うのが**時計合わせ**。クリックはWeb Audioの
+  // AudioContext.currentTime で予約し、MIDIイベントは event.timeStamp
+  // (performance.now()と同じ基準)で届く。この2つは別々の時計なので、
+  // 録音開始の瞬間に両方を控えて換算する。ここが雑だと譜面全体が一定量ずれる。
+  const SCORE_REC_GRID_UNITS = {
+    quarter: 0.25, eighth: 0.125, sixteenth: 0.0625, thirtysecond: 0.03125,
+  };
+  let scoreRecState = null; // 録音中だけ入る
+
+  function scoreRecPerfToCtx(perfMs) {
+    // performance.now()の時刻 → AudioContextの時刻
+    return scoreRecState.ctxT0 + (perfMs - scoreRecState.perfT0) / 1000;
+  }
+  // BPMが指す「1拍」の音価(全音符=1単位)。
+  // 単純拍子(4/4・3/4等)は4分音符、**複合拍子(6/8・9/8・12/8)は付点4分**。
+  // 6/8で「BPM=120」と言えば普通は付点4分が120であって8分音符ではないため
+  // (当初は拍子の下の数字をそのまま使っていて、6/8だと体感の3倍速で刻んでいた)。
+  // 連桁のまとまりと同じ規則なので scoreBeatStep() をそのまま使う。
+  function scoreRecBeatUnits() { return scoreBeatStep(); }
+  // 1小節あたりのクリック数。4/4なら4、6/8なら2(付点4分が2つ)。
+  function scoreRecClicksPerBar() {
+    return Math.max(1, Math.round(scoreMeasureCapacity() / scoreRecBeatUnits()));
+  }
+  function scoreRecSecPerWhole(bpm) { return (60 / bpm) / scoreRecBeatUnits(); }
+
+  function scoreRecScheduleClicks() {
+    const st = scoreRecState;
+    if (!st) return;
+    const ctx = ensureAudioCtx();
+    const secPerBeat = 60 / st.bpm;
+    while (st.nextClick < ctx.currentTime + METRONOME_SCHEDULE_AHEAD_SEC) {
+      scheduleClick(st.nextClick);
+      st.nextClick += secPerBeat;
+    }
+    st.timerId = setTimeout(scoreRecScheduleClicks, METRONOME_LOOKAHEAD_MS);
+  }
+
+  function scoreRecUpdateDisplay() {
+    const st = scoreRecState;
+    if (!st) return;
+    const ctx = ensureAudioCtx();
+    const perBar = scoreRecClicksPerBar();
+    const beats = (ctx.currentTime - st.zeroCtx) / (60 / st.bpm);
+    if (beats < 0) {
+      const left = Math.ceil(-beats);
+      scoreRecStatus.textContent = 'カウントイン';
+      scoreRecCounter.textContent = left + ' …';
+    } else {
+      scoreRecStatus.textContent = '録音中';
+      const bar = Math.floor(beats / perBar) + 1;
+      const beatInBar = Math.floor(beats % perBar) + 1;
+      scoreRecCounter.textContent = `${bar}小節 ${beatInBar}拍 / ${st.events.length}音`;
+    }
+    st.rafId = requestAnimationFrame(scoreRecUpdateDisplay);
+  }
+
+  function scoreStartRecording() {
+    const bpm = clamp(parseInt(scoreRecBpm.value, 10) || 100, 30, 300);
+    const ctx = ensureAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    const countInBars = parseInt(scoreRecCountIn.value, 10) || 0;
+    const secPerBeat = 60 / bpm;
+    // 最初のクリックを少し先に置く(予約が間に合うように)
+    const startCtx = ctx.currentTime + 0.25;
+    scoreRecState = {
+      bpm,
+      grid: SCORE_REC_GRID_UNITS[scoreRecQuantize.value] || 0.0625,
+      mode: scoreRecMode.value,
+      // 2つの時計を同じ瞬間に控える。これが換算の基準になる。
+      perfT0: performance.now(),
+      ctxT0: ctx.currentTime,
+      zeroCtx: startCtx + countInBars * scoreRecClicksPerBar() * secPerBeat,
+      nextClick: startCtx,
+      events: [],   // { note, onCtx, offCtx }
+      held: new Map(), // note -> events配列の添字
+      timerId: null, rafId: null,
+    };
+    scoreRecordPanel.classList.add('recording');
+    scoreRecordSetup.classList.add('hidden');
+    scoreRecordLive.classList.remove('hidden');
+    btnScoreRecord.classList.add('recording');
+    scoreRecScheduleClicks();
+    scoreRecUpdateDisplay();
+  }
+
+  function scoreStopRecordingInternal() {
+    const st = scoreRecState;
+    if (!st) return null;
+    clearTimeout(st.timerId);
+    cancelAnimationFrame(st.rafId);
+    scoreRecState = null;
+    scoreRecordPanel.classList.remove('recording');
+    scoreRecordSetup.classList.remove('hidden');
+    scoreRecordLive.classList.add('hidden');
+    btnScoreRecord.classList.remove('recording');
+    return st;
+  }
+
+  // 録音中のMIDIノートオン/オフを控える。通常の「弾いたら即入力」は行わない。
+  function scoreRecHandleNoteOn(note, perfMs) {
+    const st = scoreRecState;
+    const ctxTime = scoreRecPerfToCtx(perfMs);
+    // カウントイン中の音は捨てるが、**少し走って弾いた1拍目まで捨ててはいけない**。
+    // 実際の演奏で頭の音が数十ms早くなるのは普通で、当初は容赦なく切っていたため
+    // 1音目だけ消えて休符に化けていた。グリッド半分ぶんまでは「本番の音が
+    // 少し早かっただけ」とみなして拾う(拾った音は開始位置0に丸められる)。
+    const tolerance = (st.grid * scoreRecSecPerWhole(st.bpm)) / 2;
+    if (ctxTime < st.zeroCtx - tolerance) return;
+    // 同じ音を離さずに再度押した場合は、前の音をここで閉じる
+    if (st.held.has(note)) {
+      const prev = st.events[st.held.get(note)];
+      if (prev && prev.offCtx === null) prev.offCtx = ctxTime;
+    }
+    st.events.push({ note, onCtx: ctxTime, offCtx: null });
+    st.held.set(note, st.events.length - 1);
+  }
+  function scoreRecHandleNoteOff(note, perfMs) {
+    const st = scoreRecState;
+    if (!st.held.has(note)) return;
+    const idx = st.held.get(note);
+    st.held.delete(note);
+    if (st.events[idx] && st.events[idx].offCtx === null) {
+      st.events[idx].offCtx = scoreRecPerfToCtx(perfMs);
+    }
+  }
+
+  // 3連符と判定する条件。3連グリッドの方が「明確に」よく合う時だけ3連にする。
+  // 僅差で3連を選ぶと、普通に弾いただけの箇所が3連符だらけの読めない譜面になるため、
+  // 迷ったら直線を採る側に倒してある(ズレが3割以上小さい時だけ3連)。
+  const SCORE_REC_TRIPLET_BIAS = 0.7;
+  let scoreRecTripletSeq = 0;
+
+  // 記録した打鍵をscoreElementsに変換する。ここが記譜化の本体。
+  function scoreRecEventsToElements(st) {
+    const EPS = 1e-6;
+    const secPerWhole = scoreRecSecPerWhole(st.bpm);
+    const endCtx = ensureAudioCtx().currentTime;
+    const toUnits = (c) => (c - st.zeroCtx) / secPerWhole;
+    const beat = scoreRecBeatUnits();
+    const ts = scoreCurrentTimeSig();
+    const isCompound = ts.unit === 8 && ts.beats % 3 === 0;
+
+    // 素の(吸着前の)打鍵時刻
+    const raw = st.events.map((e) => ({
+      note: e.note,
+      on: Math.max(0, toUnits(e.onCtx)),
+      off: toUnits(e.offCtx === null ? endCtx : e.offCtx),
+    }));
+    if (raw.length === 0) return [];
+
+    // --- 1) 拍ごとに「直線 or 3連」を判定する ---
+    // その拍に入っている打鍵を直線グリッドと3連グリッドの両方に吸着させ、
+    // 元の時刻とのズレの平均が小さい方を採る。拍単位で見るので、曲の途中で
+    // 3連と直線が混ざっていても書き分けられる。
+    //
+    // 複合拍子(6/8等)では判定しない。6/8の「3つ組」は拍子が持っている区切りで、
+    // 8分3つはただの8分音符(3連符ではない)ため。
+    const tripletBeats = new Map(); // 拍番号 -> その拍のグリッド幅
+    if (!isCompound) {
+      const byBeat = new Map();
+      raw.forEach((e) => {
+        const b = Math.floor(e.on / beat + EPS);
+        if (!byBeat.has(b)) byBeat.set(b, []);
+        byBeat.get(b).push(e.on - b * beat);
+      });
+      for (const [b, offsets] of byBeat) {
+        const uniq = Array.from(new Set(offsets.map((o) => o.toFixed(4)))).map(Number);
+        if (uniq.length < 2) continue; // 1箇所しか打鍵が無い拍は判断材料が足りない
+        const err = (step) => uniq.reduce(
+          (a, u) => a + Math.abs(u - Math.round(u / step) * step), 0) / uniq.length;
+        const straight = err(st.grid);
+        const e3 = err(beat / 3);
+        const e6 = err(beat / 6);
+        const useSix = uniq.length > 3 && e6 < e3;
+        const triErr = useSix ? e6 : e3;
+        if (triErr < straight * SCORE_REC_TRIPLET_BIAS) {
+          tripletBeats.set(b, beat / (useSix ? 6 : 3));
+        }
+      }
+    }
+    const gridAt = (u) => tripletBeats.get(Math.floor(u / beat + EPS)) || st.grid;
+
+    // --- 2) その位置の拍のグリッドで吸着し、和音をまとめる ---
+    const byStart = new Map();
+    for (const e of raw) {
+      const g0 = gridAt(e.on);
+      const start = Math.max(0, Math.round(e.on / g0) * g0);
+      const g1 = gridAt(start);
+      // 押した瞬間に離した音は、グリッド1つぶんの長さとして救う
+      const end = Math.max(start + g1, Math.round(e.off / g1) * g1);
+      const key = start.toFixed(6);
+      if (!byStart.has(key)) byStart.set(key, { start, end, notes: [] });
+      const grp = byStart.get(key);
+      grp.notes.push(e.note);
+      grp.end = Math.max(grp.end, end); // 和音は一番長い音に合わせる
+    }
+    const groups = Array.from(byStart.values()).sort((a, b) => a.start - b.start);
+
+    // --- 3) 次の音の直前で切る(レガートで弾いた時の重なりを吸収) ---
+    for (let i = 0; i < groups.length - 1; i++) {
+      const g = gridAt(groups[i].start);
+      groups[i].end = Math.min(groups[i].end, groups[i + 1].start);
+      if (groups[i].end - groups[i].start < g) groups[i].end = groups[i].start + g;
+    }
+    // 3連の拍にかかる音は、その拍の中で閉じる(3連のまとまりを壊さないため)
+    for (const g of groups) {
+      const b = Math.floor(g.start / beat + EPS);
+      if (tripletBeats.has(b)) g.end = Math.min(g.end, (b + 1) * beat);
+    }
+
+    const pitchesOf = (grp) => {
+      const ps = Array.from(new Set(grp.notes)).sort((a, b) => a - b)
+        .map((n) => scoreResolveFromSemitone(n - 12));
+      ps.sort((a, b) => a.step - b.step);
+      return ps;
+    };
+
+    // --- 4) 先頭から順に、拍ごとに書き出す ---
+    const out = [];
+    const lastEnd = groups.length ? groups[groups.length - 1].end : 0;
+    const lastBeat = Math.max(0, Math.ceil(lastEnd / beat - EPS) - 1);
+    let gi = 0;
+
+    // 直線の区間は、既存の分解処理で記譜できる形に割ってタイでつなぐ
+    const pushStraight = (units, pitches) => {
+      if (units <= EPS) return;
+      const parts = scoreDecomposeToNotatable(units);
+      parts.forEach((part, i) => {
+        if (pitches) {
+          out.push({ type: 'note', pitches: pitches.map((q) => ({ ...q })),
+            duration: part.duration, dotted: part.dotted, tiedToNext: i < parts.length - 1 });
+        } else {
+          out.push({ type: 'rest', duration: part.duration, dotted: part.dotted });
+        }
+      });
+    };
+
+    let cursor = 0;
+    for (let b = 0; b <= lastBeat; b++) {
+      const bStart = b * beat;
+      const bEnd = bStart + beat;
+      const tstep = tripletBeats.get(b);
+      if (!tstep) {
+        // 直線の拍: この拍にかかる音符と休符をそのまま並べる
+        while (gi < groups.length && groups[gi].start < bEnd - EPS) {
+          const g = groups[gi];
+          if (g.start - cursor > EPS) pushStraight(g.start - cursor, null);
+          pushStraight(g.end - g.start, pitchesOf(g));
+          cursor = g.end;
+          gi += 1;
+        }
+        if (bEnd - cursor > EPS && gi < groups.length && groups[gi].start >= bEnd - EPS) {
+          pushStraight(bEnd - cursor, null);
+          cursor = bEnd;
+        }
+        continue;
+      }
+      // 3連の拍: 必ず「スロット数ぶんちょうど」の要素を出す。
+      // こうしておけば3連のまとまり(tripletGroup)が常に正しく閉じる。
+      // 音価は「基準の音符 × 2/3」なので、スロット幅の1.5倍が基準の音価になる。
+      if (bStart - cursor > EPS) { pushStraight(bStart - cursor, null); cursor = bStart; }
+      const slots = Math.round(beat / tstep);
+      const baseUnits = tstep * 1.5;
+      const baseDuration = Object.keys(SCORE_DURATION_UNITS)
+        .find((k) => Math.abs(SCORE_DURATION_UNITS[k] - baseUnits) < 1e-9) || 'eighth';
+      const groupId = ++scoreRecTripletSeq;
+      for (let sIdx = 0; sIdx < slots; sIdx++) {
+        const sStart = bStart + sIdx * tstep;
+        const el = { duration: baseDuration, dotted: false,
+          triplet: true, tripletGroup: groupId, tripletFirst: sIdx === 0 };
+        const g = groups[gi];
+        if (g && Math.abs(g.start - sStart) < tstep / 2) {
+          el.type = 'note';
+          el.pitches = pitchesOf(g);
+          // 2スロット以上ある音は、スロットごとに割ってタイでつなぐ
+          const span = Math.max(1, Math.round((g.end - g.start) / tstep));
+          el.tiedToNext = span > 1;
+          g.__remain = span - 1;
+          g.__pitches = el.pitches;
+          if (g.__remain <= 0) { cursor = g.end; gi += 1; }
+        } else if (g && g.__remain > 0) {
+          el.type = 'note';
+          el.pitches = g.__pitches.map((q) => ({ ...q }));
+          g.__remain -= 1;
+          el.tiedToNext = g.__remain > 0;
+          if (g.__remain <= 0) { cursor = g.end; gi += 1; }
+        } else {
+          el.type = 'rest';
+        }
+        out.push(el);
+      }
+      cursor = bEnd;
+    }
+    return out;
+  }
+
+  function scoreFinishRecording() {
+    const st = scoreStopRecordingInternal();
+    if (!st) return;
+    // 押しっぱなしの音は、停止した時刻で閉じる
+    const endCtx = ensureAudioCtx().currentTime;
+    st.events.forEach((e) => { if (e.offCtx === null) e.offCtx = endCtx; });
+    if (st.events.length === 0) {
+      alert('音が記録されませんでした。MIDIキーボードが繋がっているか確認してください。');
+      return;
+    }
+    const els = scoreRecEventsToElements(st);
+    if (els.length === 0) return;
+    pushScoreUndoSnapshot();
+    if (st.mode === 'replace') scoreElements = els;
+    else scoreElements = scoreElements.concat(els);
+    scoreSetSelection(null);
+    updateScoreToolbarUI();
+    renderScoreCanvas();
+  }
+
+  btnScoreRecord.addEventListener('click', () => {
+    const open = scoreRecordPanel.classList.contains('hidden');
+    if (!open && scoreRecState) return; // 録音中はパネルを閉じさせない
+    scoreRecordPanel.classList.toggle('hidden', !open);
+    if (open && currentBpm) scoreRecBpm.value = String(currentBpm);
+  });
+  btnScoreRecClose.addEventListener('click', () => scoreRecordPanel.classList.add('hidden'));
+  btnScoreRecStart.addEventListener('click', scoreStartRecording);
+  btnScoreRecStop.addEventListener('click', scoreFinishRecording);
+  btnScoreRecCancel.addEventListener('click', () => scoreStopRecordingInternal());
+
   function scoreAttachMidiInputs(access) {
     scoreMidiInputs.forEach((input) => { input.onmidimessage = null; });
     scoreMidiInputs = Array.from(access.inputs.values());
@@ -4999,27 +6471,40 @@
     scoreMidiHeldNotes.clear();
     scoreUpdateMidiButtonLabel();
   }
-  async function scoreEnableMidi() {
+  // 既定でオン(2026-08-20〜)。MIDIキーボードでステップ入力するのが主な使い方なので、
+  // 毎回ボタンを押すのは無駄だった。明示的にオフにした時だけ '0' を書いて記憶する。
+  function scoreMidiWantedByUser() { return localStorage.getItem(SCORE_MIDI_ENABLED_KEY) !== '0'; }
+  // silent=true は「ユーザーがボタンを押したわけではない自動接続」。許可を断られても
+  // アラートを出さない(MIDIを使わない人が編集画面を開くたびに怒られないように)。
+  async function scoreEnableMidi(silent) {
     try {
       const access = await navigator.requestMIDIAccess();
       scoreMidiAccess = access;
       scoreAttachMidiInputs(access);
       access.onstatechange = () => scoreAttachMidiInputs(access); // 抜き差しに追従
       scoreUpdateMidiButtonLabel();
-      localStorage.setItem(SCORE_MIDI_ENABLED_KEY, '1');
+      localStorage.removeItem(SCORE_MIDI_ENABLED_KEY); // 既定=オンなので値は消す
     } catch (err) {
-      alert('MIDIデバイスへのアクセスを許可できませんでした: ' + (err && err.message ? err.message : err));
-      localStorage.removeItem(SCORE_MIDI_ENABLED_KEY);
+      // 自動接続(silent)の失敗では設定を書き換えない。MIDI機器を繋いでいない時や
+      // 許可がまだ無い時に一度失敗しただけで、以後ずっとオフ扱いになってしまうため。
+      // 「オフ」を記憶するのは、ユーザーが自分でボタンを押した時だけにする。
+      if (!silent) {
+        alert('MIDIデバイスへのアクセスを許可できませんでした: ' + (err && err.message ? err.message : err));
+        localStorage.setItem(SCORE_MIDI_ENABLED_KEY, '0');
+      }
+      scoreUpdateMidiButtonLabel();
     }
   }
   if (typeof navigator.requestMIDIAccess === 'function') {
     btnScoreMidi.classList.remove('hidden');
+    // 録音記譜はMIDI入力が前提なので、対応環境でだけ出す
+    btnScoreRecord.classList.remove('hidden');
     btnScoreMidi.addEventListener('click', () => {
       if (scoreMidiAccess) {
         scoreDisableMidi();
-        localStorage.removeItem(SCORE_MIDI_ENABLED_KEY);
+        localStorage.setItem(SCORE_MIDI_ENABLED_KEY, '0');
       } else {
-        scoreEnableMidi();
+        scoreEnableMidi(false);
       }
     });
   }
@@ -5126,7 +6611,15 @@
       return !!(el && el.lineBreak);
     }));
 
-    return { queue, measures, effectiveAccidental, fullMeasureRest, measureRepeats, measureBreaks };
+    // 「この小節の前で改行しない(前の段に引き上げる)」指定。段の小節数を
+    // ＋で増やす操作に使う(2026-08-20〜)。
+    const measurePullUp = measures.map((measure) => measure.some((qi) => {
+      const src = queue[qi].srcIndex;
+      const el = src !== null ? scoreElements[src] : null;
+      return !!(el && el.pullUp);
+    }));
+    return { queue, measures, effectiveAccidental, fullMeasureRest,
+      measureRepeats, measureBreaks, measurePullUp };
   }
 
   // 1小節ぶんのVexFlow音符配列(StaveNote)・付点・3連符括弧を組み立てる
@@ -5147,9 +6640,14 @@
         // 並び順で決めるため未整列だと見た目が崩れるが、その心配は不要)。
         // リズム譜は音程を持たないので、全部を1本線の上に固定で置く。
         // 符頭はスラッシュにして「音程ではなくリズムを示す」ことを見た目でも伝える。
+        // オクターブ記号が付いている音符は、記号のぶんだけ**書く位置**を逆にずらす
+        // (8vaなら1オクターブ低く書いて「実際は1つ上」を記号で示す)。
+        // 実効臨時記号は本来の高さで計算済みのものをそのまま使う(オクターブが
+        // 変わっても音名は変わらないため、ここでずらしても意味は変わらない)。
+        const oct8Shift = el.oct8 === 'up' ? -7 : (el.oct8 === 'down' ? 7 : 0);
         const keys = scoreStaffType === 'rhythm'
           ? [SCORE_RHYTHM_KEY + '/s']
-          : el.pitches.map((p, pi) => scoreStepToVexKey(p.step, effectiveAccidental[idx][pi]));
+          : el.pitches.map((p, pi) => scoreStepToVexKey(p.step + oct8Shift, effectiveAccidental[idx][pi]));
         note = new VF.StaveNote({ keys, duration: SCORE_DURATION_TO_VEX[el.duration] });
         // 両手のリズムパターン用に、音符の上へL/Rを振れる
         if (scoreStaffType === 'rhythm' && el.hand) {
@@ -5194,20 +6692,78 @@
     return { notes, tuplets };
   }
 
+  // 連桁(はた同士をつなぐ横棒)を、音符の**実際の拍位置**を見て組み立てる。
+  //
+  // 以前は VF.Beam.generateBeams(notes, { groups: 1拍ごとのFraction }) に任せていたが、
+  // あれは音符を先頭から順に音価で消費してグループを切る方式なので、拍をまたぐ音符が
+  // 1つでも挟まると以後の区切りが拍からずれ続け、後続の連桁が総崩れになっていた。
+  // ここでは各音符が小節のどこから始まるかを自前で数え、同じ拍のまとまりに入る
+  // 連続した8分以下の音符だけを1つのグループにする(2026-08-20)。
+  //
+  // グループ内の連桁作成そのものは generateBeams に渡す(符幹の向き決め・3連符の
+  // 括弧処理などVexFlow側の細かい判断をそのまま使いたいため)。その際に「絶対に
+  // 超えない大きさ」のグループを1つだけ渡すことで、渡した音符が必ず1本の連桁になる。
+  function scoreBeamRuns(notes, queue, measureIdxs, measureIndex) {
+    const EPS = 1e-6;
+    const bounds = scoreMeasureBeatBoundaries(measureIndex);
+    const spanOf = (pos) => {
+      for (let i = bounds.length - 1; i >= 0; i--) if (pos >= bounds[i] - EPS) return i;
+      return 0;
+    };
+    const runs = [];
+    let cur = [];
+    let pos = 0;
+    let prevSpan = -1;
+    let prevStraddled = false;
+    measureIdxs.forEach((qi, i) => {
+      const el = queue[qi];
+      const note = notes[i];
+      const units = scoreElementDurationUnits(el);
+      const span = spanOf(pos);
+      const spanEnd = span + 1 < bounds.length ? bounds[span + 1] : Infinity;
+      // 分割しなかった長い音符(4分以上)は拍をまたぎうる。またいだ次の音符は
+      // 必ず新しいまとまりとして数え直す。
+      const straddles = pos + units > spanEnd + EPS;
+      // 連桁を張れるのは8分以下の音符だけ(4分より長い音符にははたが無い)。
+      // 休符は連桁に含めない(VexFlowの既定と同じ、一般的な記譜法)。
+      const beamable = el.type === 'note' && Number(SCORE_DURATION_TO_VEX[el.duration]) >= 8;
+      if (!beamable || span !== prevSpan || prevStraddled) {
+        if (cur.length) runs.push(cur);
+        cur = [];
+      }
+      if (beamable) cur.push(note);
+      prevSpan = span;
+      prevStraddled = straddles;
+      pos += units;
+    });
+    if (cur.length) runs.push(cur);
+    return runs.filter((r) => r.length > 1);
+  }
+  function scoreMakeBeams(VF, notes, queue, measureIdxs, measureIndex) {
+    const beams = [];
+    scoreBeamRuns(notes, queue, measureIdxs, measureIndex).forEach((run) => {
+      // 全音符4つぶん。どんなグループもこれを超えないので必ず1本にまとまる。
+      VF.Beam.generateBeams(run, { groups: [new VF.Fraction(4, 1)] })
+        .forEach((b) => beams.push(b));
+    });
+    return beams;
+  }
+
   // queue/measuresからVexFlowの音符・連桁・小節ごとの必要幅を組み立て、段(システム)
   // への折り返しを決める。実際のcanvas描画より前に段数を確定させる必要があるが、
   // VexFlowの幅計算(Formatter.preCalculateMinTotalWidth・Stave.getNoteStartX)は
   // 実際のcanvasコンテキスト無しでも動くので、ここでは描画は一切行わない。
   function scoreComputeSystems(VF) {
-    const { queue, measures, effectiveAccidental, fullMeasureRest, measureRepeats, measureBreaks } = computeScoreLayout();
+    const { queue, measures, effectiveAccidental, fullMeasureRest,
+      measureRepeats, measureBreaks, measurePullUp } = computeScoreLayout();
     const keyName = scoreKeyOption().vexName;
     const ts = scoreCurrentTimeSig();
 
-    const measureData = measures.map((measureIdxs) => {
+    const measureData = measures.map((measureIdxs, measureIndex) => {
       const { notes, tuplets } = scoreBuildMeasureNotes(VF, queue, measureIdxs, effectiveAccidental, fullMeasureRest);
       const voice = new VF.Voice({ num_beats: ts.beats, beat_value: ts.unit }).setStrict(false);
       voice.addTickables(notes);
-      const beams = VF.Beam.generateBeams(notes, { groups: scoreVexBeamGroups(VF) });
+      const beams = scoreMakeBeams(VF, notes, queue, measureIdxs, measureIndex);
       // 幅の見積もりだけに使う専用のFormatterで測る(実際の描画用format()と同じ
       // インスタンスを使い回すと、ノート・修飾記号の内部状態が二重に組まれて
       // 描画が崩れる不具合があったため、完全に分離した)。
@@ -5239,7 +6795,10 @@
       for (let m = 0; m < measureData.length; m++) {
         const header = cur.length === 0 ? (systems.length === 0 ? headerFirst : headerRest) : 0;
         const w = measureData[m].width + header;
-        if (cur.length > 0 && curW + w > contentWidth) { systems.push(cur); cur = []; }
+        // pullUpが立っている小節は、幅を超えていても前の段に留める
+        // (「＋」で段の小節数を増やす操作の実体)。
+        const keepWithPrev = measurePullUp && measurePullUp[m];
+        if (cur.length > 0 && !keepWithPrev && curW + w > contentWidth) { systems.push(cur); cur = []; }
         if (cur.length === 0) curW = 0;
         cur.push(m); curW += w;
         if (measureBreaks && measureBreaks[m]) { systems.push(cur); cur = []; curW = 0; }
@@ -5247,6 +6806,10 @@
       if (cur.length) systems.push(cur);
       if (systems.length === 0) systems.push([]); // 音符が1つも無くても五線だけは表示する
     }
+    // 「＋/−」ボタンから「どの段にどの小節が入っているか」を引くために控える
+    scoreLastSystems = systems;
+    scoreLastMeasures = measures;
+    scoreLastQueue = queue;
     return { queue, measureData, systems, keyName, ts, headerFirst, headerRest, measureRepeats };
   }
 
@@ -5260,7 +6823,7 @@
     scoreLastStaves = [];
     scoreLastNotePositions = new Map();
     const notesByQueueIndex = new Map();
-    let y = SCORE_TOP_MARGIN;
+    let y = SCORE_TOP_MARGIN + scoreExtraTopRoom();
     systems.forEach((measureIdxs, sysIdx) => {
       const isFirstSystem = sysIdx === 0;
       let x = SCORE_LEFT_MARGIN;
@@ -5339,6 +6902,34 @@
       tie.setContext(ctx).draw();
     });
 
+    // オクターブ記号(2026-08-20〜)。同じ値のoct8が続いているところを1つの範囲と
+    // みなし、その始点から終点へ点線の括弧を引く。VexFlowのTextBracketは始点の
+    // 段(Stave)を基準にY座標を決めるので、範囲が段をまたぐ場合は段ごとに切って
+    // それぞれ引く(実際の楽譜でも段が変わると記号を引き直すので記譜法とも合う)。
+    {
+      let run = null;
+      const flush = () => {
+        if (!run) return;
+        if (run.notes.length >= 1) {
+          const bracket = new VF.TextBracket({
+            start: run.notes[0], stop: run.notes[run.notes.length - 1],
+            text: '8', superscript: run.value === 'up' ? 'va' : 'vb',
+            position: run.value === 'up' ? VF.TextBracket.Position.TOP : VF.TextBracket.Position.BOTTOM,
+          });
+          bracket.setContext(ctx).draw();
+        }
+        run = null;
+      };
+      queue.forEach((el, i) => {
+        const pos = notesByQueueIndex.get(i);
+        if (!el.oct8 || !pos) { flush(); return; }
+        if (run && (run.value !== el.oct8 || run.sysIdx !== pos.sysIdx)) flush();
+        if (!run) run = { value: el.oct8, sysIdx: pos.sysIdx, notes: [] };
+        run.notes.push(pos.note);
+      });
+      flush();
+    }
+
     // スラー(2026-08-19〜)。タイと見た目は似ているが意味が違う(タイは同じ音の
     // 継続、スラーはフレーズのまとまり)ので別扱いにしている。VexFlowのCurveは
     // 音符の高さに応じて弧の向き・カーブを自動で決めてくれる。
@@ -5358,7 +6949,7 @@
     const layout = scoreComputeSystems(VF);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const systemCount = layout.systems.length;
-    const cssHeight = SCORE_TOP_MARGIN + systemCount * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP) + SCORE_BOTTOM_MARGIN + scoreExtraBottomRoom();
+    const cssHeight = SCORE_TOP_MARGIN + scoreExtraTopRoom() + systemCount * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP) + SCORE_BOTTOM_MARGIN + scoreExtraBottomRoom();
     scoreEditorCanvas.width = Math.round(scoreSystemWidth * dpr);
     scoreEditorCanvas.height = Math.round(cssHeight * dpr);
     scoreEditorCanvas.style.width = scoreSystemWidth + 'px';
@@ -5369,12 +6960,13 @@
     ctx.fillRect(0, 0, scoreSystemWidth, cssHeight);
     // ピアノ鍵盤で今度入力すると音符が追加される段(常に最後の段)だけ薄く色を付け、
     // どこに追加されるか一目で分かるようにする。
-    const activeSysY = SCORE_TOP_MARGIN + (systemCount - 1) * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP);
+    const activeSysY = SCORE_TOP_MARGIN + scoreExtraTopRoom() + (systemCount - 1) * (SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP);
     ctx.fillStyle = 'rgba(108, 204, 255, 0.12)';
     ctx.fillRect(0, activeSysY - SCORE_STAVE_LINE_SPACING * 5, scoreSystemWidth, SCORE_STAVE_LINE_SPACING * 4 + SCORE_SYSTEM_GAP + SCORE_STAVE_LINE_SPACING * 5);
     ctx.fillStyle = '#000'; // ハイライトの薄い塗り色がVexFlowの符頭・文字描画に引き継がれないようリセット
     const vfCtx = new VF.CanvasContext(ctx);
     drawScoreFromLayout(VF, vfCtx, layout);
+    renderScoreSystemControls(); // 段の切れ目の「＋」「−」
     // 入力した音符の位置(段が増えていく方向)まで追従スクロールする
     scoreEditorCanvas.parentElement.scrollTop = scoreEditorCanvas.parentElement.scrollHeight;
   }
@@ -5394,6 +6986,7 @@
   // 演奏モード中はそもそもこのボタンごと表示されない(#viewer.app-mode-perform .appModeEditOnly)。
   function setMemoEditMode(on) {
     memoEditMode = on;
+    if (!on) stampPalette.classList.add('hidden'); // メモ編集を抜けたらパレットも閉じる
     setPendingMemoType(null);
     pendingMemoPlacement = null;
     imagePickerHintEl.classList.add('hidden');
@@ -5417,6 +7010,55 @@
     setDrawMode(false);
     setPendingMemoType(pendingMemoType === 'image' ? null : 'image');
   });
+
+  // ---- 画像スタンプ(2026-08-20〜) ----
+  // 「パレットで選ぶ → 譜面をタップして置く」という、テキスト/画像メモと同じ2段構え。
+  // パレットは開いたままにしてあるので、続けて何枚も貼れる(強弱記号は曲中に
+  // 何度も出てくるため、1枚ごとにパレットを開き直すのは煩わしい)。
+  function renderStampPalette() {
+    stampPaletteBody.innerHTML = '';
+    for (const group of SHEET_STAMP_GROUPS) {
+      const wrap = document.createElement('div');
+      wrap.className = 'stampGroup';
+      const name = document.createElement('div');
+      name.className = 'stampGroupName';
+      name.textContent = group.name;
+      wrap.appendChild(name);
+      const items = document.createElement('div');
+      items.className = 'stampGroupItems';
+      for (const def of group.items) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'stampChoice' + (pendingStampId === def.id ? ' selected' : '');
+        btn.title = def.sub ? `${def.label} ${def.sub}` : def.label;
+        btn.innerHTML = buildSheetStampSvg(def);
+        btn.addEventListener('click', () => {
+          // 同じものをもう一度押したら選択解除(置くのをやめる)
+          pendingStampId = pendingStampId === def.id ? null : def.id;
+          setPendingMemoType(pendingStampId ? 'stamp' : null);
+          renderStampPalette();
+        });
+        items.appendChild(btn);
+      }
+      wrap.appendChild(items);
+      stampPaletteBody.appendChild(wrap);
+    }
+  }
+  function setStampPaletteOpen(open) {
+    stampPalette.classList.toggle('hidden', !open);
+    if (open) {
+      if (!memoEditMode) setMemoEditMode(true);
+      setDrawMode(false);
+      renderStampPalette();
+    } else {
+      pendingStampId = null;
+      if (pendingMemoType === 'stamp') setPendingMemoType(null);
+    }
+  }
+  btnAddStampMemo.addEventListener('click', () => {
+    setStampPaletteOpen(stampPalette.classList.contains('hidden'));
+  });
+  btnStampPaletteClose.addEventListener('click', () => setStampPaletteOpen(false));
   // ==================================================
   // 手書き(ペン・蛍光ペン)
   // 座標系はメモと同じくコンテンツ幅/高さに対する割合(0〜1)。strokeLayerはtileContainerと
@@ -7737,7 +9379,7 @@
   const OFFLINE_CACHE_UPDATED_KEY = 'cwlv_offline_cache_updated_at';
   // 今動いているアプリの版。キャッシュのせいで古い版が動いている時に、
   // 画面を見るだけで判別できるようにするための表示(2026-08-19〜)。
-  const APP_BUILD = '20260819-2027';
+  const APP_BUILD = '20260820-1210';
   // キャッシュ名とファイル一覧はService Worker(sw.js)が唯一の持ち主。
   // 以前はここにも同じものを書いていたが、sw.jsをv4に上げた時にこちらがv3のまま
   // 取り残され、「データを更新」がSWの読まないキャッシュに書き込む状態になって
@@ -8764,7 +10406,7 @@
     currentBpm = song.bpm ?? null;
     currentYoutubeUrl = song.youtubeUrl || null;
     speedLabel.textContent = `速度 ${speed}`;
-    zoomLevel = clamp(song.zoomLevel || ZOOM_MIN, ZOOM_MIN, ZOOM_MAX);
+    zoomLevel = clamp(song.zoomLevel || ZOOM_DEFAULT, ZOOM_MIN, ZOOM_MAX);
     scrollX = 0;
     zoomLabel.textContent = `${Math.round(zoomLevel * 100)}%`;
     updateBpmLabel();
@@ -8908,6 +10550,15 @@
       if (currentSourceKind) rebuildCurrentSource();
     }, 200);
   });
+
+
+
+
+
+
+
+
+
 
 
 
