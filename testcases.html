@@ -53,6 +53,23 @@
   }
   .caseTitle { flex: 1; font-size: 14px; line-height: 1.6; }
   .caseNo { color: #777; font-size: 11px; margin-right: 6px; }
+  /* 優先度。Aだけでも通してもらえれば最低限の確認になる、という設計 */
+  .pri {
+    display: inline-block; font-size: 10px; font-weight: bold; line-height: 1;
+    padding: 3px 5px; border-radius: 4px; margin-right: 6px; vertical-align: 1px;
+  }
+  .priA { background: #b4453a; color: #fff; }
+  .priB { background: #3a5a7a; color: #cfe; }
+  .priC { background: #333; color: #999; }
+  .case.hiddenByFilter { display: none; }
+  h2.hiddenByFilter { display: none; }
+
+  #filterRow { display: flex; gap: 6px; margin-top: 8px; }
+  #filterRow button {
+    flex: 1; font-size: 12px; padding: 7px 4px; border-radius: 8px;
+    border: 1px solid #333; background: #1c1c1e; color: #aaa; cursor: pointer;
+  }
+  #filterRow button.on { background: #6cf; border-color: #6cf; color: #111; font-weight: bold; }
   .case.done { border-color: #2f5c3f; background: #16201a; }
   .case.done .caseTitle { color: #8a9; }
   .case.ng { border-color: #7a3a3a; background: #201616; }
@@ -99,11 +116,15 @@
   <a id="backLink" href="./index.html">&larr; アプリに戻る</a>
   <h1>テスト項目</h1>
   <p class="subtitle">ChordWiki Live Viewer / スマホでそのまま進められます</p>
+  <p class="subtitle" style="margin-bottom:14px">
+    <span class="pri priA">A</span>必ず　<span class="pri priB">B</span>できれば　<span class="pri priC">C</span>余裕があれば
+  </p>
 
   <div class="lead">
     <b>進め方</b>
     <ul>
       <li>上から順に試して、<b>思った通りに動いたらチェック</b>を付けてください</li>
+      <li>時間が無ければ <b>「A だけ」に絞って</b>ください。<span class="pri priA">A</span> は本番で使う所と、過去に実際に壊れた所です</li>
       <li>おかしかったら「うまくいかない」を押して、<b>何が起きたか</b>を書いてください</li>
       <li>チェックはこの端末に自動保存されます。<b>閉じても消えません</b></li>
       <li>終わったら一番下の「結果をコピー」を押して、その内容を送ってください</li>
@@ -114,6 +135,12 @@
   <div id="progressBar">
     <div id="progressText"><span id="progressLabel">0 / 0</span><span id="progressNg"></span></div>
     <div id="progressTrack"><div id="progressFill"></div></div>
+    <div id="filterRow">
+      <button type="button" data-filter="all" class="on">ぜんぶ</button>
+      <button type="button" data-filter="A">A だけ</button>
+      <button type="button" data-filter="AB">A と B</button>
+      <button type="button" data-filter="todo">未実施だけ</button>
+    </div>
   </div>
 
   <div id="cases"></div>
@@ -133,203 +160,345 @@
   // テスト項目。groupごとに並べる。
   // title: 何をするか / expect: どうなれば正解か
   // 「スマホだけで確認できること」に絞ってある(MIDIキーボードやペダルが要る物は外した)。
+  // テスト項目。
+  //
+  // **正常系(押したら動く)は最小限にしてある。**持ち主が普段の開発で通る道は
+  // 既に何度も通っていて壊れていないので、人手をかけて確かめる価値が低い。
+  // ここに並べるのは、持ち主が通らない道:
+  //   ・過去に実際に壊れて直した所(再発していないか)
+  //   ・異常系(空・通信断・機内モード・2つ同時・上限を超えた時)
+  //   ・端末をまたぐ動き(2台で同時に触る、閉じて復帰する)
+  //
+  // pri: 'A' 本番で使う中核と、過去に壊れた所。必ず通す
+  //      'B' 使うが致命的ではない
+  //      'C' 余裕があれば / 特殊な環境が要る
+  //
+  // **機能を足したら、ここにも項目を足すこと。**
   const GROUPS = [
     {
-      name: '1. 初めて開いた時',
+      name: '1. 初めて開いた人の目線',
       cases: [
-        { title: 'アプリのURLを開く',
-          expect: '<b>いきなり確認ダイアログが出ない。</b>曲一覧の画面がそのまま出る' },
-        { title: 'アドレスバーのURLを見る',
-          expect: 'URLの後ろに <code>?key=</code> と長い文字列が付いている(あなた専用のURLです)' },
-        { title: '画面に書いてあることを読んで、次に何をすればいいか分かるか',
-          expect: '「＋ 曲を追加」から始めればいいと分かる。<b>分からなければ、それを書いてください</b>' },
+        { pri: 'A', title: 'まっさらな状態でアプリのURLを開く(ブラウザの履歴やデータを消してから)',
+          expect: '<b>いきなり確認ダイアログが出ない。</b>曲一覧がそのまま出る' },
+        { pri: 'A', title: 'この画面だけ見て、次に何をすればいいか分かるか。30秒考えて分からなければ「うまくいかない」',
+          expect: '<b>分からなかったこと自体が結果です。</b>何を探したか書いてください' },
+        { pri: 'B', title: 'アドレスバーのURLを見る',
+          expect: '後ろに <code>?key=</code> と長い文字列が付いている' },
+        { pri: 'A', title: '<b>何も作らずに</b>、アプリを閉じて開き直す',
+          expect: 'URLの <code>?key=</code> の値が<b>さっきと同じ</b>(勝手に変わらない)' },
+        { pri: 'B', title: 'いくつかボタンを押してみて、意味が分からない言葉があったらメモする',
+          expect: '専門用語で詰まった所を書いてください' },
       ],
     },
     {
-      name: '2. 曲を入れる',
+      name: '2. 曲を入れる / 壊れた入れ方',
       cases: [
-        { title: 'ChordWikiでコード譜を開いて、スクリーンショットを撮る',
-          expect: '(準備です。うまく撮れれば次へ)' },
-        { title: '「＋ 曲を追加」を押して、撮った画像を選ぶ',
-          expect: '曲が一覧に出る。曲名は自分で入れられる' },
-        { title: '追加した曲を開く',
-          expect: '譜面が画面の幅いっぱいに出る' },
-        { title: 'PDFでも1曲追加してみる(手元にあれば)',
-          expect: '複数ページのPDFでも、続けて縦に読める' },
+        { pri: 'A', title: 'ChordWikiのスクショ(縦に長い画像)を「＋ 曲を追加」で入れる',
+          expect: '一覧に出る。開くと画面の幅いっぱいに表示される' },
+        { pri: 'A', title: '<b>10ページ以上のPDF</b>を入れて、一番下までスクロールする',
+          expect: '途中で止まったり真っ白になったりしない' },
+        { pri: 'B', title: '曲名を空のまま登録してみる',
+          expect: 'エラーで固まらない(名前が無いなりに一覧に出る)' },
+        { pri: 'B', title: '<b>音楽と関係ないファイル</b>(テキストやzip)を選んでみる',
+          expect: '「画像またはPDFを選んでください」と出る。固まらない' },
+        { pri: 'B', title: '同じ画像をもう一度追加する',
+          expect: '2曲目として増える。1曲目が壊れない' },
+        { pri: 'C', title: '<b>10MB以上の大きいPDF</b>を入れる',
+          expect: '時間はかかっても最後まで入る。入らない場合はその旨が出る' },
+        { pri: 'A', title: '曲を削除して、アプリを閉じて開き直す',
+          expect: '<b>消えたまま。</b>復活しない' },
       ],
     },
     {
       name: '3. 自動スクロール(本番で一番使う)',
       cases: [
-        { title: '曲を開いて「▶ 再生」を押す',
-          expect: '譜面がゆっくり上に流れ始める' },
-        { title: '「速度」の ＋ − を押す',
-          expect: '流れる速さがその場で変わる' },
-        { title: '流れている最中に、指で譜面を上下にスワイプする',
-          expect: '<b>自分でスクロールできる。</b>指を離すとまた自動で流れ出す' },
-        { title: 'もう一度「▶」(⏸)を押す',
-          expect: '止まる' },
-        { title: '曲を開いたまま1分ほど放置する',
-          expect: '<b>画面が暗くならない</b>(演奏中に消えると困るため)' },
+        { pri: 'A', title: '「▶ 再生」で流し、途中で指でスワイプして、指を離す',
+          expect: '自分で動かせて、離すとまた流れ出す' },
+        { pri: 'A', title: '<b>2本指で触ってから、片方の指だけ離す</b>',
+          expect: '<b>スクロールが死なない。</b>残った指でそのまま動かせる(過去に壊れた所)' },
+        { pri: 'A', title: '流している最中に速度の ＋ − を連打する',
+          expect: 'その場で追従する。飛んだり止まったりしない' },
+        { pri: 'A', title: '曲を開いたまま2分ほど放置する',
+          expect: '<b>画面が暗くならない</b>' },
+        { pri: 'A', title: '流している最中にホーム画面に戻り、少し置いてからアプリに戻る',
+          expect: '<b>戻った時に位置が飛んでいない。</b>操作できる' },
+        { pri: 'B', title: '流している最中に画面を横向きにする',
+          expect: '見ていた場所を見失わない' },
+        { pri: 'B', title: '一番下まで流しきる',
+          expect: '勝手に止まる。行き過ぎて真っ白にならない' },
+        { pri: 'C', title: '着信や通知が来た状態から復帰する',
+          expect: '再生の状態がおかしくならない' },
       ],
     },
     {
-      name: '4. 拡大・縮小',
+      name: '4. 拡大・縮小(誤操作しやすい所)',
       cases: [
-        { title: '譜面の上で2本指を広げてみる(ピンチ)',
-          expect: '<b>拡大されない。</b>普通にスクロールできる(誤操作を防ぐため、既定では効きません)' },
-        { title: '「拡大」ボタンを押してから、2本指で広げる',
-          expect: '今度は拡大される' },
-        { title: '拡大した状態でスクロールする',
-          expect: '拡大したまま上下に動かせる' },
+        { pri: 'A', title: '譜面の上で2本指を広げる(拡大ボタンを押していない状態で)',
+          expect: '<b>拡大されない。</b>普通にスクロールできる(過去に、ここでスクロールが壊れた)' },
+        { pri: 'A', title: '「拡大」を押してから広げ、そのあと上下にスクロールする',
+          expect: '拡大され、拡大したまま動かせる' },
+        { pri: 'B', title: '拡大した状態でアプリを閉じて開き直す',
+          expect: '<b>倍率が100%に戻っている</b>(拡大したまま本番に入らないように)' },
+        { pri: 'B', title: '拡大したまま曲を切り替える',
+          expect: '表示が崩れない' },
       ],
     },
     {
-      name: '5. 譜面への書き込み',
+      name: '5. 譜面への書き込み(過去に一番壊れた所)',
       cases: [
-        { title: '「編集モード」にしてから曲を開き、「＋ テキスト」を押して譜面をタップ',
-          expect: 'その位置に文字を書ける' },
-        { title: '書いた文字の右下をつまんで左右に動かす',
-          expect: '<b>文字の大きさが変わる。</b>まわりに余計な余白ができない' },
-        { title: '書いた文字を指で動かす',
-          expect: '好きな位置に置ける' },
-        { title: '「＋ スタンプ」を押して、出てきた絵柄を1つ選び、譜面をタップ',
-          expect: 'その絵柄が譜面に乗る' },
-        { title: '「ペン」を押して譜面に線を引く',
-          expect: '手書きできる。太さと色も変えられる' },
-        { title: '一度アプリを閉じて開き直し、同じ曲を見る',
-          expect: '<b>書いたものが全部残っている</b>' },
+        { pri: 'A', title: '「＋ テキスト」で文字を置き、<b>右下をつまんで大きくする</b>',
+          expect: '<b>文字のまわりに余計な余白ができない。</b>枠が文字にぴったり付いてくる(過去に壊れた所)' },
+        { pri: 'A', title: '文字を長くしたり短くしたりする',
+          expect: '枠が中身に合わせて伸び縮みする' },
+        { pri: 'A', title: '「＋ スタンプ」を押した時に、<b>選べる絵柄がちゃんと見えるか</b>',
+          expect: '絵柄が並んで見える。何を押せばいいか分かる(過去に「何も見えない」状態だった)' },
+        { pri: 'A', title: 'スタンプを選んで譜面をタップする',
+          expect: '<b>その場所に置かれる</b>(過去に、選んでも置けないことがあった)' },
+        { pri: 'A', title: 'ペンで線を引き、太さと色を変えてもう一度引く',
+          expect: '両方残る。変えた設定が次も続く' },
+        { pri: 'A', title: '文字・スタンプ・ペンを全部使ったあと、<b>アプリを完全に閉じて開き直す</b>',
+          expect: '<b>全部そのまま残っている。</b>位置も大きさも変わっていない' },
+        { pri: 'B', title: '置いた文字を譜面の外(端ギリギリ)まで動かす',
+          expect: '画面の外に消えて取り戻せなくなったりしない' },
+        { pri: 'B', title: 'メモを削除してから開き直す',
+          expect: '消えたまま。復活しない' },
+        { pri: 'C', title: '1つの曲に<b>20個以上</b>メモを置く',
+          expect: '重くならない。スクロールが引っかからない' },
       ],
     },
     {
       name: '6. BPM・クリック',
       cases: [
-        { title: '曲を開いて「BPM」に数字を入れる',
-          expect: '入れた値が残る' },
-        { title: '「🥁 クリック」を押す',
-          expect: '入れたBPMでカチカチ鳴る' },
-        { title: '「速度計算」を押す',
-          expect: 'そのBPMに合った自動スクロールの速さが入る' },
+        { pri: 'A', title: 'BPMを入れて「🥁 クリック」を鳴らし、<b>1分間ちゃんと一定か</b>聞く',
+          expect: 'だんだんずれたり、つまずいたりしない' },
+        { pri: 'A', title: 'クリックを鳴らしながら自動スクロールも動かす',
+          expect: '両方同時に動く。音が途切れない' },
+        { pri: 'B', title: 'BPMに <b>0</b> や <b>999</b> や 文字を入れてみる',
+          expect: 'おかしな値で固まらない' },
+        { pri: 'B', title: '「速度計算」を押す',
+          expect: 'そのBPMに合った速さが入る' },
+        { pri: 'C', title: 'クリックを鳴らしたまま画面を消して、また点ける',
+          expect: '止まるか、正しく鳴り続けるか、どちらかで安定している' },
       ],
     },
     {
-      name: '7. セットリスト',
+      name: '7. 音源・A-Bリピート',
       cases: [
-        { title: '「セットリスト」→ 新規作成して、曲を2〜3曲入れる',
-          expect: '入れた順に並ぶ' },
-        { title: '曲順を入れ替える',
-          expect: '並べ替えられる' },
-        { title: 'セットリストから曲を開いて、最後までスクロールする',
-          expect: '<b>次の曲へ進める</b>(本番で使う流れです)' },
+        { pri: 'B', title: '曲に音源ファイルを入れて再生する',
+          expect: '鳴る' },
+        { pri: 'B', title: 'A-Bリピートで4小節ぶんくらいを繰り返す',
+          expect: '<b>指定した所だけ繰り返す。</b>ずれていかない' },
+        { pri: 'B', title: '再生速度を落とす',
+          expect: '音の高さが変わらず、遅くなる' },
+        { pri: 'C', title: '音源を入れた曲を他の端末で開く',
+          expect: '<b>音源は入っていない</b>(端末内だけの仕様。曲やメモは出てくる)' },
       ],
     },
     {
-      name: '8. 楽譜エディター',
+      name: '8. セットリスト',
       cases: [
-        { title: '曲を開いて「＋ 楽譜」を押す',
-          expect: '五線譜と鍵盤が出る' },
-        { title: '画面の鍵盤をタップして音符を並べる',
-          expect: '五線譜に音符が増えていく' },
-        { title: '音符の長さ(4分・8分など)を変えて入れる',
-          expect: '長さが変わる。<b>付点や休符も正しく出る</b>' },
-        { title: '「ピアノロール」に切り替える',
-          expect: '横向きの帯で音が見える。<b>左に音名(C, D, E...)が出ている</b>' },
-        { title: 'ピアノロールで音符をつまんで上下に動かす',
-          expect: '<b>つまんだ場所を持ったまま</b>動く(勝手に真ん中に飛ばない)' },
-        { title: '五線譜に戻して「保存」する',
-          expect: '譜面の上に楽譜が貼られる' },
+        { pri: 'A', title: '5曲入れて、順番を入れ替える',
+          expect: '並べ替えられる。閉じて開いても順番が残る' },
+        { pri: 'A', title: 'セットリストから曲を開き、最後まで行って次の曲へ進む',
+          expect: '<b>次の曲が開く</b>(本番の流れ)' },
+        { pri: 'B', title: 'セットリストに入れている曲を、曲一覧の方から削除する',
+          expect: 'セットリストが壊れない(消えた曲があっても他の曲は開ける)' },
+        { pri: 'B', title: '同じ曲を1つのセットリストに2回入れる',
+          expect: '2回とも出る。おかしくならない' },
+        { pri: 'C', title: '空のセットリストを開く',
+          expect: '固まらない' },
       ],
     },
     {
-      name: '9. フレーズ集',
+      name: '9. 楽譜エディター(音符まわり)',
       cases: [
-        { title: '「フレーズ集」を開く',
-          expect: '一覧が出る(まだ空かもしれません)' },
-        { title: '楽譜エディターでフレーズを作って保存する',
-          expect: 'フレーズ集に絵付きで並ぶ' },
-        { title: 'コード名を付けて保存し、一覧で「ディグリー」の表示を見る',
+        { pri: 'A', title: '<b>付点4分 + 8分</b> を1小節に入れる',
+          expect: '<b>付点がそのまま出る。</b>勝手にタイで分割されたりしない(過去に壊れた所)' },
+        { pri: 'A', title: '<b>付点8分 + 16分</b> を並べる',
+          expect: '同上。形が崩れない' },
+        { pri: 'A', title: '8分音符を8つ並べる',
+          expect: '<b>連桁(音符をつなぐ横棒)が4つずつ、正しく分かれる</b>(過去に総崩れした所)' },
+        { pri: 'A', title: '拍をまたぐ長さの音符を入れる(例: 2拍目の裏から2分音符)',
+          expect: 'タイでつながれて、小節の形が保たれる' },
+        { pri: 'A', title: '休符を入れる。3連符も入れる',
+          expect: '両方入る。混ざっても崩れない' },
+        { pri: 'A', title: '一度保存した楽譜を開き直して、<b>直してもう一度「保存」</b>',
+          expect: '<b>エラーが出ない</b>(過去に、更新の時だけエラーが出た)' },
+        { pri: 'B', title: 'Undo(戻す)と Redo(やり直す)を10回ずつ連打する',
+          expect: '譜面が壊れない。ずれていかない' },
+        { pri: 'B', title: '拍子を 6/8 にしてクリックを鳴らす',
+          expect: '<b>速すぎない</b>(過去に3倍速くなっていた)' },
+        { pri: 'B', title: '調号を変えて、♯や♭の付く音を入れる',
+          expect: '臨時記号が正しく出る/出ない' },
+        { pri: 'C', title: '30小節くらいの長い譜面を作る',
+          expect: '重くならない。改行の位置がおかしくならない' },
+      ],
+    },
+    {
+      name: '10. ピアノロール',
+      cases: [
+        { pri: 'A', title: 'ピアノロールに切り替える',
+          expect: '<b>左に音名(C, D, E...)が見えている</b>(過去に見えなくなっていた)' },
+        { pri: 'A', title: '音符をつまんで上下に動かす',
+          expect: '<b>つまんだ所を持ったまま動く。</b>指の真ん中に飛んでこない(過去に壊れた所)' },
+        { pri: 'A', title: 'ピアノロールで直してから五線譜に戻す',
+          expect: '直した内容が五線譜にも出ている' },
+        { pri: 'B', title: '一番低い音・一番高い音の所まで動かす',
+          expect: '画面の外に消えない' },
+        { pri: 'B', title: 'ピアノロールの表示中に横スクロールする',
+          expect: '音名の列が左に残ったままついてくる' },
+      ],
+    },
+    {
+      name: '11. フレーズ集・ディグリー',
+      cases: [
+        { pri: 'A', title: 'コード名を付けたフレーズを保存して、ディグリー表示を見る',
           expect: '<code>IIm7</code> <code>V7</code> のような度数が自動で付く' },
-        { title: '度数のボタンを2つ以上押して絞り込む',
-          expect: 'その度数を含むフレーズだけが残る' },
+        { pri: 'A', title: '<b>Cadd9</b> を含むフレーズを作る',
+          expect: '度数が <code>I</code> 系になる。<b><code>I7</code> にならない</b>(過去に間違えた所)' },
+        { pri: 'A', title: '<b>Dm7</b> で検索する',
+          expect: '<b>Dm7b5 のフレーズが混ざってこない</b>(過去に混ざった)' },
+        { pri: 'A', title: '<b>C9</b> や <b>C13</b> のようにテンションの付いたコードを入れる',
+          expect: 'テンションは度数に含まれない(<code>I7</code> 扱い)' },
+        { pri: 'B', title: '度数を2つ以上選んで絞り込む',
+          expect: 'その全部を含むフレーズだけ残る' },
+        { pri: 'B', title: 'フレーズにYouTubeのリンクと秒数を付けて再生する',
+          expect: 'その秒数から始まる' },
+        { pri: 'B', title: 'ループ再生と再生速度を使う',
+          expect: '指定した所を繰り返す。速度も変わる' },
+        { pri: 'C', title: 'フレーズを移調する',
+          expect: 'コード名も音符も一緒に動く' },
       ],
     },
     {
-      name: '10. チューナー',
+      name: '12. チューナー',
       cases: [
-        { title: '曲一覧の「🎤 チューナー」を押す',
-          expect: 'マイクの許可を聞かれる。許可すると画面が切り替わる' },
-        { title: '「あー」と声を出してみる',
-          expect: '<b>いちばん近い音の名前が大きく出る</b>(C, D, E...)' },
-        { title: '同じ高さで声を伸ばして、少しずつ上げ下げする',
-          expect: '針が左右に動く。<b>合うと緑になって「ぴったり」</b>と出る' },
-        { title: '低い声と高い声の両方で試す',
-          expect: 'どちらも読める(男性の低い声〜女性の高い声まで)' },
-        { title: 'ギターやピアノの音でも試す(あれば)',
+        { pri: 'A', title: '「🎤 チューナー」を開いて声を伸ばす',
+          expect: 'いちばん近い音の名前が大きく出る' },
+        { pri: 'A', title: '<b>何も音を出さずに黙っている</b>',
+          expect: '<b>適当な音名を出さない。</b>「声や音を出してください」のまま' },
+        { pri: 'A', title: '「閉じる」を押したあと、<b>録音中のマークが消えるか</b>確認する',
+          expect: '<b>消える</b>(マイクを掴んだままにしない)' },
+        { pri: 'A', title: '低い声と高い声の両方で試す',
+          expect: 'どちらも読める。<b>1オクターブずれた音名が出ない</b>' },
+        { pri: 'B', title: 'ざわざわした場所(テレビの音など)で開く',
+          expect: '音名がめちゃくちゃに飛び回らない' },
+        { pri: 'B', title: 'A の基準を 438 に変えてから、閉じて開き直す',
+          expect: '<b>438 のまま覚えている</b>' },
+        { pri: 'B', title: 'ギターやピアノの音でも試す',
           expect: '同じように読める' },
-        { title: '「閉じる」を押す',
-          expect: '<b>マイクのマーク(録音中の表示)が消える</b>' },
+        { pri: 'C', title: 'マイクの許可を<b>拒否</b>してみる',
+          expect: '「マイクを使えませんでした」と出る。固まらない' },
       ],
     },
     {
-      name: '11. 練習ToDo・リンク集',
+      name: '13. 練習ToDo・リンク集',
       cases: [
-        { title: '「練習ToDo」に何か1つ足して、チェックを付ける',
-          expect: '足せる。チェックが残る' },
-        { title: '「リンク集」にYouTubeのURLを1つ足す',
-          expect: '足せる。押すと開く' },
+        { pri: 'B', title: 'ToDoを足してチェックを付け、閉じて開き直す',
+          expect: 'チェックが残る' },
+        { pri: 'B', title: '<b>空のまま</b>「追加」を押す',
+          expect: '空の項目が増えたりしない' },
+        { pri: 'B', title: 'リンク集にYouTubeのURLを足して押す',
+          expect: '開く' },
+        { pri: 'C', title: 'URLでない文字列をリンクとして足す',
+          expect: '固まらない' },
       ],
     },
     {
-      name: '12. 他の端末とそろえる',
+      name: '14. 他の端末とそろえる(2台必要)',
       cases: [
-        { title: '「⚙ 設定・バックアップ」を開く',
-          expect: '中身が出る。<b>「フットコントローラー」は畳まれていて1行だけ</b>' },
-        { title: '「あなた用のURLをコピー」を押す',
-          expect: 'コピーできた、と出る' },
-        { title: 'そのURLをPCや別のスマホで開く',
+        { pri: 'A', title: '「あなた用のURLをコピー」して、別の端末で開く',
           expect: '<b>同じ曲・セットリストが出てくる</b>' },
-        { title: '別の端末で曲名を変えてから、元の端末で「今すぐ同期」',
-          expect: '変えた方が反映される' },
+        { pri: 'A', title: '<b>2台で別々の曲名に変えてから</b>、両方で「今すぐ同期」',
+          expect: '<b>あとで変えた方が残る。</b>データが消えたりしない' },
+        { pri: 'A', title: '片方の端末で曲を削除して、もう片方で「今すぐ同期」',
+          expect: '<b>もう片方からも消える</b>' },
+        { pri: 'A', title: '削除したあと、<b>もう片方でその曲のメモを直してから</b>同期する',
+          expect: '直した方が新しければ残る(消えない)' },
+        { pri: 'B', title: '「別のURLに切り替える」に、<b>URLを丸ごと貼る</b>',
+          expect: '通る(パラメータの部分だけを貼っても通る)' },
+        { pri: 'B', title: '同じ欄を<b>空にして</b>決定する',
+          expect: 'この端末だけの利用に戻る。<b>端末内のデータは消えない</b>' },
+        { pri: 'C', title: 'でたらめな文字列をURLとして貼って同期する',
+          expect: 'エラーは出るが、端末内のデータは無事' },
       ],
     },
     {
-      name: '13. オフライン・ホーム画面',
+      name: '15. 通信が無い / おかしい時',
       cases: [
-        { title: 'ブラウザのメニューから「ホーム画面に追加」する',
-          expect: 'アイコンができる' },
-        { title: 'そのアイコンから起動する',
-          expect: 'アドレスバーなしで開く。<b>曲がそのまま入っている</b>' },
-        { title: '機内モードにしてから、アイコンで起動する',
-          expect: '<b>電波が無くても曲が開ける</b>' },
+        { pri: 'A', title: '<b>機内モードのまま</b>アプリを起動する',
+          expect: '<b>曲が開ける。エラーダイアログが出ない</b>' },
+        { pri: 'A', title: '機内モードのまま曲を追加してメモを書く',
+          expect: '普通に保存できる' },
+        { pri: 'A', title: '機内モードを解除して「今すぐ同期」',
+          expect: 'オフライン中に作った物が上がる' },
+        { pri: 'B', title: '電波の弱い場所で「今すぐ同期」を押す',
+          expect: '<b>「同期中...」のまま固まり続けない</b>(20秒で戻る)' },
+        { pri: 'B', title: '同期の途中でアプリを閉じる',
+          expect: '次に開いた時にデータが壊れていない' },
       ],
     },
     {
-      name: '14. バックアップ',
+      name: '16. ホーム画面・オフライン',
       cases: [
-        { title: '「書き出す」を押す',
-          expect: 'ZIPファイルが保存される' },
-        { title: 'その ZIP を「読み込む」で戻す',
-          expect: '曲が消えたり増えたりしない' },
+        { pri: 'A', title: '「ホーム画面に追加」してアイコンから起動する',
+          expect: '<b>曲がそのまま入っている</b>(空っぽにならない)' },
+        { pri: 'A', title: 'アイコンから起動した状態で「あなた用のURLをコピー」',
+          expect: 'ちゃんとURLが取れる(過去に、ここでパラメータが失われた)' },
+        { pri: 'B', title: 'アイコンから起動して機内モードで使う',
+          expect: '全部使える' },
+        { pri: 'C', title: 'アプリの新しい版が出たあとに開く',
+          expect: '<b>勝手に新しくなる。</b>古いままにならない' },
       ],
     },
     {
-      name: '15. 不具合の報告',
+      name: '17. バックアップ',
       cases: [
-        { title: '「💬 不具合・要望を送る」を押す',
-          expect: '入力画面が出る' },
-        { title: '「要望」を選んで何か書いて送信する',
+        { pri: 'A', title: '「書き出す」でZIPを保存し、<b>そのまま「読み込む」で戻す</b>',
+          expect: '<b>曲が増えも減りもしない。</b>メモも消えない' },
+        { pri: 'B', title: '曲を1つ消してから、さっきのZIPを読み込む',
+          expect: '消した曲が戻る' },
+        { pri: 'C', title: 'ZIPでないファイルを「読み込む」で選ぶ',
+          expect: '「読み込めません」と出る。今のデータは壊れない' },
+      ],
+    },
+    {
+      name: '18. 不具合の報告',
+      cases: [
+        { pri: 'A', title: '「💬 不具合・要望を送る」で何か書いて送る',
           expect: '<b>「送信しました」の画面が出る</b>' },
+        { pri: 'B', title: '<b>空のまま</b>送信を押す',
+          expect: '「内容を書いてください」と出る。送信されない' },
+        { pri: 'B', title: '<b>機内モードで</b>送信を押す',
+          expect: '送れなかったと出る。<b>もう一度押せる状態に戻る</b>' },
       ],
     },
     {
-      name: '16. 使ってみた感想(自由記入)',
+      name: '19. 壊しにいく(できる範囲で)',
       cases: [
-        { title: '本番で使えそうか',
-          expect: '思ったことを「うまくいかない」欄に自由に書いてください(チェックだけでもOK)' },
-        { title: '分かりにくかったところ',
+        { pri: 'B', title: '<b>同じアプリを2つのタブで開いて</b>、両方で曲を追加する',
+          expect: '固まらない。「再読み込みしてください」等の案内が出るならそれでOK' },
+        { pri: 'B', title: 'ボタンを<b>連打</b>する(再生、同期、追加など)',
+          expect: '二重に実行されない。固まらない' },
+        { pri: 'B', title: '曲を開いている最中に「戻る」を何回も押す',
+          expect: '変な画面に迷い込まない' },
+        { pri: 'C', title: '端末の容量がほぼ一杯の状態で曲を追加する',
+          expect: '保存できないことがちゃんと伝わる(黙って消えない)' },
+        { pri: 'C', title: '<b>150曲</b>を超えるまで曲を入れる(できれば)',
+          expect: '上限に達したことが分かる案内が出る' },
+      ],
+    },
+    {
+      name: '20. 使ってみた感想(自由記入)',
+      cases: [
+        { pri: 'A', title: '本番で使えそうか。使えないとしたら何が足りないか',
+          expect: '「うまくいかない」欄に自由に書いてください' },
+        { pri: 'A', title: '一番分かりにくかった所はどこか',
           expect: '「これどうやるの？」と思った場所を書いてください' },
-        { title: '欲しい機能',
+        { pri: 'B', title: '欲しい機能',
           expect: 'あれば書いてください' },
+        { pri: 'B', title: '他のアプリと比べて、これは良い/これは劣る と思った点',
+          expect: '正直に書いてください' },
       ],
     },
   ];
@@ -351,6 +520,7 @@
   GROUPS.forEach((g, gi) => {
     const h = document.createElement('h2');
     h.textContent = g.name;
+    // 絞り込みで章ごと隠すために、各項目から見出しを参照できるようにしておく
     const cnt = document.createElement('span');
     cnt.className = 'count';
     h.appendChild(cnt);
@@ -373,8 +543,16 @@
       const noEl = document.createElement('span');
       noEl.className = 'caseNo';
       noEl.textContent = no;
+      const priEl = document.createElement('span');
+      priEl.className = 'pri pri' + (c.pri || 'B');
+      priEl.textContent = c.pri || 'B';
+      title.appendChild(priEl);
       title.appendChild(noEl);
-      title.appendChild(document.createTextNode(c.title));
+      // タイトルにも <b> と <code> を使いたいので、ここは固定の文字列を入れる
+      // (このファイル内で書いた物しか入らない)
+      const titleText = document.createElement('span');
+      titleText.innerHTML = c.title;
+      title.appendChild(titleText);
       head.appendChild(cb);
       head.appendChild(title);
 
@@ -428,20 +606,51 @@
       });
       note.addEventListener('input', () => { st.note = note.value; save(); });
 
-      rows.push({ no, group: g.name, title: c.title, st, paint, cb, note });
+      rows.push({ no, group: g.name, title: c.title, pri: c.pri || 'B',
+                  st, paint, cb, note, box, head: h });
       paint();
+    });
+  });
+
+  // 絞り込み。時間が無い人は「A だけ」に切り替えて上から潰せばよい。
+  let filterMode = 'all';
+  function applyFilter() {
+    const heads = new Map();
+    rows.forEach((r) => {
+      let show = true;
+      if (filterMode === 'A') show = r.pri === 'A';
+      else if (filterMode === 'AB') show = r.pri === 'A' || r.pri === 'B';
+      else if (filterMode === 'todo') show = !r.st.ok && !r.st.ng;
+      r.box.classList.toggle('hiddenByFilter', !show);
+      if (show) heads.set(r.head, true);
+    });
+    // 中身が全部隠れた章は見出しごと隠す
+    document.querySelectorAll('#cases h2').forEach((h) => {
+      h.classList.toggle('hiddenByFilter', !heads.has(h));
+    });
+  }
+  document.querySelectorAll('#filterRow button').forEach((b) => {
+    b.addEventListener('click', () => {
+      filterMode = b.dataset.filter;
+      document.querySelectorAll('#filterRow button')
+        .forEach((x) => x.classList.toggle('on', x === b));
+      applyFilter();
     });
   });
 
   function updateProgress() {
     const done = rows.filter((r) => r.st.ok).length;
     const ng = rows.filter((r) => r.st.ng).length;
-    progressLabel.textContent = done + ' / ' + rows.length + ' 済み';
+    const aRows = rows.filter((r) => r.pri === 'A');
+    const aDone = aRows.filter((r) => r.st.ok).length;
+    progressLabel.textContent = done + ' / ' + rows.length + ' 済み'
+      + '(A: ' + aDone + ' / ' + aRows.length + ')';
     progressNg.textContent = ng ? ('うまくいかない: ' + ng + '件') : '';
     progressNg.style.color = ng ? '#e88' : '#777';
     progressFill.style.width = (rows.length ? (done / rows.length) * 100 : 0) + '%';
   }
   updateProgress();
+  applyFilter();
 
   // 結果は、そのまま貼って送れる形にする(スマホで書くのは大変なので)
   function buildReport() {
@@ -452,20 +661,26 @@
     lines.push('■ ChordWiki Live Viewer テスト結果');
     lines.push('端末: ' + navigator.userAgent);
     lines.push('日時: ' + new Date().toLocaleString('ja-JP'));
+    const aRows = rows.filter((r) => r.pri === 'A');
     lines.push('OK: ' + done + ' / ' + rows.length
       + ' / NG: ' + ngRows.length + ' / 未実施: ' + untouched.length);
+    lines.push('優先度A: ' + aRows.filter((r) => r.st.ok).length + ' / ' + aRows.length + ' 済み'
+      + ' / NGが ' + aRows.filter((r) => r.st.ng).length + '件');
     lines.push('');
     if (ngRows.length) {
-      lines.push('▼ うまくいかなかったもの');
-      ngRows.forEach((r) => {
-        lines.push('[' + r.no + '] ' + r.title);
+      lines.push('▼ うまくいかなかったもの(優先度の高い順)');
+      const order = { A: 0, B: 1, C: 2 };
+      ngRows.slice().sort((x, y) => order[x.pri] - order[y.pri]).forEach((r) => {
+        // タイトルの装飾タグは報告文では邪魔なので落とす
+        const plain = r.title.replace(/<[^>]+>/g, '');
+        lines.push('[' + r.pri + '][' + r.no + '] ' + plain);
         lines.push('   ' + (r.st.note.trim() || '(内容の記入なし)'));
       });
       lines.push('');
     }
     if (untouched.length) {
       lines.push('▼ 未実施');
-      lines.push(untouched.map((r) => r.no).join(', '));
+      lines.push(untouched.map((r) => '[' + r.pri + ']' + r.no).join(', '));
     }
     return lines.join('\n');
   }
